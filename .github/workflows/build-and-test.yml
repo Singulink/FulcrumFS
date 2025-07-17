@@ -12,43 +12,39 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Setup .NET 6.0
-      uses: actions/setup-dotnet@v1
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: |
+          8.0.x
+          9.0.x
     - name: Clean
       run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
-      working-directory: Source
     - name: Install dependencies
       run: dotnet restore
-      working-directory: Source
     - name: Build
       run: dotnet build --configuration Debug --no-restore
-      working-directory: Source
     - name: Test
       run: dotnet test --configuration Debug --no-build --verbosity normal
-      working-directory: Source
 
   release-windows:
 
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Setup .NET 6.0
-      uses: actions/setup-dotnet@v1
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: |
+          8.0.x
+          9.0.x
     - name: Clean
       run: dotnet clean --configuration Release && dotnet nuget locals all --clear
-      working-directory: Source
     - name: Install dependencies
       run: dotnet restore
-      working-directory: Source
     - name: Build
       run: dotnet build --configuration Release --no-restore
-      working-directory: Source
     - name: Test
       run: dotnet test --configuration Release --no-build --verbosity normal
-      working-directory: Source

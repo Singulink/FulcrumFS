@@ -1,10 +1,28 @@
-# Singulink.Net.FileHosting
+# Singulink FulcrumFS
 
 [![Chat on Discord](https://img.shields.io/discord/906246067773923490)](https://discord.gg/EkQhJFsBu6)
-[![View nuget packages](https://img.shields.io/nuget/v/Singulink.Net.FileHosting.svg)](https://www.nuget.org/packages/Singulink.Net.FileHosting/)
-[![Build and Test](https://github.com/Singulink/Singulink.Net.FileHosting/workflows/build%20and%20test/badge.svg)](https://github.com/Singulink/Singulink.Net.FileHosting/actions?query=workflow%3A%22build+and+test%22)
 
-**Singulink.Net.FileHosting** provides file and image storage functionality like image resizing and thumbnail generation suitable for hosting scenarios where users upload files. Source image parameters, such as size, can be validated prior to fully loading and processing the image to prevent easy denial-of-service attacks like uploading massive resolution JPEG files that are only 2MB in size but allocate 1GB+ memory when loaded.
+**FulcrumFS** is a high-performance file processing pipeline and storage engine that layers on top of any file system, transforming a standard directory into a transactional file repository with a two-phase commit protocol.
+
+It serves as a foundational component of our upcoming **FulcrumDB** database engine but is also designed to function independently, bringing robust file handling to any application or database. FulcrumFS is especially well-suited for managing user-uploaded content such as documents, images and videos, offering strong guarantees around consistency and integrity.
+
+Details of each component are provided below:
+
+| Library | Status | Package |
+| --- | --- | --- |
+| **FulcrumFS** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
+| **FulcrumFS.Images** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+
+**Supported Platforms**: .NET 8.0+
+
+Libraries may be in the following states:
+- Internal: Source code (and possibly a nuget package) is available to the public but the library is intended to be used internally until further development.
+- Preview: The library is available for public preview but the APIs may not be fully documented and the API surface is subject to change without notice.
+- Public: The library is intended for public use with a fully documented and stable API surface.
+
+You are free to use any libraries or code in this repository that you find useful and feedback/contributions are welcome regardless of library state.
+
+API documentation and additional information is coming soon.
 
 ### About Singulink
 
@@ -12,20 +30,30 @@ We are a small team of engineers and designers dedicated to building beautiful, 
 
 This package is part of our **Singulink Libraries** collection. Visit https://github.com/Singulink to see our full list of publicly available libraries and other open-source projects.
 
-## Installation
+## Components
 
-The package is available on NuGet - simply install the `Singulink.Net.FileHosting` package.
+### FulcrumFS
 
-**Supported Runtimes**: Anywhere .NET Standard 2.1+ is supported, including:
-- .NET Core 3.0+
-- Mono 6.4+
-- Xamarin.iOS 12.16+
-- Xamarin.Android 10.0+
+The core library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system.
 
-## API
+**Features**:
 
-You can view the API on [FuGet](https://www.fuget.org/packages/Singulink.Net.FileHosting).
+✔️ **Two-phase commit** ensures consistency with transactional databases while keeping files decoupled from database storage  
+✔️ Validate, pre-process, and post-process files during storage and retrieval  
+✔️ Generate and manage file variants (e.g., alternate formats, resolutions, thumbnails)  
+✔️ Operates on any file system, including local disks, NAS, and network shares  
+✔️ Scales to **millions of files** per repository without degrading file system performance  
+✔️ Provides **direct `FileStream` access** for efficient, low-overhead file I/O  
+✔️ Stored files remain browsable in standard file managers (e.g., File Explorer)  
+✔️ Fully compatible with file system features like encryption and compression  
+✔️ Works seamlessly with existing backup, redundancy, replication, and storage tools  
 
-## Project Status
+### FulcrumFS.Images
 
-Documentation and development is in progress. Poke around the source code or check out our other projects for now!
+An optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping, for both original images and their derived variants.
+
+Image processing is provided by the excellent [`ImageSharp`](https://github.com/SixLabors/ImageSharp) library.
+
+## Further Reading
+
+API documentation and additional usage information is coming soon.

@@ -1,19 +1,17 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.6.30114.105
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36212.18
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Singulink.Net.FileHosting", "Singulink.Net.FileHosting\Singulink.Net.FileHosting.csproj", "{89AE02BC-3E9A-49CE-95AA-B6225F7E9AFC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FulcrumFS", "Source\FulcrumFS\FulcrumFS.csproj", "{89AE02BC-3E9A-49CE-95AA-B6225F7E9AFC}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A8483073-F762-444E-95EB-34018CA8D77E}"
-	ProjectSection(SolutionItems) = preProject
-		.editorconfig = .editorconfig
-		Directory.Build.props = Directory.Build.props
-	EndProjectSection
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Singulink.Net.FileHosting.Tests", "Singulink.Net.FileHosting.Tests\Singulink.Net.FileHosting.Tests.csproj", "{43D7D8D8-B82A-4309-917F-3083B5BECCC3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FulcrumFS.Tests", "Tests\FulcrumFS.Tests\FulcrumFS.Tests.csproj", "{43D7D8D8-B82A-4309-917F-3083B5BECCC3}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{42064B01-EE8C-463B-897C-5E9F7FB395C4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FulcrumFS.Images", "Source\FulcrumFS.Images\FulcrumFS.Images.csproj", "{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -49,12 +47,26 @@ Global
 		{43D7D8D8-B82A-4309-917F-3083B5BECCC3}.Release|x64.Build.0 = Release|Any CPU
 		{43D7D8D8-B82A-4309-917F-3083B5BECCC3}.Release|x86.ActiveCfg = Release|Any CPU
 		{43D7D8D8-B82A-4309-917F-3083B5BECCC3}.Release|x86.Build.0 = Release|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Debug|x64.Build.0 = Debug|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Debug|x86.Build.0 = Debug|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|x64.ActiveCfg = Release|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|x64.Build.0 = Release|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|x86.ActiveCfg = Release|Any CPU
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{89AE02BC-3E9A-49CE-95AA-B6225F7E9AFC} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{43D7D8D8-B82A-4309-917F-3083B5BECCC3} = {42064B01-EE8C-463B-897C-5E9F7FB395C4}
+		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B1A06F60-4A33-4818-A949-F527DAC4D3A8}
