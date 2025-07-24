@@ -446,3 +446,9 @@ dotnet_diagnostic.CS9113.severity = suggestion
 
 # SA1401: Fields should be private
 dotnet_diagnostic.SA1401.severity = suggestion
+
+# CA2007: Do not directly await a Task
+dotnet_diagnostic.CA2007.severity = error
+
+# CA2016: Forward the 'CancellationToken' parameter to methods
+dotnet_diagnostic.CA2016.severity = warning
