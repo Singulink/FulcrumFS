@@ -1,24 +1,32 @@
-# Singulink FulcrumFS
+<div align="center">
+<picture>
+    <source media="(prefers-color-scheme: dark)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Light.png">
+    <img src="/Resources/Fulcrum%20Logo%20400x150 LightBg.png" alt="Singulink Fulcrum Logo"/>
+</picture>
+</div>
+
+# FulcrumFS
 
 [![Chat on Discord](https://img.shields.io/discord/906246067773923490)](https://discord.gg/EkQhJFsBu6)
 
-**FulcrumFS** is a high-performance file processing pipeline and storage engine that layers on top of any file system, transforming a standard directory into a transactional file repository with a two-phase commit protocol.
+**FulcrumFS** is a high-performance file processing pipeline and storage engine that layers on top of any file system, transforming standard directories into transactional file repositories with a two-phase commit system and file variant management.
 
-It serves as a foundational component of our upcoming **FulcrumDB** database engine but is also designed to function independently, bringing robust file handling to any application or database. FulcrumFS is especially well-suited for managing user-uploaded content such as documents, images and videos, offering strong guarantees around consistency and integrity.
+While it serves as a key component of our upcoming **FulcrumDB** database engine, it is also designed to function independently, bringing robust file handling to any application or database. FulcrumFS is especially well-suited for managing user-uploaded content such as documents, images and videos, offering strong guarantees around consistency and integrity.
 
 Details of each component are provided below:
 
-| Library | Status | Package |
-| --- | --- | --- |
-| **FulcrumFS** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
-| **FulcrumFS.Images** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+|| Library | Status | Package |
+| --- | --- | --- | --- |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
 
-**Supported Platforms**: .NET 8.0+
+**Supported Runtimes**: .NET 8.0+
 
 Libraries may be in the following states:
-- Internal: Source code (and possibly a nuget package) is available to the public but the library is intended to be used internally until further development.
-- Preview: The library is available for public preview but the APIs may not be fully documented and the API surface is subject to change without notice.
-- Public: The library is intended for public use with a fully documented and stable API surface.
+- Internal: Source code (and possibly a nuget package) is available but the library is intended for internal use at this time.
+- Preview: Library is available for public preview but the APIs may not be fully documented and the API surface is subject to change without notice.
+- Public: Library is intended for public use with a fully documented and stable API surface.
 
 You are free to use any libraries or code in this repository that you find useful and feedback/contributions are welcome regardless of library state.
 
@@ -34,23 +42,24 @@ This package is part of our **Singulink Libraries** collection. Visit https://gi
 
 ### FulcrumFS
 
-The core library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system.
+Core library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system.
 
 **Features**:
 
-✔️ **Two-phase commit** ensures consistency with transactional databases while keeping files decoupled from database storage  
+✔️ **Two-phase commit** enables consistency with transactional databases while keeping files decoupled from database storage  
 ✔️ Validate, pre-process, and post-process files during storage and retrieval  
-✔️ Generate and manage file variants (e.g., alternate formats, resolutions, thumbnails)  
-✔️ Operates on any file system, including local disks, NAS, and network shares  
-✔️ Scales to **millions of files** per repository without degrading file system performance  
+✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)  
+✔️ Operates reliably on any file system, including local disks, NAS, and network file systems  
+✔️ Graceful recovery from crashes, power failures and disconnected storage volumes  
+✔️ Scales to **millions of files** per repository while maintaining good file system performance characteristics  
 ✔️ Provides **direct `FileStream` access** for efficient, low-overhead file I/O  
-✔️ Stored files remain browsable in standard file managers (e.g., File Explorer)  
+✔️ Stored files remain browsable in standard file managers (e.g. File Explorer, Finder)  
 ✔️ Fully compatible with file system features like encryption and compression  
-✔️ Works seamlessly with existing backup, redundancy, replication, and storage tools  
+✔️ Designed to work seamlessly with existing backup, redundancy, replication, and storage tools  
 
 ### FulcrumFS.Images
 
-An optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping, for both original images and their derived variants.
+Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping, for both original images and their derived variants.
 
 Image processing is provided by the excellent [`ImageSharp`](https://github.com/SixLabors/ImageSharp) library.
 

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -6,7 +6,7 @@
 
     <PackageId>Singulink.FulcrumFS</PackageId>
     <Version>0.9-alpha</Version>
-    <Description>Transactional file processing pipeline and storage engine with two-phase commit, de-duplication, and variant management.</Description>
+    <Description>Transactional file processing pipeline and storage engine with two-phase commit and file variant management.</Description>
     <PackageTags></PackageTags>
   </PropertyGroup>
 
@@ -14,7 +14,12 @@
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
     <PackageReference Include="Nito.AsyncEx.Coordination" Version="5.1.2" />
     <PackageReference Include="Singulink.Enums" Version="2.3.0" />
-    <PackageReference Include="Singulink.IO.FileSystem" Version="2.0.0" />
+    <PackageReference Include="Singulink.IO.FileSystem" Version="2.3.3" />
+    <PackageReference Include="Singulink.Threading" Version="2.0.2" />
+
+    <!-- Analyzers -->
+    <PackageReference Include="hamarb123.Analyzers" Version="1.2.1" PrivateAssets="All" />
+    <PackageReference Include="Roslyn.Diagnostics.Analyzers" Version="4.14.0" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>
