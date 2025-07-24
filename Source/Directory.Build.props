@@ -10,7 +10,7 @@
     <Authors>Singulink</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Copyright>© Singulink. All rights reserved.</Copyright>
-    <PackageIcon>Singulink Icon 128x128.png</PackageIcon>
+    <PackageIcon>FulcrumFS Icon 128x128.png</PackageIcon>
     <PackageProjectUrl>https://github.com/Singulink/Singulink.UI</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -32,7 +32,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\Resources\Singulink Icon 128x128.png" Pack="true" PackagePath="\"/>
+    <None Include="..\..\Resources\FulcrumFS Icon 128x128.png" Pack="true" PackagePath="\"/>
     <None Include="..\key.snk" Link="key.snk" />
   </ItemGroup>
 </Project>
