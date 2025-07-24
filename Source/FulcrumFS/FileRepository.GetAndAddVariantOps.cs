@@ -1,0 +1,117 @@
+using System.Diagnostics;
+
+namespace FulcrumFS;
+
+/// <content>
+/// Contains the implementation of methods that get or add variants to the repository.
+/// </content>
+partial class FileRepository
+{
+    /// <summary>
+    /// Adds a new file variant to an existing file in the repository, processing it through the specified pipeline. If a variant with the same ID already
+    /// exists, it returns the existing variant without reprocessing.
+    /// </summary>
+    /// <param name="fileId">The ID of the main file to which the variant will be added.</param>
+    /// <param name="variantId">The ID of the variant to be added. Must only contain ASCII letters, digits, hyphens and underscores.</param>
+    /// <param name="pipeline">The processing pipeline to use for the variant.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
+    public async Task<AddVariantResult> GetOrAddVariantAsync(
+        Guid fileId,
+        string variantId,
+        FileProcessPipeline pipeline,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await GetOrAddVariantAsyncImpl(fileId, variantId, pipeline, openStream: false, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (result.AddResult is null)
+            throw new UnreachableException("Unexpected Error: Variant result is null.");
+
+        return result.AddResult;
+    }
+
+    /// <summary>
+    /// Opens a file variant stream for an existing file in the repository.
+    /// </summary>
+    /// <exception cref="RepositoryFileNotFoundException">The variant was not found.</exception>
+    public async Task<FileStream> OpenVariantAsync(Guid fileId, string variantId)
+    {
+        var result = await GetOrAddVariantAsyncImpl(fileId, variantId, null, openStream: true, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+
+        if (result.Stream is null)
+            throw new RepositoryFileNotFoundException($"Variant '{variantId}' for file ID '{fileId}' was not found.");
+
+        return result.Stream;
+    }
+
+    /// <summary>
+    /// Gets an existing file variant from the repository.
+    /// </summary>
+    /// <exception cref="RepositoryFileNotFoundException">The variant was not found.</exception>
+    public async Task<IAbsoluteFilePath> GetVariantAsync(Guid fileId, string variantId)
+    {
+        var result = await GetOrAddVariantAsyncImpl(fileId, variantId, null, openStream: false, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+
+        if (result.AddResult is null)
+            throw new RepositoryFileNotFoundException($"Variant '{variantId}' for file ID '{fileId}' was not found.");
+
+        return result.AddResult.File;
+    }
+
+    private async Task<(AddVariantResult? AddResult, FileStream? Stream)> GetOrAddVariantAsyncImpl(
+        Guid fileId,
+        string variantId,
+        FileProcessPipeline? pipeline,
+        bool openStream,
+        CancellationToken cancellationToken)
+    {
+        ValidateFileId(fileId);
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        variantId = NormalizeVariantId(variantId) ?? throw new ArgumentException("Variant ID cannot be empty.", nameof(variantId));
+
+        string fileIdString = GetFileIdString(fileId);
+        IAbsoluteFilePath mainFile;
+        Stream mainFileStream;
+
+        IAbsoluteFilePath variantFile;
+        FileStream? OpenStream() => openStream ? variantFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete) : null;
+
+        using (await _fileSync.LockAsync((fileId, null), cancellationToken).ConfigureAwait(false))
+        {
+            variantFile = FindDataFile(fileIdString, variantId);
+
+            if (variantFile is not null)
+                return (new(variantFile, true), OpenStream());
+
+            lock (_processingFileIds)
+            {
+                if (_processingFileIds.Contains(fileId))
+                    throw new InvalidOperationException($"Main file ID '{fileId}' is currently being processed.");
+            }
+
+            mainFile = FindDataFile(fileIdString);
+
+            if (mainFile is null)
+                throw new RepositoryFileNotFoundException($"Main file ID '{fileId}' does not exist.");
+
+            mainFileStream = mainFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        }
+
+        await using (mainFileStream.ConfigureAwait(false))
+        using (await _fileSync.LockAsync((fileId, variantId), cancellationToken).ConfigureAwait(false))
+        {
+            variantFile = FindDataFile(fileIdString, variantId);
+
+            if (variantFile is not null)
+                return (new(variantFile, true), OpenStream());
+
+            if (pipeline is null)
+                return (null, null);
+
+            string extension = mainFile.Extension;
+            variantFile = await AddAsyncImpl(fileId, variantId, mainFileStream, extension, false, pipeline, cancellationToken).ConfigureAwait(false);
+
+            return (new(variantFile, false), OpenStream());
+        }
+    }
+}
