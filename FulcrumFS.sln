@@ -13,6 +13,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{02EA68
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FulcrumFS.Images", "Source\FulcrumFS.Images\FulcrumFS.Images.csproj", "{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FulcrumFS.Images.Tests", "Tests\FulcrumFS.Images.Tests\FulcrumFS.Images.Tests.csproj", "{55F4D68A-7FF3-401A-A1B6-87763B2210CF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,18 @@ Global
 		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|x64.Build.0 = Release|Any CPU
 		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|x86.ActiveCfg = Release|Any CPU
 		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8}.Release|x86.Build.0 = Release|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Debug|x64.Build.0 = Debug|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Debug|x86.Build.0 = Debug|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Release|x64.ActiveCfg = Release|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Release|x64.Build.0 = Release|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Release|x86.ActiveCfg = Release|Any CPU
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -67,6 +81,7 @@ Global
 		{89AE02BC-3E9A-49CE-95AA-B6225F7E9AFC} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{43D7D8D8-B82A-4309-917F-3083B5BECCC3} = {42064B01-EE8C-463B-897C-5E9F7FB395C4}
 		{1AB360CF-0EBC-49F2-881F-35A8BB5AE3A8} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{55F4D68A-7FF3-401A-A1B6-87763B2210CF} = {42064B01-EE8C-463B-897C-5E9F7FB395C4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B1A06F60-4A33-4818-A949-F527DAC4D3A8}

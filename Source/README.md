@@ -1,11 +1,3 @@
-<div align="center">
-<picture>
-    <source media="(prefers-color-scheme: dark)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Light.png">
-    <img src="/Resources/Fulcrum%20Logo%20400x150 LightBg.png" alt="Singulink Fulcrum Logo"/>
-</picture>
-</div>
-
 # FulcrumFS
 
 [![Chat on Discord](https://img.shields.io/discord/906246067773923490)](https://discord.gg/EkQhJFsBu6)
@@ -16,10 +8,10 @@ While it serves as a key component of our upcoming **FulcrumDB** database engine
 
 Details of each component are provided below:
 
-|| Library | Status | Package |
-| --- | --- | --- | --- |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| Library | Status | Package |
+| --- | --- | --- |
+| **Singulink.FulcrumFS** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
+| **Singulink.FulcrumFS.Images** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
 
 **Supported Runtimes**: .NET 9.0+
 
@@ -61,7 +53,7 @@ Core library that enables transactional file storage and processing, providing a
 
 Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping, for both original images and their derived variants.
 
-Image processing is provided by the fantastic [`ImageSharp`](https://github.com/SixLabors/ImageSharp) library.
+Image processing is provided by the fanstastic [`ImageSharp`](https://github.com/SixLabors/ImageSharp) library.
 
 ## Further Reading
 

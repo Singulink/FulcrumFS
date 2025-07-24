@@ -1,0 +1,19 @@
+﻿<Project Sdk="MSTest.Sdk/3.9.3">
+
+  <PropertyGroup>
+    <RootNamespace>Singulink.FulcrumFS.Images.Tests</RootNamespace>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\FulcrumFS.Images\FulcrumFS.Images.csproj" />
+    <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Images\test-1024x768.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -10,13 +10,13 @@
     <Authors>Singulink</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Copyright>© Singulink. All rights reserved.</Copyright>
-    <PackageIcon>Singulink Icon 128x128.png</PackageIcon>
+    <PackageIcon>FulcrumFS Icon 128x128.png</PackageIcon>
     <PackageProjectUrl>https://github.com/Singulink/Singulink.UI</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Link="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\README.md" Link="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <PropertyGroup Label="AOT Compatibility" Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net6.0'))">
@@ -32,7 +32,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\Resources\Singulink Icon 128x128.png" Pack="true" PackagePath="\"/>
+    <None Include="..\..\Resources\FulcrumFS Icon 128x128.png" Pack="true" PackagePath="\"/>
     <None Include="..\key.snk" Link="key.snk" />
   </ItemGroup>
 </Project>
