@@ -32,7 +32,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\Resources\FulcrumFS Icon 128x128.png" Pack="true" PackagePath="\"/>
+    <None Include="..\..\Resources\FulcrumFS Icon 128x128.png" Pack="true" PackagePath="\" />
     <None Include="..\key.snk" Link="key.snk" />
   </ItemGroup>
 </Project>
