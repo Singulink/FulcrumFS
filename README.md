@@ -18,8 +18,8 @@ Details of each component are provided below:
 
 || Library | Status | Package |
 | --- | --- | --- | --- |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Internal | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
 
 **Supported Runtimes**: .NET 9.0+
 
@@ -28,7 +28,7 @@ Libraries may be in the following states:
 - Preview: Library is available for public preview but the APIs may not be fully documented and the API surface is subject to change without notice.
 - Public: Library is intended for public use with a fully documented and stable API surface.
 
-You are free to use any libraries or code in this repository that you find useful and feedback/contributions are welcome regardless of library state.
+You are welcome to use any libraries or code in this repository that you find useful and feedback/contributions are appreciated regardless of library state.
 
 API documentation and additional information is coming soon.
 
@@ -50,7 +50,7 @@ Core library that enables transactional file storage and processing, providing a
 ✔️ Validate, pre-process, and post-process files during storage and retrieval  
 ✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)  
 ✔️ Operates reliably on any file system, including local disks, NAS, and network file systems  
-✔️ Graceful recovery from crashes, power failures and disconnected storage volumes  
+✔️ Recovers gracefully from crashes, power failures and disconnected storage volumes  
 ✔️ Scales to **millions of files** per repository while maintaining good file system performance characteristics  
 ✔️ Provides **direct `FileStream` access** for efficient, low-overhead file I/O  
 ✔️ Stored files remain browsable in standard file managers (e.g. File Explorer, Finder)  
@@ -59,7 +59,7 @@ Core library that enables transactional file storage and processing, providing a
 
 ### FulcrumFS.Images
 
-Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping, for both original images and their derived variants.
+Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
 Image processing is provided by the fantastic [`ImageSharp`](https://github.com/SixLabors/ImageSharp) library.
 
