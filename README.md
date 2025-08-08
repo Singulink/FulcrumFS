@@ -19,6 +19,7 @@ Details of each component are provided below:
 || Library | Status | Package |
 | --- | --- | --- | --- |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
 
 **Supported Runtimes**: .NET 9.0+
@@ -56,6 +57,10 @@ Core library that enables transactional file storage and processing, providing a
 ✔️ Stored files remain browsable in standard file managers (e.g. File Explorer, Finder)  
 ✔️ Fully compatible with file system features like encryption and compression  
 ✔️ Designed to work seamlessly with existing backup, redundancy, replication, and storage tools  
+
+### FulcrumFS.Core
+
+Core library that is mostly useful for access to the `FileId` type and repository paths from projects that do not need the full file processing capabilities of the main `FulcrumFS` library (e.g. in a client application that needs to convert file IDs received from a service to resulting path).
 
 ### FulcrumFS.Images
 

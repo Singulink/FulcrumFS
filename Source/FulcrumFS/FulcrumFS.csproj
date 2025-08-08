@@ -2,10 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
     <PackageId>Singulink.FulcrumFS</PackageId>
-    <Version>0.9-alpha</Version>
+    <Version>0.10-alpha</Version>
     <Description>Transactional file processing pipeline and storage engine with two-phase commit and file variant management.</Description>
     <PackageTags></PackageTags>
   </PropertyGroup>
@@ -20,6 +19,10 @@
     <!-- Analyzers -->
     <PackageReference Include="hamarb123.Analyzers" Version="1.2.1" PrivateAssets="All" />
     <PackageReference Include="Roslyn.Diagnostics.Analyzers" Version="4.14.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FulcrumFS.Core\FulcrumFS.Core.csproj" />
   </ItemGroup>
 
 </Project>

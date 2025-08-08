@@ -1,5 +1,3 @@
-using FulcrumFS.Utilities;
-
 namespace FulcrumFS;
 
 /// <content>
@@ -60,14 +58,14 @@ partial class FileRepo
 
             var marker = markerInfo.Path;
 
-            if (marker.Extension == IndeterminateMarkerExtension)
+            if (marker.Extension == FileRepoPath.IndeterminateMarkerExtension)
             {
                 if (markerInfo.CreationTimeUtc + Options.IndeterminateDelay > DateTime.UtcNow)
                     continue;
 
                 indeterminateMarkers.Add(marker);
             }
-            else if (marker.Extension == DeleteMarkerExtension)
+            else if (marker.Extension == FileRepoPath.DeleteMarkerExtension)
             {
                 if (markerInfo.CreationTimeUtc + Options.DeleteDelay > DateTime.UtcNow)
                     continue;
@@ -77,7 +75,7 @@ partial class FileRepo
 
                 if (variantId is null)
                 {
-                    await elc.TryRunAsync(DeleteDataFileGroupAsync(deleteFileId, immediateDelete: true)).ConfigureAwait(false);
+                    await elc.TryRunAsync(DeleteFileDirAsync(deleteFileId, immediateDelete: true)).ConfigureAwait(false);
                     deletedFileIds.Add(deleteFileId);
                 }
                 else
@@ -94,10 +92,10 @@ partial class FileRepo
             if (!FileId.TryParse(indeterminateMarker.NameWithoutExtension, out var indeterminateFileId))
                 continue;
 
-            var dataFileGroupDir = GetDataFileGroupDirectory(indeterminateFileId);
-            var dataFileGroupDirState = dataFileGroupDir.State;
+            var fileDir = GetFileDirectory(indeterminateFileId);
+            var fileDirState = fileDir.State;
 
-            if (dataFileGroupDirState is EntryState.ParentExists || deletedFileIds.Contains(indeterminateFileId))
+            if (fileDirState is EntryState.ParentExists || deletedFileIds.Contains(indeterminateFileId))
             {
                 // Parent dir of the group exists but the group itself does not, so we can delete the indeterminate marker since the file group is gone.
                 // Ignore errors, we don't want to create an indeterminate marker again if it is gone.
@@ -117,7 +115,7 @@ partial class FileRepo
             if (resolution is IndeterminateResolution.Keep)
                 await elc.TryRunAsync(DeleteIndeterminateMarkerAsync(indeterminateFileId)).ConfigureAwait(false);
             else if (resolution is IndeterminateResolution.Delete)
-                await elc.TryRunAsync(DeleteDataFileGroupAsync(indeterminateFileId, immediateDelete: true)).ConfigureAwait(false);
+                await elc.TryRunAsync(DeleteFileDirAsync(indeterminateFileId, immediateDelete: true)).ConfigureAwait(false);
             else
                 throw new ArgumentOutOfRangeException(nameof(resolveIndeterminateCallback), "The provided callback returned an invalid resolution value.");
         }

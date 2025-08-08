@@ -66,7 +66,7 @@ partial class FileRepo
             }
             catch (DirectoryNotFoundException) when (variantId is not null)
             {
-                // If the data file group directory does not exist (but its parent does) then it means that a race occurred and the file group was deleted while
+                // If the file directory does not exist (but its parent does) then it means that a race occurred and the file dir was deleted while
                 // we were processing the variant. We can keep thing simple and act as though adding the variant was successful and the delete happened
                 // afterwards by returning success. There is no need to throw an exception or report an error here.
 

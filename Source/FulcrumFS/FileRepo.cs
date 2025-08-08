@@ -1,9 +1,4 @@
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.IO;
-using Nito.AsyncEx;
-using Singulink.Threading;
 
 namespace FulcrumFS;
 
@@ -12,20 +7,16 @@ namespace FulcrumFS;
 /// </summary>
 public sealed partial class FileRepo : IDisposable
 {
-    private const string MainFileName = "$main$";
-    private const string DeleteMarkerExtension = ".del";
-    private const string IndeterminateMarkerExtension = ".ind";
-
     /// <summary>
     /// Gets the singleton instance of the <see cref="RecyclableMemoryStreamManager"/> used for managing MemoryStream memory. Internal use only.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static RecyclableMemoryStreamManager MemoryStreamManager { get; } = new();
 
-    private IAbsoluteFilePath _lockFilePath;
+    private IAbsoluteFilePath _lockFile;
     private FileStream? _lockStream;
 
-    private readonly IAbsoluteDirectoryPath _dataDirectory;
+    private readonly IAbsoluteDirectoryPath _filesDirectory;
     private readonly IAbsoluteDirectoryPath _tempDirectory;
     private readonly IAbsoluteDirectoryPath _cleanupDirectory;
 
@@ -36,13 +27,17 @@ public sealed partial class FileRepo : IDisposable
     private readonly AsyncLock _cleanSync = new();
 
     private long _lastSuccessfulHealthCheck = long.MinValue;
-
     private bool _isDisposed;
 
     /// <summary>
     /// Gets the configuration options for the file repository.
     /// </summary>
     public FileRepoOptions Options { get; }
+
+    /// <summary>
+    /// Gets the directory where files are stored.
+    /// </summary>
+    public IAbsoluteDirectoryPath FilesDirectory => _filesDirectory;
 
     /// <summary>
     /// Occurs when a commit operation fails. The handler can be used to log errors or perform custom error handling.
@@ -77,27 +72,16 @@ public sealed partial class FileRepo : IDisposable
     {
         Options = options;
 
-        _lockFilePath = options.BaseDirectory.CombineFile(".lock", PathOptions.None);
-        _dataDirectory = options.BaseDirectory.CombineDirectory("Data", PathOptions.None);
-        _tempDirectory = options.BaseDirectory.CombineDirectory(".temp", PathOptions.None);
-        _cleanupDirectory = options.BaseDirectory.CombineDirectory(".cleanup", PathOptions.None);
-    }
-
-    private static string NormalizeVariantId(string variantId)
-    {
-        if (variantId.Length is 0)
-            throw new ArgumentException("Variant ID cannot be empty.", nameof(variantId));
-
-        if (variantId.Any(c => !char.IsAsciiDigit(c) && !char.IsAsciiLetter(c) && c is not ('-' or '_')))
-            throw new ArgumentException("Variant ID must contain only ASCII letters, digits, hyphens and underscores.", nameof(variantId));
-
-        return variantId.ToLowerInvariant();
+        _lockFile = options.BaseDirectory.CombineFile(FileRepoPath.LockFileName, PathOptions.None);
+        _filesDirectory = options.BaseDirectory.CombineDirectory(FileRepoPath.FilesDirectoryName, PathOptions.None);
+        _tempDirectory = options.BaseDirectory.CombineDirectory(FileRepoPath.TempDirectoryName, PathOptions.None);
+        _cleanupDirectory = options.BaseDirectory.CombineDirectory(FileRepoPath.CleanupDirectoryName, PathOptions.None);
     }
 
     /// <summary>
     /// Gets a unique entry name for a given file ID and variant ID which is used to name temp work directories or cleanup files associated with the file.
     /// </summary>
-    private static string GetEntryName(FileId fileId, string? variantId) => variantId is null ? fileId.String : $"{fileId.String} {variantId}";
+    private static string GetEntryName(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
 
     private static bool TryGetFileIdStringAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
     {
@@ -118,37 +102,35 @@ public sealed partial class FileRepo : IDisposable
         if (FileId.TryParse(fileIdString, out fileId))
             return true;
 
-        fileIdString = null;
         variantId = null;
-
         return false;
     }
 
     private IAbsoluteFilePath GetDeleteMarker(FileId fileId, string? variant)
     {
-        string name = variant is null ? fileId.String : GetEntryName(fileId, variant);
-        return _cleanupDirectory.CombineFile(name + DeleteMarkerExtension, PathOptions.None);
+        string name = variant is null ? fileId.ToString() : GetEntryName(fileId, variant);
+        return _cleanupDirectory.CombineFile(name + FileRepoPath.DeleteMarkerExtension, PathOptions.None);
     }
 
     private IAbsoluteFilePath GetIndeterminateMarker(FileId fileId)
     {
-        return _cleanupDirectory.CombineFile(fileId.String + IndeterminateMarkerExtension, PathOptions.None);
+        return _cleanupDirectory.CombineFile(fileId.ToString() + FileRepoPath.IndeterminateMarkerExtension, PathOptions.None);
     }
 
     private IAbsoluteFilePath GetDataFile(FileId fileId, string extension, string? variantId = null)
     {
-        string fileNamePart = variantId ?? MainFileName;
+        string fileNamePart = variantId ?? FileRepoPath.MainFileName;
         string fullFileName = fileNamePart + extension;
-        return GetDataFileGroupDirectory(fileId).CombineFile(fullFileName, PathOptions.None);
+        return GetFileDirectory(fileId).CombineFile(fullFileName, PathOptions.None);
     }
 
     private IAbsoluteFilePath? FindDataFile(FileId fileId, string? variantId = null)
     {
-        string fileNamePart = variantId ?? MainFileName;
+        string fileNamePart = variantId ?? FileRepoPath.MainFileName;
 
         try
         {
-            return GetDataFileGroupDirectory(fileId).GetChildFiles(fileNamePart + ".*").SingleOrDefault();
+            return GetFileDirectory(fileId).GetChildFiles(fileNamePart + ".*").SingleOrDefault();
         }
         catch (DirectoryNotFoundException)
         {
@@ -156,20 +138,7 @@ public sealed partial class FileRepo : IDisposable
         }
     }
 
-    private IAbsoluteDirectoryPath GetDataFileGroupDirectory(FileId fileId)
-    {
-        // Length is 32 hex chars + 4 hyphens
-        Debug.Assert(fileId.String.Length is 36, "Unexpected file ID length.");
-
-        var fileIdSpan = fileId.String.AsSpan();
-
-        var relativeDir = DirectoryPath
-            .ParseRelative(fileIdSpan[9..11], PathFormat.Universal, PathOptions.None)
-            .CombineDirectory(fileIdSpan[11..13], PathOptions.None)
-            .CombineDirectory(fileId.String, PathOptions.None);
-
-        return _dataDirectory.Combine(relativeDir);
-    }
+    private IAbsoluteDirectoryPath GetFileDirectory(FileId fileId) => _filesDirectory.Combine(fileId.GetRelativeDirectory());
 
     private async Task LogToMarkerAsync<T>(IAbsoluteFilePath cleanupFile, string header, T message, bool markerRequired)
     {
@@ -190,7 +159,7 @@ public sealed partial class FileRepo : IDisposable
                     {
                         await sw.WriteLineAsync(
                         $"=============== {header} ===============\r\n\r\n" +
-                        $"Timestamp (UTC): {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}\r\n\r\n" +
+                        $"Timestamp: {DateTimeOffset.Now}\r\n\r\n" +
                         $"{message}\r\n\r\n").ConfigureAwait(false);
                     }
                 }

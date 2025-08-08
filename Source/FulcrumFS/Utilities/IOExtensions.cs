@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 internal static class IOExtensions
 {
     public static async Task CopyToAsync(this IAbsoluteFilePath source, IAbsoluteFilePath destination, CancellationToken cancellationToken = default)

@@ -37,10 +37,10 @@ partial class FileRepo
                     throw new InvalidOperationException($"File ID '{fileId}' is currently being processed and cannot be deleted.");
             }
 
-            var dataFileGroupDir = GetDataFileGroupDirectory(fileId);
+            var fileDir = GetFileDirectory(fileId);
             var deleteMarker = GetDeleteMarker(fileId, null);
 
-            switch (dataFileGroupDir.State, deleteMarker.State)
+            switch (fileDir.State, deleteMarker.State)
             {
                 case (EntryState.ParentExists, _) or (_, EntryState.Exists):
                     throw new RepoFileNotFoundException($"File ID '{fileId}' could not be found in the repository or has already been marked for deletion.");
@@ -60,10 +60,10 @@ partial class FileRepo
         await DeleteIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
 
     internal async Task TxnCommitDeleteAsync(FileId fileId) =>
-        await DeleteDataFileGroupAsync(fileId, immediateDelete: false).ConfigureAwait(false);
+        await DeleteFileDirAsync(fileId, immediateDelete: false).ConfigureAwait(false);
 
     internal async Task TxnRollbackAddAsync(FileId fileId) =>
-        await DeleteDataFileGroupAsync(fileId, immediateDelete: true).ConfigureAwait(false);
+        await DeleteFileDirAsync(fileId, immediateDelete: true).ConfigureAwait(false);
 
     internal async Task TxnRollbackDeleteAsync(FileId fileId) =>
         await DeleteIndeterminateMarkerAsync(fileId).ConfigureAwait(false);

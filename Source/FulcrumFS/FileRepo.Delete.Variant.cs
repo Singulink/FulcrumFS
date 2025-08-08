@@ -12,7 +12,7 @@ partial class FileRepo
 
     private async Task DeleteFileVariantAsync(FileId fileId, string variantId, bool immediateDelete)
     {
-        variantId = NormalizeVariantId(variantId);
+        variantId = VariantId.Normalize(variantId);
         await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
 
         var file = FindDataFile(fileId, variantId);

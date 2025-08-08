@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
 namespace FulcrumFS.Utilities;
@@ -5,6 +6,7 @@ namespace FulcrumFS.Utilities;
 /// <summary>
 /// Utility class for handling file extensions.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class FileExtension
 {
     /// <summary>

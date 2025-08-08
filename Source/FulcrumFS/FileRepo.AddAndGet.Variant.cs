@@ -13,13 +13,13 @@ partial class FileRepo
     {
         await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
 
-        var fileGroupDir = GetDataFileGroupDirectory(fileId);
+        var fileDir = GetFileDirectory(fileId);
 
         try
         {
-            return fileGroupDir.GetChildFiles()
+            return fileDir.GetChildFiles()
                 .Select(f => f.NameWithoutExtension)
-                .Where(n => n is not MainFileName)
+                .Where(n => n is not FileRepoPath.MainFileName)
                 .ToList();
         }
         catch (DirectoryNotFoundException)
@@ -44,7 +44,7 @@ partial class FileRepo
     /// <exception cref="RepoFileNotFoundException">The variant was not found.</exception>
     public async Task<IAbsoluteFilePath> GetVariantAsync(FileId fileId, string variantId)
     {
-        variantId = NormalizeVariantId(variantId);
+        variantId = VariantId.Normalize(variantId);
         await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
 
         return FindDataFile(fileId, variantId) ?? throw new RepoFileNotFoundException($"File ID '{fileId}' or its variant '{variantId}' was not found.");
@@ -105,7 +105,7 @@ partial class FileRepo
         FileProcessPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
-        variantId = NormalizeVariantId(variantId);
+        variantId = VariantId.Normalize(variantId);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         IAbsoluteFilePath variantFile = FindDataFile(fileId, variantId);

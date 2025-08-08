@@ -147,7 +147,7 @@ public sealed class Tests
 
         await using (var tx = await _repo.BeginTransactionAsync())
         {
-            var added = await tx.AddAsync(stream, leaveOpen: false, new ImageProcessor(new() { }));
+            var added = await tx.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
             fileId = added.FileId;
 
             await _repo.GetOrAddVariantAsync(fileId, "max", new ImageProcessor(new() {

@@ -1,5 +1,3 @@
-using FulcrumFS.Utilities;
-
 namespace FulcrumFS;
 
 /// <content>
@@ -45,13 +43,13 @@ partial class FileRepo
 
             using (await _fileSync.LockAsync((fileId, null), cancellationToken).ConfigureAwait(false))
             {
-                var dataFileGroupDir = GetDataFileGroupDirectory(fileId);
-                var dataFileGroupDirState = dataFileGroupDir.State;
+                var fileDir = GetFileDirectory(fileId);
+                var fileDirState = fileDir.State;
 
                 var deleteMarker = GetDeleteMarker(fileId, null);
                 var deleteMarkerState = deleteMarker.State;
 
-                if (dataFileGroupDirState is EntryState.Exists || deleteMarkerState is EntryState.Exists)
+                if (fileDirState is EntryState.Exists || deleteMarkerState is EntryState.Exists)
                     continue;
 
                 if (deleteMarkerState is not EntryState.ParentExists)

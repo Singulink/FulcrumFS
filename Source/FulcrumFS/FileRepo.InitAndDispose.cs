@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using FulcrumFS.Utilities;
 
 namespace FulcrumFS;
 
@@ -102,7 +101,7 @@ partial class FileRepo
                 Throw();
             }
 
-            var lockStream = _lockFilePath.OpenStream(FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+            var lockStream = _lockFile.OpenStream(FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
 
             try
             {

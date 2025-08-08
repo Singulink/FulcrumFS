@@ -8,7 +8,7 @@ namespace FulcrumFS;
 public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
 {
     private static DateTimeOffset _lastTimeStamp = DateTimeOffset.MinValue;
-    private static readonly object _timeSync = new();
+    private static readonly Lock _timeSync = new();
 
     /// <summary>
     /// Implicitly converts a <see cref="FileId"/> instance to a <see cref="System.Guid"/>.
@@ -36,7 +36,7 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public Guid Guid { get; }
 
-    internal string String => field ??= Guid.ToString("D").ToUpperInvariant();
+    private string String => field ??= Guid.ToString("D");
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileId"/> class with the specified GUID.
@@ -53,6 +53,28 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     {
         Guid = guid;
         String = str;
+    }
+
+    /// <summary>
+    /// Returns the directory path where the file and its variants are stored relative to the repository's files subdirectory.
+    /// </summary>
+    public IRelativeDirectoryPath GetRelativeDirectory()
+    {
+        var fileIdSpan = String.AsSpan();
+
+        return DirectoryPath
+            .ParseRelative(fileIdSpan[9..11], PathFormat.Universal, PathOptions.None)
+            .CombineDirectory(fileIdSpan[11..13], PathOptions.None)
+            .CombineDirectory(fileIdSpan, PathOptions.None);
+    }
+
+    /// <summary>
+    /// Returns the file path to a main file or its variant relative to the repository's files subdirectory.
+    /// </summary>
+    public IRelativeFilePath GetRelativeFilePath(string? variantId, string extension)
+    {
+        string fileName = string.IsNullOrEmpty(variantId) ? FileRepoPath.MainFileName : VariantId.Normalize(variantId);
+        return GetRelativeDirectory().CombineFile(fileName + extension);
     }
 
     /// <summary>
@@ -81,9 +103,11 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public static bool TryParse([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out FileId fileId)
     {
+        s = s?.ToLowerInvariant();
+
         if (Guid.TryParseExact(s, "D", out var guid) && guid.Version is 7)
         {
-            fileId = new(guid, s.ToUpperInvariant());
+            fileId = new(guid, s);
             return true;
         }
 
@@ -121,9 +145,12 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
         return left == right;
     }
 
-    internal static FileId CreateSequential()
+    /// <summary>
+    /// Creates a new sequential file ID.
+    /// </summary>
+    public static FileId CreateSequential()
     {
-        lock (_timeSync)
+        using (_timeSync.EnterScope())
         {
             var nextTimeStamp = _lastTimeStamp.AddMilliseconds(1);
             var currentTimeStamp = DateTimeOffset.UtcNow;
