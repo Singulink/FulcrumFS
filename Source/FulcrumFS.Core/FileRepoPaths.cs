@@ -3,12 +3,12 @@ namespace FulcrumFS;
 /// <summary>
 /// Contains path constants used by file repositories.
 /// </summary>
-public static class FileRepoPath
+public static class FileRepoPaths
 {
     /// <summary>
     /// The file name used for main files in the repository.
     /// </summary>
-    public const string MainFileName = "$main$";
+    public const string MainFileName = "$main";
 
     /// <summary>
     /// The directory name where files are stored in the repository.

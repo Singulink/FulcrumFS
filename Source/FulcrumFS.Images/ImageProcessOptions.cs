@@ -10,27 +10,22 @@ namespace FulcrumFS.Images;
 /// </summary>
 public class ImageProcessOptions
 {
-    internal ImmutableArray<ImageFormatOptions> FormatsInternal { get; private init; } =
-        ImageFormat.All.Select(f => new ImageFormatOptions(f)).ToImmutableArray();
-
     /// <summary>
     /// Gets or initializes the image format options for the formats that the processor will process. Defaults to all supported formats with default options.
     /// </summary>
-    public IReadOnlyList<ImageFormatOptions> Formats
+    public ImmutableArray<ImageFormatOptions> Formats
     {
-        get => FormatsInternal;
+        get;
         init {
-            var array = value.ToImmutableArray();
-
-            if (array.Length is 0)
+            if (value.Length is 0)
                 throw new ArgumentException("Formats cannot be empty.", nameof(value));
 
-            if (array.Any(f => f is null))
+            if (value.Any(f => f is null))
                 throw new ArgumentException("Formats cannot contain null values.", nameof(value));
 
-            FormatsInternal = array;
+            field = value;
         }
-    }
+    } = ImageFormat.All.Select(f => new ImageFormatOptions(f)).ToImmutableArray();
 
     /// <summary>
     /// Gets or initializes the options for validating the source image before processing.

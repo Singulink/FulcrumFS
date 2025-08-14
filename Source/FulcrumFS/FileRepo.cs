@@ -48,7 +48,7 @@ public sealed partial class FileRepo : IDisposable
     /// type <see cref="AggregateException"/>.</para>
     /// <para>
     /// Exceptions are not thrown automatically for transaction commit failures since added files are still accessible after the commit fails (they are just
-    /// marked as being in an indeterminate state). The handler can throw an exception if that behavior is desired.</para>
+    /// marked as being in an indeterminate state). The handler can throw an exception if throwing behavior is desired.</para>
     /// </remarks>
     public event Func<Exception, Task>? CommitFailed;
 
@@ -61,7 +61,7 @@ public sealed partial class FileRepo : IDisposable
     /// of type <see cref="AggregateException"/>.</para>
     /// <para>
     /// Exceptions are not thrown automatically for transaction rollback failures since deleted files are still accessible after the rollback fails (they are
-    /// just marked as being in an indeterminate state). The handler can throw an exception if that behavior is desired.</para>
+    /// just marked as being in an indeterminate state). The handler can throw an exception if throwing behavior is desired.</para>
     /// </remarks>
     public event Func<Exception, Task>? RollbackFailed;
 
@@ -72,10 +72,10 @@ public sealed partial class FileRepo : IDisposable
     {
         Options = options;
 
-        _lockFile = options.BaseDirectory.CombineFile(FileRepoPath.LockFileName, PathOptions.None);
-        _filesDirectory = options.BaseDirectory.CombineDirectory(FileRepoPath.FilesDirectoryName, PathOptions.None);
-        _tempDirectory = options.BaseDirectory.CombineDirectory(FileRepoPath.TempDirectoryName, PathOptions.None);
-        _cleanupDirectory = options.BaseDirectory.CombineDirectory(FileRepoPath.CleanupDirectoryName, PathOptions.None);
+        _lockFile = options.BaseDirectory.CombineFile(FileRepoPaths.LockFileName, PathOptions.None);
+        _filesDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.FilesDirectoryName, PathOptions.None);
+        _tempDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.TempDirectoryName, PathOptions.None);
+        _cleanupDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.CleanupDirectoryName, PathOptions.None);
     }
 
     /// <summary>
@@ -109,24 +109,24 @@ public sealed partial class FileRepo : IDisposable
     private IAbsoluteFilePath GetDeleteMarker(FileId fileId, string? variant)
     {
         string name = variant is null ? fileId.ToString() : GetEntryName(fileId, variant);
-        return _cleanupDirectory.CombineFile(name + FileRepoPath.DeleteMarkerExtension, PathOptions.None);
+        return _cleanupDirectory.CombineFile(name + FileRepoPaths.DeleteMarkerExtension, PathOptions.None);
     }
 
     private IAbsoluteFilePath GetIndeterminateMarker(FileId fileId)
     {
-        return _cleanupDirectory.CombineFile(fileId.ToString() + FileRepoPath.IndeterminateMarkerExtension, PathOptions.None);
+        return _cleanupDirectory.CombineFile(fileId.ToString() + FileRepoPaths.IndeterminateMarkerExtension, PathOptions.None);
     }
 
     private IAbsoluteFilePath GetDataFile(FileId fileId, string extension, string? variantId = null)
     {
-        string fileNamePart = variantId ?? FileRepoPath.MainFileName;
+        string fileNamePart = variantId ?? FileRepoPaths.MainFileName;
         string fullFileName = fileNamePart + extension;
         return GetFileDirectory(fileId).CombineFile(fullFileName, PathOptions.None);
     }
 
     private IAbsoluteFilePath? FindDataFile(FileId fileId, string? variantId = null)
     {
-        string fileNamePart = variantId ?? FileRepoPath.MainFileName;
+        string fileNamePart = variantId ?? FileRepoPaths.MainFileName;
 
         try
         {

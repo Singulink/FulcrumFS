@@ -58,14 +58,14 @@ partial class FileRepo
 
             var marker = markerInfo.Path;
 
-            if (marker.Extension == FileRepoPath.IndeterminateMarkerExtension)
+            if (marker.Extension == FileRepoPaths.IndeterminateMarkerExtension)
             {
                 if (markerInfo.CreationTimeUtc + Options.IndeterminateDelay > DateTime.UtcNow)
                     continue;
 
                 indeterminateMarkers.Add(marker);
             }
-            else if (marker.Extension == FileRepoPath.DeleteMarkerExtension)
+            else if (marker.Extension == FileRepoPaths.DeleteMarkerExtension)
             {
                 if (markerInfo.CreationTimeUtc + Options.DeleteDelay > DateTime.UtcNow)
                     continue;

@@ -23,7 +23,7 @@ public class ImageProcessor : FileProcessor
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageProcessor"/> class with the specified processing options.
     /// </summary>
-    public ImageProcessor(ImageProcessOptions options) : base(GetAllowedFileExtensions(options.FormatsInternal))
+    public ImageProcessor(ImageProcessOptions options) : base(GetAllowedFileExtensions(options.Formats))
     {
         Options = options;
     }
@@ -35,7 +35,7 @@ public class ImageProcessor : FileProcessor
 
         var sourceFormat = Image.DetectFormat(stream);
 
-        if (Options.FormatsInternal.FirstOrDefault(fo => fo.SourceFormat.LibFormat == sourceFormat) is not { } formatOptions)
+        if (Options.Formats.FirstOrDefault(fo => fo.SourceFormat.LibFormat == sourceFormat) is not { } formatOptions)
         {
             string allowedFormats = string.Join(", ", Options.Formats.Select(f => f.SourceFormat.LibFormat.Name));
             throw new FileProcessException($"The image format '{sourceFormat.Name}' is not allowed. Allowed formats: {allowedFormats}.");
@@ -352,7 +352,6 @@ public class ImageProcessor : FileProcessor
 
     private static IEnumerable<string> GetAllowedFileExtensions(ImmutableArray<ImageFormatOptions> formatOptions)
     {
-        return formatOptions
-            .SelectMany(format => format.SourceFormat.Extensions);
+        return formatOptions.SelectMany(format => format.SourceFormat.Extensions);
     }
 }

@@ -12,7 +12,7 @@ public sealed class Tests
     private static readonly IAbsoluteFilePath _imageFile = _appDir.CombineDirectory("Images").CombineFile("test-1024x768.jpg");
     private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot");
 
-    private static readonly FileRepo _repo = new FileRepo(new FileRepoOptions(_repoDir) {
+    private static readonly FileRepo _repo = new FileRepo(new(_repoDir) {
         MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(120),
     });
 
@@ -62,7 +62,7 @@ public sealed class Tests
     {
         ResetRepository();
 
-        using var stream = _imageFile.OpenStream();
+        await using var stream = _imageFile.OpenStream();
 
         FileId fileId;
 
@@ -128,10 +128,10 @@ public sealed class Tests
         i75.Length.ShouldBeGreaterThan(i50.Length);
         i50.Length.ShouldBeGreaterThan(i25.Length);
 
-        FileProcessor GetProcessor(int quality) => new ImageProcessor(new() {
-            Formats = [new(ImageFormat.Jpeg) {
-                Quality = quality,
-            }],
+        static FileProcessor GetProcessor(int quality) => new ImageProcessor(new() {
+            Formats = [
+                new(ImageFormat.Jpeg) { Quality = quality }
+            ],
             Resize = new(ImageResizeMode.Max, 300, 300),
         });
     }

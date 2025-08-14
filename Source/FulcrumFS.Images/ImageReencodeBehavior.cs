@@ -22,8 +22,8 @@ public enum ImageReencodeBehavior
 
     /// <summary>
     /// Discard the re-encoded result if it is larger in size than the source, the formats are the same and no changes were made to the image data. Only use
-    /// this mode if metadata changes (e.g., metadata stripping) are not important (i.e. they are only stripped for size optimization, and not privacy, for
-    /// example) and you want to keep the source image if it was encoded more efficiently than the re-encoded image.
+    /// this mode if metadata changes (e.g., metadata stripping) are not important (e.g. they are only stripped for size optimization and not privacy) and you
+    /// want to keep the source image if it was encoded more efficiently than the re-encoded image.
     /// </summary>
     DiscardIfLarger,
 }

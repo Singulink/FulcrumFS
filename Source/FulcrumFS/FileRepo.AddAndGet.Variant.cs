@@ -19,7 +19,7 @@ partial class FileRepo
         {
             return fileDir.GetChildFiles()
                 .Select(f => f.NameWithoutExtension)
-                .Where(n => n is not FileRepoPath.MainFileName)
+                .Where(n => n is not FileRepoPaths.MainFileName)
                 .ToList();
         }
         catch (DirectoryNotFoundException)

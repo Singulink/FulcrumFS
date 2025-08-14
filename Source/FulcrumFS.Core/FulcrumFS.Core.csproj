@@ -1,11 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <RootNamespace>FulcrumFS</RootNamespace>
     <TargetFramework>net9.0</TargetFramework>
 
     <PackageId>Singulink.FulcrumFS.Core</PackageId>
-    <Version>0.10-alpha</Version>
+    <Version>0.11-alpha</Version>
     <Description>Transactional file processing pipeline and storage engine with two-phase commit and file variant management.</Description>
     <PackageTags></PackageTags>
   </PropertyGroup>

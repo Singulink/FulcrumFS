@@ -73,7 +73,7 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public IRelativeFilePath GetRelativeFilePath(string? variantId, string extension)
     {
-        string fileName = string.IsNullOrEmpty(variantId) ? FileRepoPath.MainFileName : VariantId.Normalize(variantId);
+        string fileName = string.IsNullOrEmpty(variantId) ? FileRepoPaths.MainFileName : VariantId.Normalize(variantId);
         return GetRelativeDirectory().CombineFile(fileName + extension);
     }
 
