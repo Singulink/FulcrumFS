@@ -1,11 +1,8 @@
-using System.ComponentModel;
-
 namespace FulcrumFS.Utilities;
 
 /// <summary>
 /// Utility class for handling variant IDs.
 /// </summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
 public static class VariantId
 {
     /// <summary>
@@ -16,9 +13,37 @@ public static class VariantId
         if (variantId.Length is 0)
             throw new ArgumentException("Variant ID cannot be empty.", nameof(variantId));
 
-        if (variantId.Any(c => !char.IsAsciiDigit(c) && !char.IsAsciiLetter(c) && c is not ('-' or '_')))
-            throw new ArgumentException("Variant ID must contain only ASCII letters, digits, hyphens and underscores.", nameof(variantId));
+        foreach (char c in variantId)
+        {
+            if (!char.IsAsciiDigit(c) && !char.IsAsciiLetter(c) && c is not ('-' or '_'))
+                throw new ArgumentException("Variant ID must contain only ASCII letters, digits, hyphens and underscores.", nameof(variantId));
+        }
 
         return variantId.ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Checks if the given variant ID is valid and normalized.
+    /// </summary>
+    public static bool IsNormalized(string variantId) => IsValidAndNormalized(variantId.AsSpan());
+
+    /// <summary>
+    /// Checks if the given variant ID is valid and normalized.
+    /// </summary>
+    public static bool IsValidAndNormalized(ReadOnlySpan<char> variantId)
+    {
+        if (variantId.Length is 0)
+            return false;
+
+        foreach (char c in variantId)
+        {
+            if (!char.IsAsciiDigit(c) && !char.IsAsciiLetter(c) && c is not ('-' or '_'))
+                return false;
+
+            if (char.IsUpper(c))
+                return false;
+        }
+
+        return true;
     }
 }

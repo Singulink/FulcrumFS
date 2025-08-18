@@ -10,9 +10,17 @@ namespace FulcrumFS;
 public class FileRepoOptions
 {
     /// <summary>
+    /// Initializes a new instance of the <see cref="FileRepoOptions"/> class.
+    /// </summary>
+    public FileRepoOptions()
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="FileRepoOptions"/> class with the specified base directory for the file repository.
     /// </summary>
     /// <param name="baseDirectory">The base directory for the file repository. Must be an existing directory in the file system.</param>
+    [SetsRequiredMembers]
     public FileRepoOptions(IAbsoluteDirectoryPath baseDirectory)
     {
         BaseDirectory = baseDirectory;
@@ -21,31 +29,32 @@ public class FileRepoOptions
     /// <summary>
     /// Gets the base directory for the file repository.
     /// </summary>
-    public IAbsoluteDirectoryPath BaseDirectory { get; }
+    public required IAbsoluteDirectoryPath BaseDirectory { get; init; }
 
     /// <summary>
-    /// Gets or initializes the time delay between when files are marked for deletion and when they are actually deleted from the repository. Default is <see
-    /// cref="TimeSpan.Zero"/>, indicating immediate deletion upon transaction commit.
+    /// Gets or initializes the time delay between when files are marked for deletion and when they are actually deleted from the repository. A value of <see
+    /// cref="TimeSpan.Zero"/> indicates immediate deletion upon transaction commit. Default is 48 hours.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Setting a delete delay can be useful for allowing other open transactions that may still be referencing deleted files to complete before the files are
-    /// actually deleted. It can also be used to allow recovery of files that were mistakenly deleted, or to allow file backup systems that run on a schedule to
-    /// back up files before they are deleted.</para>
+    /// A delete delay is important for concurrent open transactions to have access to deleted files for a period of time. It can also be used to enable
+    /// recovery of files that were mistakenly deleted, or to allow scheduled file backups to run before files are physically deleted.</para>
     /// <para>
-    /// NOTE: This setting does not affect immediate deletion of files when a file add operation gets rolled back, either by the transaction being rolled back
-    /// or when the file is deleted within the same transaction.</para>
+    /// This setting does not affect immediate deletion of files when a file add operation gets rolled back, e.g. when a transaction that added a file is rolled
+    /// back or the file is deleted within the same transaction that added it.</para>
     /// </remarks>
-    public TimeSpan DeleteDelay {
+    public TimeSpan DeleteDelay
+    {
         get;
         init {
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero, nameof(value));
             field = value;
         }
-    } = TimeSpan.Zero;
+    } = TimeSpan.FromHours(48);
 
     /// <summary>
-    /// Gets or initializes the time delay after which files are considered indeterminate if they are not successfully committed or rolled back. Default is 24 hours.
+    /// Gets or initializes the time delay after which files are considered indeterminate if they are not successfully committed or rolled back. Default is 48
+    /// hours.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -54,9 +63,11 @@ public class FileRepoOptions
     /// cref="FileRepo.CleanAsync(Func{FileId, IndeterminateResolution}?, CancellationToken)"/> method for details on indeterminate file state resolution.
     /// </para>
     /// <para>
-    /// If the delay is too short, files may be prematurely deleted before they are committed, resulting in potential data loss. Even a large delay should have
-    /// minimal impact on the repository unless transactions frequently fail to commit or roll back, so a very generous safety margin is recommended when
-    /// configuring this value.
+    /// If the delay is too short, newly added files may be prematurely deleted during <see cref="FileRepo.CleanAsync(Func{FileId, IndeterminateResolution}?,
+    /// CancellationToken)"/> operations before they are committed, resulting in potential data loss. In practice, even a very large delay should have no
+    /// impact on the repository unless there is an problem with the application that is causing frequent transaction commit/rollback failures, so a very
+    /// generous safety margin is recommended when configuring this value. The delay should be at least several times longer than the longest possible
+    /// transaction that may add files to the repository.
     /// </para>
     /// </remarks>
     public TimeSpan IndeterminateDelay
@@ -66,7 +77,7 @@ public class FileRepoOptions
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero, nameof(value));
             field = value;
         }
-    } = TimeSpan.FromHours(24);
+    } = TimeSpan.FromHours(48);
 
     /// <summary>
     /// Gets or initializes the interval at which health checks on the repo volume/directory are performed. Minimum value is 1 second. Default is 15 seconds.

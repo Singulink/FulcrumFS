@@ -155,13 +155,13 @@ public sealed partial class FileRepo : IDisposable
                 {
                     var sw = new StreamWriter(stream, leaveOpen: true);
 
-                    await using (sw.ConfigureAwait(false))
-                    {
-                        await sw.WriteLineAsync(
+                    string entry =
                         $"=============== {header} ===============\r\n\r\n" +
                         $"Timestamp: {DateTimeOffset.Now}\r\n\r\n" +
-                        $"{message}\r\n\r\n").ConfigureAwait(false);
-                    }
+                        $"{message}\r\n\r\n";
+
+                    await using (sw.ConfigureAwait(false))
+                        await sw.WriteLineAsync(entry).ConfigureAwait(false);
                 }
             }
         }

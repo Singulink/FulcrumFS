@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
 namespace FulcrumFS.Utilities;
@@ -6,9 +5,10 @@ namespace FulcrumFS.Utilities;
 /// <summary>
 /// Utility class for handling file extensions.
 /// </summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
 public static class FileExtension
 {
+    private static readonly IRelativeFilePath _dummyFile = FilePath.ParseRelative("f", PathFormat.Universal, PathOptions.None);
+
     /// <summary>
     /// Returns a validated and normalized file extension from the given extension string. Extension must either be empty or start with a dot (e.g.,
     /// <c>".jpg"</c>, <c>".png"</c>).
@@ -20,7 +20,32 @@ public static class FileExtension
         if (string.IsNullOrEmpty(extension))
             return string.Empty;
 
-        var file = FilePath.ParseRelative("f", PathFormat.Universal, PathOptions.None).WithExtension(extension);
+        var file = _dummyFile.WithExtension(extension);
         return file.Extension.ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Checks if the given file extension is valid and normalized.
+    /// </summary>
+    public static bool IsNormalized(string extension) => IsValidAndNormalized(extension.AsSpan());
+
+    /// <summary>
+    /// Checks if the given file extension is valid and normalized.
+    /// </summary>
+    public static bool IsValidAndNormalized(ReadOnlySpan<char> extension)
+    {
+        if (extension.Length is 0)
+            return true;
+
+        if (extension[0] is not '.')
+            return false;
+
+        foreach (char c in extension[1..])
+        {
+            if (char.IsUpper(c))
+                return false;
+        }
+
+        return true;
     }
 }

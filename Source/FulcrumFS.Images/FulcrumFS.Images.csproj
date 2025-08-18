@@ -3,7 +3,7 @@
     <TargetFramework>net9.0</TargetFramework>
 
     <PackageId>Singulink.FulcrumFS.Images</PackageId>
-    <Version>0.11-alpha</Version>
+    <Version>0.12</Version>
     <Description>
       FulcrumFS extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and
       metadata stripping, for both original images and their derived variants.

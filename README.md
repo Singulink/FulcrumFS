@@ -9,6 +9,7 @@
 # FulcrumFS
 
 [![Chat on Discord](https://img.shields.io/discord/906246067773923490)](https://discord.gg/EkQhJFsBu6)
+[![Build and Test](https://github.com/Singulink/FulcrumFS/workflows/build%20and%20test/badge.svg)](https://github.com/Singulink/FulcrumFS/actions?query=workflow%3A%22build+and+test%22)
 
 **FulcrumFS** is a high-performance file processing pipeline and storage engine that layers on top of any file system, transforming standard directories into transactional file repositories with a two-phase commit system and file variant management.
 

@@ -13,6 +13,7 @@ public sealed class Tests
     private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot");
 
     private static readonly FileRepo _repo = new FileRepo(new(_repoDir) {
+        DeleteDelay = TimeSpan.Zero,
         MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(120),
     });
 
@@ -71,7 +72,7 @@ public sealed class Tests
             var added = await tx.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
             fileId = added.FileId;
 
-            await _repo.GetOrAddVariantAsync(added.FileId, "thumbnail", new ImageProcessor(new() {
+            await _repo.AddVariantAsync(added.FileId, "thumbnail", new ImageProcessor(new() {
                 Resize = new(ImageResizeMode.Max, 100, 100),
             }));
 
@@ -112,9 +113,9 @@ public sealed class Tests
                 fileId = added.FileId;
             }
 
-            await _repo.GetOrAddVariantAsync(fileId, "75", GetProcessor(75));
-            await _repo.GetOrAddVariantAsync(fileId, "50", GetProcessor(50));
-            await _repo.GetOrAddVariantAsync(fileId, "25", GetProcessor(25));
+            await _repo.AddVariantAsync(fileId, "75", GetProcessor(75));
+            await _repo.AddVariantAsync(fileId, "50", GetProcessor(50));
+            await _repo.AddVariantAsync(fileId, "25", GetProcessor(25));
 
             await tx.CommitAsync();
         }
@@ -150,20 +151,20 @@ public sealed class Tests
             var added = await tx.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
             fileId = added.FileId;
 
-            await _repo.GetOrAddVariantAsync(fileId, "max", new ImageProcessor(new() {
+            await _repo.AddVariantAsync(fileId, "max", new ImageProcessor(new() {
                 Resize = new(ImageResizeMode.Max, 2000, 2000),
             }));
 
-            await _repo.GetOrAddVariantAsync(fileId, "crop", new ImageProcessor(new() {
+            await _repo.AddVariantAsync(fileId, "crop", new ImageProcessor(new() {
                 Resize = new(ImageResizeMode.Crop, 2000, 2000),
             }));
 
-            await _repo.GetOrAddVariantAsync(fileId, "pad1", new ImageProcessor(new() {
+            await _repo.AddVariantAsync(fileId, "pad1", new ImageProcessor(new() {
                 Resize = new(ImageResizeMode.Pad, 800, 800),
                 BackgroundColor = BackgroundColor.FromRgb(0, 255, 0, true),
             }));
 
-            await _repo.GetOrAddVariantAsync(fileId, "pad2", new ImageProcessor(new() {
+            await _repo.AddVariantAsync(fileId, "pad2", new ImageProcessor(new() {
                 Resize = new(ImageResizeMode.Pad, 2000, 2000) {
                     PadColor = BackgroundColor.FromRgb(255, 0, 0, true),
                 },
