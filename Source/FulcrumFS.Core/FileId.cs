@@ -16,7 +16,7 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     public static implicit operator Guid(FileId fileId) => fileId.Guid;
 
     /// <summary>
-    /// Implicitly converts a <see cref="System.Guid"/> to a <see cref="FileId"/>.
+    /// Converts a <see cref="System.Guid"/> to a <see cref="FileId"/>.
     /// </summary>
     /// <param name="fileIdGuid">The <see cref="System.Guid"/> to convert to a <see cref="FileId"/>.</param>
     public static explicit operator FileId(Guid fileIdGuid) => new(fileIdGuid);
@@ -36,6 +36,12 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public Guid Guid { get; }
 
+    /// <summary>
+    /// Gets the directory path where the file and its variants are stored relative to the repository's <see cref="FileRepoPaths.FilesDirectoryName"/>
+    /// subdirectory.
+    /// </summary>
+    public IRelativeDirectoryPath RelativeDirectory => field ??= GetRelativeDirectory();
+
     private string String => field ??= Guid.ToString("D");
 
     /// <summary>
@@ -43,38 +49,54 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public FileId(Guid guid)
     {
-        if (guid.Version is not 7)
+        if (!IsValidFileIdGuid(guid))
             throw new ArgumentException("Invalid File ID.");
 
         Guid = guid;
     }
 
-    private FileId(Guid guid, string str)
+    private FileId(Guid guid, string s)
     {
         Guid = guid;
-        String = str;
+        String = s;
     }
 
     /// <summary>
-    /// Returns the directory path where the file and its variants are stored relative to the repository's files subdirectory.
+    /// Creates a new file ID from the specified GUID.
     /// </summary>
-    public IRelativeDirectoryPath GetRelativeDirectory()
-    {
-        var fileIdSpan = String.AsSpan();
+    public static FileId Create(Guid guid) => new(guid);
 
-        return DirectoryPath
-            .ParseRelative(fileIdSpan[9..11], PathFormat.Universal, PathOptions.None)
-            .CombineDirectory(fileIdSpan[11..13], PathOptions.None)
-            .CombineDirectory(fileIdSpan, PathOptions.None);
+    /// <summary>
+    /// Creates a new sequential file ID.
+    /// </summary>
+    public static FileId CreateSequential()
+    {
+        using (_timeSync.EnterScope())
+        {
+            var nextTimeStamp = _lastTimeStamp.AddMilliseconds(1);
+            var currentTimeStamp = DateTimeOffset.UtcNow;
+
+            if (currentTimeStamp < nextTimeStamp)
+                currentTimeStamp = nextTimeStamp;
+
+            _lastTimeStamp = currentTimeStamp;
+
+            return new(Guid.CreateVersion7(currentTimeStamp));
+        }
     }
 
     /// <summary>
-    /// Returns the file path to a main file or its variant relative to the repository's files subdirectory.
+    /// Determines whether two <see cref="FileId"/> instances are equal.
     /// </summary>
-    public IRelativeFilePath GetRelativeFilePath(string? variantId, string extension)
+    public static bool Equals(FileId? left, FileId? right)
     {
-        string fileName = string.IsNullOrEmpty(variantId) ? FileRepoPaths.MainFileName : VariantId.Normalize(variantId);
-        return GetRelativeDirectory().CombineFile(fileName + extension);
+        if (left is null)
+            return right is null;
+
+        if (right is null)
+            return false;
+
+        return left == right;
     }
 
     /// <summary>
@@ -105,7 +127,7 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     {
         s = s?.ToLowerInvariant();
 
-        if (Guid.TryParseExact(s, "D", out var guid) && guid.Version is 7)
+        if (Guid.TryParseExact(s, "D", out var guid) && IsValidFileIdGuid(guid))
         {
             fileId = new(guid, s);
             return true;
@@ -116,12 +138,14 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     }
 
     /// <summary>
-    /// Gets the string representation of the file ID.
+    /// Returns the file path to a main file or its variant relative to the repository's <see cref="FileRepoPaths.FilesDirectoryName"/> subdirectory.
     /// </summary>
-    public override string ToString() => String;
-
-    /// <inheritdoc/>
-    public override int GetHashCode() => Guid.GetHashCode();
+    public IRelativeFilePath GetRelativeFilePath(string? variantId, string extension)
+    {
+        extension = FileExtension.Normalize(extension);
+        string fileName = string.IsNullOrEmpty(variantId) ? FileRepoPaths.MainFileName : VariantId.Normalize(variantId);
+        return GetRelativeDirectory().CombineFile(fileName + extension);
+    }
 
     /// <summary>
     /// Determines whether the specified <see cref="FileId"/> is equal to the current <see cref="FileId"/>.
@@ -131,36 +155,19 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// <inheritdoc/>
     public override bool Equals([NotNullWhen(true)] object? obj) => obj is FileId fileId && this == fileId;
 
-    /// <summary>
-    /// Determines whether two <see cref="FileId"/> instances are equal.
-    /// </summary>
-    public static bool Equals(FileId? left, FileId? right)
-    {
-        if (left is null)
-            return right is null;
-
-        if (right is null)
-            return false;
-
-        return left == right;
-    }
+    /// <inheritdoc/>
+    public override int GetHashCode() => Guid.GetHashCode();
 
     /// <summary>
-    /// Creates a new sequential file ID.
+    /// Gets the string representation of the file ID.
     /// </summary>
-    public static FileId CreateSequential()
+    public override string ToString() => String;
+
+    private static bool IsValidFileIdGuid(Guid guid) => guid.Version is 7;
+
+    private IRelativeDirectoryPath GetRelativeDirectory()
     {
-        using (_timeSync.EnterScope())
-        {
-            var nextTimeStamp = _lastTimeStamp.AddMilliseconds(1);
-            var currentTimeStamp = DateTimeOffset.UtcNow;
-
-            if (currentTimeStamp < nextTimeStamp)
-                currentTimeStamp = nextTimeStamp;
-
-            _lastTimeStamp = currentTimeStamp;
-
-            return new(Guid.CreateVersion7(currentTimeStamp));
-        }
+        var fileIdSpan = String.AsSpan();
+        return DirectoryPath.ParseRelative($"{fileIdSpan[9..11]}/{fileIdSpan[11..13]}/{fileIdSpan}", PathFormat.Universal, PathOptions.None);
     }
 }

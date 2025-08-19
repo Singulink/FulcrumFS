@@ -229,7 +229,7 @@ public sealed partial class FileRepo : IDisposable
         }
     }
 
-    private IAbsoluteDirectoryPath GetFileDirectory(FileId fileId) => _filesDirectory.Combine(fileId.GetRelativeDirectory());
+    private IAbsoluteDirectoryPath GetFileDirectory(FileId fileId) => _filesDirectory.Combine(fileId.RelativeDirectory);
 
     private async Task LogToMarkerAsync<T>(IAbsoluteFilePath cleanupFile, string header, T message, bool markerRequired)
     {
