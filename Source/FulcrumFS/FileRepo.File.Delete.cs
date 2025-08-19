@@ -5,9 +5,12 @@ namespace FulcrumFS;
 /// </content>
 partial class FileRepo
 {
-    private async Task DeleteFileDirAsync(FileId fileId, bool immediateDelete)
+    /// <summary>
+    /// Deletes a file and its variants from the repository.
+    /// </summary>
+    private async Task DeleteAsync(FileId fileId, bool immediateDelete)
     {
-        await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
+        await EnsureInitializedAsync().ConfigureAwait(false);
         using var fileLock = await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false);
 
         var fileDir = GetFileDirectory(fileId);

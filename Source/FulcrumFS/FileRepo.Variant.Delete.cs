@@ -6,20 +6,17 @@ namespace FulcrumFS;
 partial class FileRepo
 {
     /// <summary>
-    /// Asynchronously deletes a specified variant of a file.
+    /// Deletes the specified variant of a file.
     /// </summary>
-    public Task DeleteFileVariantAsync(FileId fileId, string variantId) => DeleteFileVariantAsync(fileId, variantId, immediateDelete: false);
+    public Task DeleteVariantAsync(FileId fileId, string variantId) => DeleteVariantAsync(fileId, variantId, immediateDelete: false);
 
-    private async Task DeleteFileVariantAsync(FileId fileId, string variantId, bool immediateDelete)
+    private async Task DeleteVariantAsync(FileId fileId, string variantId, bool immediateDelete)
     {
         variantId = VariantId.Normalize(variantId);
-        await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
+        await EnsureInitializedAsync().ConfigureAwait(false);
 
-        var file = FindDataFile(fileId, variantId);
+        var file = FindDataFile(fileId, variantId) ?? throw new RepoFileNotFoundException($"File ID '{fileId}' or its variant '{variantId}' was not found.");
         var deleteMarker = GetDeleteMarker(fileId, variantId);
-
-        if (file is null)
-            throw new RepoFileNotFoundException($"File ID '{fileId}' or its variant '{variantId}' was not found.");
 
         if (immediateDelete || Options.DeleteDelay <= TimeSpan.Zero)
         {

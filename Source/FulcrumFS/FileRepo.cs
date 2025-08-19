@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Microsoft.IO;
 
 namespace FulcrumFS;
@@ -79,31 +81,120 @@ public sealed partial class FileRepo : IDisposable
     }
 
     /// <summary>
-    /// Gets a unique entry name for a given file ID and variant ID which is used to name temp work directories or cleanup files associated with the file.
+    /// Ensures that the file repository is initialized, creating necessary directories and acquiring locks.
     /// </summary>
-    private static string GetEntryName(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
-
-    private static bool TryGetFileIdStringAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
+    public void EnsureInitialized()
     {
-        int dashIndex = entryName.IndexOf(' ');
-        string fileIdString;
-
-        if (dashIndex < 0)
+        using (_stateSync.Lock())
         {
-            fileIdString = entryName;
-            variantId = null;
+            InitializeCore();
         }
-        else
+    }
+
+    /// <summary>
+    /// Disposes of the file repository, releasing any resources and locks held by it.
+    /// </summary>
+    public void Dispose()
+    {
+        using (_stateSync.Lock())
         {
-            fileIdString = entryName[..dashIndex];
-            variantId = entryName[(dashIndex + 1)..];
+            if (_lockStream is not null)
+            {
+                _lockStream.Dispose();
+                _lockStream = null;
+            }
+
+            _isDisposed = true;
+        }
+    }
+
+    private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken = default)
+    {
+        return EnsureInitializedAsync(forceHealthCheck: false, cancellationToken);
+    }
+
+    private async ValueTask EnsureInitializedAsync(bool forceHealthCheck, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        long initStartTimestamp = Stopwatch.GetTimestamp();
+
+        using (await _stateSync.LockAsync(Options.MaxAccessWaitOrRetryTime, cancellationToken))
+        {
+            if (_lockStream is null || forceHealthCheck || Stopwatch.GetElapsedTime(_lastSuccessfulHealthCheck) >= Options.HealthCheckInterval)
+            {
+                var elc = new ExceptionListCapture(ex => ex is IOException);
+
+                if (_lockStream is not null && !elc.TryRun(CheckHealth))
+                {
+                    _lockStream.Dispose();
+                    _lockStream = null;
+                }
+
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (elc.TryRun(InitializeCore))
+                        return;
+
+                    if (Stopwatch.GetElapsedTime(initStartTimestamp) > Options.MaxAccessWaitOrRetryTime)
+                        throw new TimeoutException("The operation timed out attempting to get I/O access the repository.", elc.ResultException);
+
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
 
-        if (FileId.TryParse(fileIdString, out fileId))
-            return true;
+        void CheckHealth()
+        {
+            if (_lockStream.Length > 10)
+                _lockStream.SetLength(0);
+            else
+                _lockStream.SetLength(_lockStream.Length + 1);
 
-        variantId = null;
-        return false;
+            _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
+        }
+    }
+
+    /// <summary>
+    /// MUST BE CALLED WITHIN A STATE SYNC LOCK.
+    /// </summary>
+    private void InitializeCore()
+    {
+        if (_lockStream is not null)
+            return;
+
+        InitializeCoreSlow();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void InitializeCoreSlow()
+        {
+            if (_isDisposed)
+            {
+                void Throw() => throw new ObjectDisposedException(nameof(FileRepo));
+                Throw();
+            }
+
+            var lockStream = _lockFile.OpenStream(FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+
+            try
+            {
+                _tempDirectory.Delete(recursive: true);
+                _tempDirectory.Create();
+                _tempDirectory.Attributes |= FileAttributes.Hidden;
+                _cleanupDirectory.Create();
+                _cleanupDirectory.Attributes |= FileAttributes.Hidden;
+            }
+            catch (IOException)
+            {
+                lockStream.Dispose();
+                throw;
+            }
+
+            _lockStream = lockStream;
+            _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
+        }
     }
 
     private IAbsoluteFilePath GetDeleteMarker(FileId fileId, string? variant)
@@ -166,5 +257,33 @@ public sealed partial class FileRepo : IDisposable
             }
         }
         catch (IOException) when (opened || !markerRequired || cleanupFile.State is EntryState.Exists) { }
+    }
+
+    /// <summary>
+    /// Gets a unique entry name for a given file ID and variant ID which is used to name temp work directories or cleanup files associated with the file.
+    /// </summary>
+    private static string GetEntryName(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
+
+    private static bool TryGetFileIdStringAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
+    {
+        int dashIndex = entryName.IndexOf(' ');
+        string fileIdString;
+
+        if (dashIndex < 0)
+        {
+            fileIdString = entryName;
+            variantId = null;
+        }
+        else
+        {
+            fileIdString = entryName[..dashIndex];
+            variantId = entryName[(dashIndex + 1)..];
+        }
+
+        if (FileId.TryParse(fileIdString, out fileId))
+            return true;
+
+        variantId = null;
+        return false;
     }
 }

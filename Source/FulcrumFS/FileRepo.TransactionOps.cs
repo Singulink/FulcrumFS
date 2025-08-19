@@ -10,7 +10,7 @@ partial class FileRepo
     /// </summary>
     public async ValueTask<FileRepoTransaction> BeginTransactionAsync()
     {
-        await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
+        await EnsureInitializedAsync().ConfigureAwait(false);
         return new FileRepoTransaction(this);
     }
 
@@ -21,13 +21,54 @@ partial class FileRepo
         FileProcessPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
-        var result = await AddAsyncImpl(stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
-        return new AddFileResult(result.FileId, result.File);
+        extension = FileExtension.Normalize(extension);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        FileId fileId;
+
+        while (true)
+        {
+            fileId = FileId.CreateSequential();
+
+            using (await _fileSync.LockAsync((fileId, null), cancellationToken).ConfigureAwait(false))
+            {
+                var fileDir = GetFileDirectory(fileId);
+                var fileDirState = fileDir.State;
+
+                var deleteMarker = GetDeleteMarker(fileId, null);
+                var deleteMarkerState = deleteMarker.State;
+
+                if (fileDirState is EntryState.Exists || deleteMarkerState is EntryState.Exists)
+                    continue;
+
+                if (deleteMarkerState is not EntryState.ParentExists)
+                    throw new IOException("An error occurred while accessing the repository: Cleanup directory does not exist.");
+
+                lock (_processingFileIds)
+                {
+                    if (!_processingFileIds.Add(fileId))
+                        continue;
+                }
+
+                break;
+            }
+        }
+
+        try
+        {
+            var result = await AddCommonAsyncCore(fileId, null, stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
+            return new(fileId, result);
+        }
+        finally
+        {
+            lock (_processingFileIds)
+                _processingFileIds.Remove(fileId);
+        }
     }
 
     internal async Task TxnDeleteAsync(FileId fileId)
     {
-        await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
+        await EnsureInitializedAsync().ConfigureAwait(false);
 
         using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
         {
@@ -60,10 +101,10 @@ partial class FileRepo
         await DeleteIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
 
     internal async Task TxnCommitDeleteAsync(FileId fileId) =>
-        await DeleteFileDirAsync(fileId, immediateDelete: false).ConfigureAwait(false);
+        await DeleteAsync(fileId, immediateDelete: false).ConfigureAwait(false);
 
     internal async Task TxnRollbackAddAsync(FileId fileId) =>
-        await DeleteFileDirAsync(fileId, immediateDelete: true).ConfigureAwait(false);
+        await DeleteAsync(fileId, immediateDelete: true).ConfigureAwait(false);
 
     internal async Task TxnRollbackDeleteAsync(FileId fileId) =>
         await DeleteIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
@@ -78,27 +119,5 @@ partial class FileRepo
     {
         if (RollbackFailed is { } handler)
             await handler.Invoke(ex).ConfigureAwait(false);
-    }
-
-    private async Task DeleteIndeterminateMarkerAsync(FileId fileId)
-    {
-        await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
-
-        var indeterminateMarker = GetIndeterminateMarker(fileId);
-
-        using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
-        {
-            try
-            {
-                indeterminateMarker.Delete(ignoreNotFound: true);
-            }
-            catch (IOException ex) when (ex.GetType() != typeof(FileNotFoundException))
-            {
-                // If we can't delete the indeterminate marker, log the error but continue.
-                // This only needs to be a "best effort". File will stay in indeterminate state and will be cleaned up later.
-
-                await LogToMarkerAsync(indeterminateMarker, "DELETE MARKER ATTEMPT FAILED", ex, markerRequired: false).ConfigureAwait(false);
-            }
-        }
     }
 }

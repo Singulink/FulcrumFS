@@ -75,12 +75,12 @@ partial class FileRepo
 
                 if (variantId is null)
                 {
-                    await elc.TryRunAsync(DeleteFileDirAsync(deleteFileId, immediateDelete: true)).ConfigureAwait(false);
+                    await elc.TryRunAsync(DeleteAsync(deleteFileId, immediateDelete: true)).ConfigureAwait(false);
                     deletedFileIds.Add(deleteFileId);
                 }
                 else
                 {
-                    await elc.TryRunAsync(DeleteFileVariantAsync(deleteFileId, variantId, immediateDelete: true)).ConfigureAwait(false);
+                    await elc.TryRunAsync(DeleteVariantAsync(deleteFileId, variantId, immediateDelete: true)).ConfigureAwait(false);
                 }
             }
         }
@@ -115,12 +115,34 @@ partial class FileRepo
             if (resolution is IndeterminateResolution.Keep)
                 await elc.TryRunAsync(DeleteIndeterminateMarkerAsync(indeterminateFileId)).ConfigureAwait(false);
             else if (resolution is IndeterminateResolution.Delete)
-                await elc.TryRunAsync(DeleteFileDirAsync(indeterminateFileId, immediateDelete: true)).ConfigureAwait(false);
+                await elc.TryRunAsync(DeleteAsync(indeterminateFileId, immediateDelete: true)).ConfigureAwait(false);
             else
                 throw new ArgumentOutOfRangeException(nameof(resolveIndeterminateCallback), "The provided callback returned an invalid resolution value.");
         }
 
         if (elc.HasExceptions)
             throw elc.ResultException;
+    }
+
+    private async Task DeleteIndeterminateMarkerAsync(FileId fileId)
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        var indeterminateMarker = GetIndeterminateMarker(fileId);
+
+        using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
+        {
+            try
+            {
+                indeterminateMarker.Delete(ignoreNotFound: true);
+            }
+            catch (IOException ex) when (ex.GetType() != typeof(FileNotFoundException))
+            {
+                // If we can't delete the indeterminate marker, log the error but continue.
+                // This only needs to be a "best effort" - file will stay in indeterminate state and another attempt to delete the marker will be made later.
+
+                await LogToMarkerAsync(indeterminateMarker, "DELETE MARKER ATTEMPT FAILED", ex, markerRequired: false).ConfigureAwait(false);
+            }
+        }
     }
 }

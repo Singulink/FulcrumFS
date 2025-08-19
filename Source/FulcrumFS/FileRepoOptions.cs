@@ -110,7 +110,7 @@ public class FileRepoOptions
 
     /// <summary>
     /// Gets or initializes the maximum time that repository operations will wait for successful I/O access to the repository before throwing a <see
-    /// cref="TimeoutException"/>. Must be between 1 second and <see cref="int.MaxValue"/> milliseconds (inclusive). Default is 10 seconds.
+    /// cref="TimeoutException"/>. Must be between 1 second and <see cref="int.MaxValue"/> milliseconds (inclusive). Default is 8 seconds.
     /// </summary>
     public TimeSpan MaxAccessWaitOrRetryTime {
         get;
@@ -120,5 +120,5 @@ public class FileRepoOptions
 
             field = value;
         }
-    } = TimeSpan.FromSeconds(10);
+    } = TimeSpan.FromSeconds(8);
 }
