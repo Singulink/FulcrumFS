@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Options;
 using Microsoft.IO;
 
 namespace FulcrumFS;
@@ -32,7 +33,7 @@ public sealed partial class FileRepo : IDisposable
     private bool _isDisposed;
 
     /// <summary>
-    /// Gets the configuration options for the file repository.
+    /// Gets the configuration options for the file repository. The returned instance is frozen and cannot be modified.
     /// </summary>
     public FileRepoOptions Options { get; }
 
@@ -72,12 +73,36 @@ public sealed partial class FileRepo : IDisposable
     /// </summary>
     public FileRepo(FileRepoOptions options)
     {
+        if (options.BaseDirectory is null)
+            throw new ArgumentException("Base directory must be set in options.", nameof(options));
+
+        options.Freeze();
         Options = options;
 
         _lockFile = options.BaseDirectory.CombineFile(FileRepoPaths.LockFileName, PathOptions.None);
         _filesDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.FilesDirectoryName, PathOptions.None);
         _tempDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.TempDirectoryName, PathOptions.None);
         _cleanupDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.CleanupDirectoryName, PathOptions.None);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileRepo"/> class with the specified options.
+    /// </summary>
+    public FileRepo(IOptions<FileRepoOptions> options) : this(options.Value) { }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileRepo"/> class with the specified base directory and optional configuration action.
+    /// </summary>
+    /// <param name="baseDirectory">The base directory for the file repository. Must be an existing directory in the file system.</param>
+    /// <param name="configure">An optional action that configures additional options.</param>
+    public FileRepo(IAbsoluteDirectoryPath baseDirectory, Action<FileRepoOptions>? configure = null)
+        : this(BuildOptions(baseDirectory, configure)) { }
+
+    private static FileRepoOptions BuildOptions(IAbsoluteDirectoryPath baseDirectory, Action<FileRepoOptions>? configure)
+    {
+        var options = new FileRepoOptions(baseDirectory);
+        configure?.Invoke(options);
+        return options;
     }
 
     /// <summary>
@@ -229,6 +254,9 @@ public sealed partial class FileRepo : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the directory where the main file and its variants are stored for the specified file ID.
+    /// </summary>
     private IAbsoluteDirectoryPath GetFileDirectory(FileId fileId) => _filesDirectory.Combine(fileId.RelativeDirectory);
 
     private async Task LogToMarkerAsync<T>(IAbsoluteFilePath cleanupFile, string header, T message, bool markerRequired)

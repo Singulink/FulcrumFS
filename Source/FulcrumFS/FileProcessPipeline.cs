@@ -1,5 +1,3 @@
-using System.Collections.Immutable;
-
 namespace FulcrumFS;
 
 /// <summary>
@@ -15,24 +13,24 @@ public class FileProcessPipeline
     /// <summary>
     /// Gets the collection of file processors that will be used in this pipeline to process files.
     /// </summary>
-    public ImmutableArray<FileProcessor> Processors { get; }
+    public IReadOnlyList<FileProcessor> Processors { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileProcessPipeline"/> class with the specified file processors.
     /// </summary>
     public FileProcessPipeline(IEnumerable<FileProcessor> processors)
     {
-        Processors = processors.ToImmutableArray();
+        Processors = [..processors];
     }
 
     internal async Task ExecuteAsync(FileProcessContext context)
     {
-        for (int i = 0; i < Processors.Length; i++)
+        for (int i = 0; i < Processors.Count; i++)
         {
             var processor = Processors[i];
-            var result = await processor.ProcessAsyncInternal(context, context.CancellationToken).ConfigureAwait(false);
+            var result = await processor.CallProcessAsync(context, context.CancellationToken).ConfigureAwait(false);
 
-            bool isNextProcessorLast = i >= Processors.Length - 2;
+            bool isNextProcessorLast = i >= Processors.Count - 2;
             await context.SetResult(result, isNextProcessorLast).ConfigureAwait(false);
         }
     }

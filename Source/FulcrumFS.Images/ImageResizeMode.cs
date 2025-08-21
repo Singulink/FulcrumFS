@@ -1,22 +1,25 @@
 namespace FulcrumFS.Images;
 
 /// <summary>
-/// Specifies the different modes available for resizing an image.
+/// Specifies the available modes for resizing an image.
 /// </summary>
 public enum ImageResizeMode
 {
     /// <summary>
-    /// Maintains the aspect ratio of the image and scales it down (if needed) to fit within the desired size.
+    /// Fit (contain): Preserve source image aspect ratio and scale down as needed to fit within the target width and height. Does not upscale smaller
+    /// images; output dimensions are less than or equal to the target size.
     /// </summary>
-    Max,
+    FitDown,
 
     /// <summary>
-    /// Pads the image to the aspect ratio of the desired size and scales it down (if needed) to the desired size.
+    /// Pad (letterbox): Pad the source image to match the target aspect ratio and scale down as needed to fit within the target size. Unused area is filled
+    /// using <see cref="ImageResizeOptions.PadColor"/>. Does not upscale smaller images; output dimensions are less than or equal to the target size.
     /// </summary>
-    Pad,
+    PadDown,
 
     /// <summary>
-    /// Crops the image to the aspect ratio of the desired size and scales it down (if needed) to the desired size.
+    /// Crop (cover): Crop the source image to match the target aspect ratio and scale down as needed to fit within the target size. Does not upscale smaller
+    /// images; output dimensions are less than or equal to the target size.
     /// </summary>
-    Crop,
+    CropDown,
 }

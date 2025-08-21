@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Diagnostics;
 using Microsoft.IO;
 using SixLabors.ImageSharp;
@@ -18,12 +17,12 @@ public class ImageProcessor : FileProcessor
     /// <summary>
     /// Gets the options used for processing images with this processor.
     /// </summary>
-    public ImageProcessOptions Options { get; }
+    public ImageProcessorOptions Options { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageProcessor"/> class with the specified processing options.
     /// </summary>
-    public ImageProcessor(ImageProcessOptions options) : base(GetAllowedFileExtensions(options.Formats))
+    public ImageProcessor(ImageProcessorOptions options) : base(GetAllowedFileExtensions(options))
     {
         Options = options;
     }
@@ -35,9 +34,9 @@ public class ImageProcessor : FileProcessor
 
         var sourceFormat = Image.DetectFormat(stream);
 
-        if (Options.Formats.FirstOrDefault(fo => fo.SourceFormat.LibFormat == sourceFormat) is not { } formatOptions)
+        if (Options.Formats.FirstOrDefault(fo => fo.SourceFormat.ImageSharpFormat == sourceFormat) is not { } formatOptions)
         {
-            string allowedFormats = string.Join(", ", Options.Formats.Select(f => f.SourceFormat.LibFormat.Name));
+            string allowedFormats = string.Join(", ", Options.Formats.Select(f => f.SourceFormat.Name));
             throw new FileProcessException($"The image format '{sourceFormat.Name}' is not allowed. Allowed formats: {allowedFormats}.");
         }
 
@@ -79,8 +78,20 @@ public class ImageProcessor : FileProcessor
 
         // StripMetadata
 
-        if (Options.StripMetadata is not StripMetadataMode.None)
-            StripMetadata(image, Options.StripMetadata, orientation, ref changedMetadata);
+        switch (Options.StripMetadata)
+        {
+            case StripImageMetadataMode.All:
+                StripStandardMetadata(image.Metadata, orientation, ref changedMetadata);
+
+                if (!changedMetadata)
+                    changedMetadata = formatOptions.SourceFormat.HasExtraStrippableMetadata(image.Metadata);
+
+                break;
+
+            case StripImageMetadataMode.ThumbnailOnly:
+                StripThumbnailMetadata(image.Metadata, ref changedMetadata);
+                break;
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -112,19 +123,19 @@ public class ImageProcessor : FileProcessor
 
         string resultExtension = formatOptions.ResultFormat.Extensions.First();
 
-        int sourceQuality = formatOptions.SourceFormat.GetQuality(info);
-        int resultQuality = Math.Min(sourceQuality, formatOptions.Quality);
+        int sourceQuality = formatOptions.SourceFormat.GetQuality(info.Metadata);
+        int resultQuality = Math.Min(sourceQuality, formatOptions.QualityOverride ?? Options.Quality);
         bool reducedQuality = sourceQuality != resultQuality;
         bool resultCompressible = formatOptions.ResultFormat.SupportsCompression;
 
-        (bool encode, bool discardIfLarger) = formatOptions.Reencode switch {
-            ImageReencodeBehavior.Always => (changedData || changedMetadata || reducedQuality || resultCompressible, !changedData && !changedMetadata),
-            ImageReencodeBehavior.SkipIfUnchanged => (changedData || changedMetadata || reducedQuality, !changedData && !changedMetadata),
-            ImageReencodeBehavior.DiscardIfLarger => (changedData || changedMetadata || reducedQuality || resultCompressible, !changedData),
+        (bool reencode, bool discardIfLarger) = (formatOptions.ReencodeOverride ?? Options.ReencodeBehavior) switch {
+            ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged => (changedData || changedMetadata || reducedQuality || resultCompressible, !changedData && !changedMetadata),
+            ImageReencodeBehavior.DiscardLargerEvenIfMetadataChanged => (changedData || changedMetadata || reducedQuality || resultCompressible, !changedData),
+            ImageReencodeBehavior.SkipUnlessMetadataOrQualityChanged => (changedData || changedMetadata || reducedQuality, !changedData && !changedMetadata),
             _ => throw new UnreachableException("Unexpected re-encode behavior."),
         };
 
-        if (encode)
+        if (reencode)
         {
             // Estimate output size based on (result pixels / source pixels) and a 20% compression factor.
             long estimatedOutputLength = stream.Length * image.Width / info.Width * image.Height / info.Height * 4 / 5;
@@ -132,7 +143,8 @@ public class ImageProcessor : FileProcessor
 
             try
             {
-                var resultEncoder = formatOptions.ResultFormat.GetEncoder(formatOptions.CompressionLevel, resultQuality, Options.StripMetadata);
+                var resultCompressionLevel = formatOptions.CompressionLevelOverride ?? Options.CompressionLevel;
+                var resultEncoder = formatOptions.ResultFormat.GetEncoder(resultCompressionLevel, resultQuality, Options.StripMetadata);
                 image.Save(outputStream, resultEncoder);
             }
             catch (Exception)
@@ -182,50 +194,47 @@ public class ImageProcessor : FileProcessor
             throw new FileProcessException("The image is too small.");
     }
 
-    private static void StripMetadata(Image image, StripMetadataMode mode, ushort orientation, ref bool changedMetadata)
+    private static void StripStandardMetadata(ImageMetadata metadata, ushort orientation, ref bool changedMetadata)
     {
-        if (mode is StripMetadataMode.All)
+        if (metadata.XmpProfile is not null ||
+            metadata.IccProfile is not null ||
+            metadata.CicpProfile is not null ||
+            metadata.IptcProfile is not null)
         {
-            if (image.Metadata.XmpProfile is not null ||
-                image.Metadata.IccProfile is not null ||
-                image.Metadata.CicpProfile is not null ||
-                image.Metadata.IptcProfile is not null)
+            metadata.XmpProfile = null;
+            metadata.IccProfile = null;
+            metadata.CicpProfile = null;
+            metadata.IptcProfile = null;
+
+            changedMetadata = true;
+        }
+
+        if (metadata.ExifProfile is not null)
+        {
+            if (orientation is 1)
             {
-                image.Metadata.XmpProfile = null;
-                image.Metadata.IccProfile = null;
-                image.Metadata.CicpProfile = null;
-                image.Metadata.IptcProfile = null;
+                // Orientation is normal so can be stripped as well since it's the default.
+                metadata.ExifProfile = null;
+                changedMetadata = true;
+            }
+            else if (metadata.ExifProfile.Values.Count > 1)
+            {
+                // Image has more than just non-default orientation, create a new profile with just the orientation.
+                metadata.ExifProfile = new ExifProfile();
+                metadata.ExifProfile.SetValue(ExifTag.Orientation, orientation);
 
                 changedMetadata = true;
             }
-
-            if (image.Metadata.ExifProfile is not null)
-            {
-                var exifInfo = image.Metadata.ExifProfile;
-
-                if (orientation is 1)
-                {
-                    // Orientation is normal so can be stripped as well since it's the default.
-                    image.Metadata.ExifProfile = null;
-                    changedMetadata = true;
-                }
-                else if (exifInfo.Values.Count > 1)
-                {
-                    // Image has more than just non-default orientation, create a new profile with just the orientation.
-                    image.Metadata.ExifProfile = new ExifProfile();
-                    image.Metadata.ExifProfile.SetValue(ExifTag.Orientation, orientation);
-
-                    changedMetadata = true;
-                }
-            }
         }
-        else if (mode is StripMetadataMode.ThumbnailOnly)
-        {
-            if (image.Metadata.ExifProfile?.TryGetValue(ExifTag.JPEGInterchangeFormat, out _) is true)
-            {
-                image.Metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormat);
-                image.Metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormatLength);
+    }
 
+    private static void StripThumbnailMetadata(ImageMetadata metadata, ref bool changedMetadata)
+    {
+        if (metadata.ExifProfile is not null)
+        {
+            if (metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormat) ||
+                metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormatLength))
+            {
                 changedMetadata = true;
             }
         }
@@ -241,7 +250,7 @@ public class ImageProcessor : FileProcessor
     {
         if (GetResizeInfo(image, options, swapDimensions) is not { } resizeInfo)
         {
-            if (options.ThrowIfSkipped)
+            if (options.ThrowWhenSkipped)
                 throw new ImageResizeSkippedException();
 
             return;
@@ -271,7 +280,7 @@ public class ImageProcessor : FileProcessor
 
         ResizeMode mode;
 
-        if (options.Mode is ImageResizeMode.Max)
+        if (options.Mode is ImageResizeMode.FitDown)
         {
             if (image.Width <= resizeWidth && image.Height <= resizeHeight)
                 return null;
@@ -286,7 +295,7 @@ public class ImageProcessor : FileProcessor
 
             mode = ResizeMode.Max;
         }
-        else if (options.Mode is ImageResizeMode.Crop)
+        else if (options.Mode is ImageResizeMode.CropDown)
         {
             double srcAspectRatio = (double)image.Width / image.Height;
             double destAspectRatio = (double)resizeWidth / resizeHeight;
@@ -315,7 +324,7 @@ public class ImageProcessor : FileProcessor
 
             mode = ResizeMode.Crop;
         }
-        else if (options.Mode is ImageResizeMode.Pad)
+        else if (options.Mode is ImageResizeMode.PadDown)
         {
             double srcAspectRatio = (double)image.Width / image.Height;
             double destAspectRatio = (double)resizeWidth / resizeHeight;
@@ -350,8 +359,5 @@ public class ImageProcessor : FileProcessor
         return (resizeWidth, resizeHeight, mode);
     }
 
-    private static IEnumerable<string> GetAllowedFileExtensions(ImmutableArray<ImageFormatOptions> formatOptions)
-    {
-        return formatOptions.SelectMany(format => format.SourceFormat.Extensions);
-    }
+    private static IEnumerable<string> GetAllowedFileExtensions(ImageProcessorOptions options) => options.Formats.SelectMany(format => format.SourceFormat.Extensions);
 }

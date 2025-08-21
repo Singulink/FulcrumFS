@@ -7,13 +7,17 @@ namespace FulcrumFS;
 /// </summary>
 public abstract class FileProcessor
 {
+    private FileProcessPipeline? _singleProcessorPipeline;
+
     private readonly ImmutableArray<string> _allowedFileExtensions;
 
     /// <summary>
     /// Gets the file extensions that this processor allows, including the leading dot (e.g., ".jpg", ".png"), or an empty collection if all file extensions are
     /// allowed.
     /// </summary>
-    public IList<string> AllowedFileExtensions => _allowedFileExtensions;
+    public IReadOnlyList<string> AllowedFileExtensions => _allowedFileExtensions;
+
+    internal FileProcessPipeline SingleProcessorPipeline => _singleProcessorPipeline ??= new([this]);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileProcessor"/> class with the specified allowed file extensions.
@@ -32,7 +36,7 @@ public abstract class FileProcessor
     /// </summary>
     protected abstract Task<FileProcessResult> ProcessAsync(FileProcessContext context, CancellationToken cancellationToken);
 
-    internal Task<FileProcessResult> ProcessAsyncInternal(FileProcessContext context, CancellationToken cancellationToken)
+    internal async Task<FileProcessResult> CallProcessAsync(FileProcessContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -44,11 +48,11 @@ public abstract class FileProcessor
 
         try
         {
-            return ProcessAsync(context, cancellationToken);
+            return await ProcessAsync(context, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not FileProcessException)
         {
-            throw new FileProcessException("An error occurred while processing the image.", ex);
+            throw new FileProcessException("An error occurred while processing the file.", ex);
         }
     }
 }

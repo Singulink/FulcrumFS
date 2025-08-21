@@ -9,6 +9,8 @@ namespace FulcrumFS;
 /// </summary>
 public class FileRepoOptions
 {
+    private bool _frozen;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepoOptions"/> class.
     /// </summary>
@@ -27,12 +29,18 @@ public class FileRepoOptions
     }
 
     /// <summary>
-    /// Gets the base directory for the file repository.
+    /// Gets or sets the base directory for the file repository.
     /// </summary>
-    public required IAbsoluteDirectoryPath BaseDirectory { get; init; }
+    public required IAbsoluteDirectoryPath BaseDirectory {
+        get;
+        set {
+            CheckFrozen();
+            field = value;
+        }
+    }
 
     /// <summary>
-    /// Gets or initializes the time delay between when files are marked for deletion and when they are actually deleted from the repository. A value of <see
+    /// Gets or sets the time delay between when files are marked for deletion and when they are actually deleted from the repository. A value of <see
     /// cref="TimeSpan.Zero"/> indicates immediate deletion upon transaction commit. Default is 48 hours.
     /// </summary>
     /// <remarks>
@@ -46,14 +54,15 @@ public class FileRepoOptions
     public TimeSpan DeleteDelay
     {
         get;
-        init {
+        set {
+            CheckFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero, nameof(value));
             field = value;
         }
     } = TimeSpan.FromHours(48);
 
     /// <summary>
-    /// Gets or initializes the time delay after which files are considered indeterminate if they are not successfully committed or rolled back. Default is 48
+    /// Gets or sets the time delay after which files are considered indeterminate if they are not successfully committed or rolled back. Default is 48
     /// hours.
     /// </summary>
     /// <remarks>
@@ -73,14 +82,15 @@ public class FileRepoOptions
     public TimeSpan IndeterminateDelay
     {
         get;
-        init {
+        set {
+            CheckFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero, nameof(value));
             field = value;
         }
     } = TimeSpan.FromHours(48);
 
     /// <summary>
-    /// Gets or initializes the interval at which health checks on the repo volume/directory are performed. Minimum value is 1 second. Default is 15 seconds.
+    /// Gets or sets the interval at which health checks on the repo volume/directory are performed. Minimum value is 1 second. Default is 15 seconds.
     /// </summary>
     /// <remarks>
     /// A relatively short health check interval is recommended to ensure that the repository can recover quickly from any issues that may arise, such as
@@ -90,35 +100,49 @@ public class FileRepoOptions
     /// </remarks>
     public TimeSpan HealthCheckInterval {
         get;
-        init {
+        set {
+            CheckFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1), nameof(value));
             field = value;
         }
     } = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// Gets or initializes the logging mode used to log information and errors to indeterminate and delete marker files. Default is <see
+    /// Gets or sets the logging mode used to log information and errors to indeterminate and delete marker files. Default is <see
     /// cref="LoggingMode.HumanReadable"/>.
     /// </summary>
     public LoggingMode MarkerFileLogging {
         get;
-        init {
+        set {
+            CheckFrozen();
             value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = LoggingMode.HumanReadable;
 
     /// <summary>
-    /// Gets or initializes the maximum time that repository operations will wait for successful I/O access to the repository before throwing a <see
+    /// Gets or sets the maximum time that repository operations will wait for successful I/O access to the repository before throwing a <see
     /// cref="TimeoutException"/>. Must be between 1 second and <see cref="int.MaxValue"/> milliseconds (inclusive). Default is 8 seconds.
     /// </summary>
     public TimeSpan MaxAccessWaitOrRetryTime {
         get;
-        init {
+        set {
+            CheckFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1), nameof(value));
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value, TimeSpan.FromMilliseconds(int.MaxValue), nameof(value));
 
             field = value;
         }
     } = TimeSpan.FromSeconds(8);
+
+    internal void Freeze()
+    {
+        _frozen = true;
+    }
+
+    private void CheckFrozen()
+    {
+        if (_frozen)
+            throw new InvalidOperationException("Cannot modify options after the repository has been initialized.");
+    }
 }

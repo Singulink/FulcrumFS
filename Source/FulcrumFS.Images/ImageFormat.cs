@@ -4,6 +4,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Metadata;
 
 namespace FulcrumFS.Images;
 
@@ -49,12 +50,12 @@ public abstract class ImageFormat
     /// </summary>
     public static ImageFormat Png { get; } = new PngImpl();
 
-    internal static ImmutableArray<ImageFormat> All { get; } = [Jpeg, Png];
+    internal static ImmutableArray<ImageFormat> AllFormats { get; } = [Jpeg, Png];
 
     /// <summary>
     /// Gets the file extensions associated with this image format.
     /// </summary>
-    public IEnumerable<string> Extensions => LibFormat.FileExtensions.Select(ext => "." + ext);
+    public IEnumerable<string> Extensions => ImageSharpFormat.FileExtensions.Select(ext => "." + ext);
 
     /// <summary>
     /// Gets the name of the image format (e.g., "JPEG", "PNG", "GIF").
@@ -76,16 +77,18 @@ public abstract class ImageFormat
     /// </summary>
     public abstract bool SupportsQuality { get; }
 
-    internal IImageFormat LibFormat { get; }
+    internal IImageFormat ImageSharpFormat { get; }
 
     private ImageFormat(IImageFormat format)
     {
-        LibFormat = format;
+        ImageSharpFormat = format;
     }
 
-    internal virtual int GetQuality(ImageInfo imageInfo) => 100;
+    internal virtual int GetQuality(ImageMetadata metadata) => 100;
 
-    internal abstract IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripMetadataMode stripMetadataMode);
+    internal virtual bool HasExtraStrippableMetadata(ImageMetadata metadata) => false;
+
+    internal abstract IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripImageMetadataMode stripMetadataMode);
 
     private class JpegImpl : ImageFormat
     {
@@ -101,13 +104,13 @@ public abstract class ImageFormat
 
         public override bool SupportsQuality => true;
 
-        internal override int GetQuality(ImageInfo imageInfo)
+        internal override int GetQuality(ImageMetadata metadata)
         {
-            var metadata = imageInfo.Metadata.GetJpegMetadata();
-            return metadata.ColorType is not null ? metadata.Quality : 100;
+            var jpegMetadata = metadata.GetJpegMetadata();
+            return jpegMetadata.ColorType is not null ? jpegMetadata.Quality : 100;
         }
 
-        internal override IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripMetadataMode stripMetadataMode)
+        internal override IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripImageMetadataMode stripMetadataMode)
         {
             return new JpegEncoder { Quality = quality };
         }
@@ -127,15 +130,16 @@ public abstract class ImageFormat
 
         public override bool SupportsQuality => false;
 
-        internal override IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripMetadataMode stripMetadataMode)
+        internal override bool HasExtraStrippableMetadata(ImageMetadata metadata)
         {
-            const PngChunkFilter stripMetadataChunkFilter =
-                PngChunkFilter.ExcludeGammaChunk |
-                PngChunkFilter.ExcludePhysicalChunk |
-                PngChunkFilter.ExcludeTextChunks;
+            var pngMetadata = metadata.GetPngMetadata();
+            return pngMetadata.TextData.Count > 0;
+        }
 
+        internal override IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripImageMetadataMode stripMetadataMode)
+        {
             return new PngEncoder {
-                ChunkFilter = stripMetadataMode is StripMetadataMode.All ? stripMetadataChunkFilter : PngChunkFilter.None,
+                ChunkFilter = stripMetadataMode is StripImageMetadataMode.All ? PngChunkFilter.ExcludeTextChunks : PngChunkFilter.None,
                 CompressionLevel = compressionLevel switch {
                     ImageCompressionLevel.Low => PngCompressionLevel.Level3,
                     ImageCompressionLevel.Medium => PngCompressionLevel.Level5,

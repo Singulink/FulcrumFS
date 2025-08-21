@@ -3,7 +3,7 @@ using Shouldly;
 using Singulink.IO;
 using SixLabors.ImageSharp;
 
-namespace FulcrumFS.Images.Tests;
+namespace FulcrumFS.Images;
 
 [PrefixTestClass]
 public sealed class Tests
@@ -12,9 +12,9 @@ public sealed class Tests
     private static readonly IAbsoluteFilePath _imageFile = _appDir.CombineDirectory("Images").CombineFile("test-1024x768.jpg");
     private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot");
 
-    private static readonly FileRepo _repo = new FileRepo(new(_repoDir) {
-        DeleteDelay = TimeSpan.Zero,
-        MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(120),
+    private static readonly FileRepo _repo = new(_repoDir, options => {
+        options.DeleteDelay = TimeSpan.Zero;
+        options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(120);
     });
 
     private static bool _initialized;
@@ -67,16 +67,16 @@ public sealed class Tests
 
         FileId fileId;
 
-        await using (var tx = await _repo.BeginTransactionAsync())
+        await using (var repoTxn = await _repo.BeginTransactionAsync())
         {
-            var added = await tx.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
+            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
             fileId = added.FileId;
 
             await _repo.AddVariantAsync(added.FileId, "thumbnail", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.Max, 100, 100),
+                Resize = new(ImageResizeMode.FitDown, 100, 100),
             }));
 
-            await tx.CommitAsync();
+            await repoTxn.CommitAsync();
         }
 
         var imagePath = await _repo.GetAsync(fileId);
@@ -105,11 +105,11 @@ public sealed class Tests
 
         FileId fileId;
 
-        await using (var tx = await _repo.BeginTransactionAsync())
+        await using (var repoTxn = await _repo.BeginTransactionAsync())
         {
             await using (var stream = _imageFile.OpenAsyncStream())
             {
-                var added = await tx.AddAsync(stream, true, GetProcessor(100));
+                var added = await repoTxn.AddAsync(stream, true, GetProcessor(100));
                 fileId = added.FileId;
             }
 
@@ -117,7 +117,7 @@ public sealed class Tests
             await _repo.AddVariantAsync(fileId, "50", GetProcessor(50));
             await _repo.AddVariantAsync(fileId, "25", GetProcessor(25));
 
-            await tx.CommitAsync();
+            await repoTxn.CommitAsync();
         }
 
         var i100 = await _repo.GetAsync(fileId);
@@ -130,10 +130,8 @@ public sealed class Tests
         i50.Length.ShouldBeGreaterThan(i25.Length);
 
         static FileProcessor GetProcessor(int quality) => new ImageProcessor(new() {
-            Formats = [
-                new(ImageFormat.Jpeg) { Quality = quality }
-            ],
-            Resize = new(ImageResizeMode.Max, 300, 300),
+            Resize = new(ImageResizeMode.FitDown, 300, 300),
+            Quality = quality,
         });
     }
 
@@ -146,31 +144,31 @@ public sealed class Tests
 
         FileId fileId;
 
-        await using (var tx = await _repo.BeginTransactionAsync())
+        await using (var repoTxn = await _repo.BeginTransactionAsync())
         {
-            var added = await tx.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
+            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
             fileId = added.FileId;
 
             await _repo.AddVariantAsync(fileId, "max", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.Max, 2000, 2000),
+                Resize = new(ImageResizeMode.FitDown, 2000, 2000),
             }));
 
             await _repo.AddVariantAsync(fileId, "crop", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.Crop, 2000, 2000),
+                Resize = new(ImageResizeMode.CropDown, 2000, 2000),
             }));
 
             await _repo.AddVariantAsync(fileId, "pad1", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.Pad, 800, 800),
+                Resize = new(ImageResizeMode.PadDown, 800, 800),
                 BackgroundColor = BackgroundColor.FromRgb(0, 255, 0, true),
             }));
 
             await _repo.AddVariantAsync(fileId, "pad2", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.Pad, 2000, 2000) {
+                Resize = new(ImageResizeMode.PadDown, 2000, 2000) {
                     PadColor = BackgroundColor.FromRgb(255, 0, 0, true),
                 },
             }));
 
-            await tx.CommitAsync();
+            await repoTxn.CommitAsync();
         }
 
         using (var image = Image.Load((await _repo.GetAsync(fileId)).PathExport))

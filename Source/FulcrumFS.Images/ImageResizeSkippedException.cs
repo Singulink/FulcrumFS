@@ -1,11 +1,12 @@
 namespace FulcrumFS.Images;
 
 /// <summary>
-/// Exception thrown when an image resize operation is attempted but the image does not require resizing.
+/// Exception thrown when an image resize operation is attempted but the image does not require resizing. Only thrown if the <see
+/// cref="ImageResizeOptions.ThrowWhenSkipped"/> resize option is set.
 /// </summary>
 public class ImageResizeSkippedException : Exception
 {
-    private const string DefaultMessage = "Resize operation was skipped for the image (source image was already in the desired size).";
+    private const string DefaultMessage = "Image resize operation skipped (source image does not require resizing).";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageResizeSkippedException"/> class with a default message.

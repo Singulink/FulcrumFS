@@ -97,8 +97,8 @@ partial class FileRepo
 
             if (fileDirState is EntryState.ParentExists || deletedFileIds.Contains(indeterminateFileId))
             {
-                // Parent dir of the file dir exists but the file dir itself does not, so we can delete the indeterminate marker since the file group is gone.
-                // Ignore errors, we don't want to recreate an indeterminate marker if it is gone.
+                // Parent dir of the file container dir exists but the file dir itself does not, so we can delete the indeterminate marker since the file dir is
+                // gone. Ignore errors, we don't want to recreate an indeterminate marker if it is gone.
 
                 indeterminateMarker.TryDelete(out _);
                 continue;

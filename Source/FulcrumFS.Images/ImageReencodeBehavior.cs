@@ -1,29 +1,53 @@
 namespace FulcrumFS.Images;
 
 /// <summary>
-/// Specifies the behavior for re-encoding images, determining whether and how an image should be re-encoded based on changes and size considerations.
+/// Specifies image re-encoding behavior, ie. whether and when an image should be re-encoded and when the original image bytes should be preserved.
 /// </summary>
 /// <remarks>
-/// Re-encoded results are always discarded in favor of the source image if the source and result formats are the same, no changes were made to the image data
-/// or metadata, and the re-encoded image is larger in size than the source.
+/// <para>Unconditional rules:</para>
+/// <list type="bullet">
+///   <item>
+///     <description>
+///       Re-encoding is skipped and the original bytes are preserved if the image processor can prove that the output would not meaningfully change (in content
+///       or byte size).
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       If no changes are made to the image format, pixel data, or metadata during processing, any re-encoded result that is larger in byte size than the
+///       source is always discarded and the original source bytes are preserved.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       If changes are made to the image format or pixel data, re-encoding always occurs and the re-encoded output is used.
+///     </description>
+///   </item>
+/// </list>
+/// <para>
+///  These rules apply regardless of the configured behavior. The enum values control when re-encoding is performed and how to prefer source v.s. re-encoded
+///  bytes in other scenarios (for example, when only metadata is changed).</para>
 /// </remarks>
 public enum ImageReencodeBehavior
 {
     /// <summary>
-    /// Always re-encode the image (unless re-encoding is known to have no effect on the output, both in terms of content and size).
+    /// Re-encode by default, and discard the re-encoded output if it is larger (by byte size) and no metadata changes were made during processing. If metadata
+    /// changes were made, use the re-encoded output to preserve those changes. Subject to the unconditional rules specified in the <see
+    /// cref="ImageReencodeBehavior"/> remarks.
     /// </summary>
-    Always,
+    DiscardLargerUnlessMetadataChanged,
 
     /// <summary>
-    /// Skip re-encoding entirely if no changes were effectively made to the image format, quality, data or metadata. Using this option means that the image
-    /// will not be re-encoded if the compression level is different from the source image.
+    /// Re-encode by default, and discard the re-encoded output if it is larger (by byte size) even if metadata changes were made during processing. Use only
+    /// when preserving processed metadata changes is not required (e.g. when metadata is being stripped solely to reduce size, not for privacy reasons).
+    /// Subject to the unconditional rules specified in the <see cref="ImageReencodeBehavior"/> remarks.
     /// </summary>
-    SkipIfUnchanged,
+    DiscardLargerEvenIfMetadataChanged,
 
     /// <summary>
-    /// Discard the re-encoded result if it is larger in size than the source, the formats are the same and no changes were made to the image data. Only use
-    /// this mode if metadata changes (e.g., metadata stripping) are not important (e.g. they are only stripped for size optimization and not privacy) and you
-    /// want to keep the source image if it was encoded more efficiently than the re-encoded image.
+    /// Skip re-encoding when no metadata changes were made during processing, and in the case of lossy formats, the requested result quality is greater than or
+    /// equal to the source quality. Differences in lossless compression level do not trigger re-encoding; the source’s compression level is preserved when
+    /// encoding is skipped. Subject to the unconditional rules specified in the <see cref="ImageReencodeBehavior"/> remarks.
     /// </summary>
-    DiscardIfLarger,
+    SkipUnlessMetadataOrQualityChanged,
 }

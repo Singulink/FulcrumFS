@@ -12,7 +12,7 @@ partial class FileRepo
         FileProcessor processor,
         CancellationToken cancellationToken = default)
     {
-        return AddVariantAsync(fileId, variantId, null, new FileProcessPipeline([processor]), cancellationToken);
+        return AddVariantAsync(fileId, variantId, null, processor.SingleProcessorPipeline, cancellationToken);
     }
 
     /// <summary>
@@ -31,7 +31,7 @@ partial class FileRepo
         FileProcessor processor,
         CancellationToken cancellationToken = default)
     {
-        return AddVariantAsync(fileId, variantId, sourceVariantId, new FileProcessPipeline([processor]), cancellationToken);
+        return AddVariantAsync(fileId, variantId, sourceVariantId, processor.SingleProcessorPipeline, cancellationToken);
     }
 
     /// <inheritdoc cref="AddVariantAsync(FileId, string, string?, FileProcessPipeline, CancellationToken)"/>
@@ -78,7 +78,7 @@ partial class FileRepo
         FileProcessor processor,
         CancellationToken cancellationToken = default)
     {
-        return GetOrAddVariantAsync(fileId, variantId, null, new FileProcessPipeline([processor]), cancellationToken);
+        return GetOrAddVariantAsync(fileId, variantId, null, processor.SingleProcessorPipeline, cancellationToken);
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ partial class FileRepo
         FileProcessor processor,
         CancellationToken cancellationToken = default)
     {
-        return GetOrAddVariantAsync(fileId, variantId, sourceVariantId, new FileProcessPipeline([processor]), cancellationToken);
+        return GetOrAddVariantAsync(fileId, variantId, sourceVariantId, processor.SingleProcessorPipeline, cancellationToken);
     }
 
     /// <inheritdoc cref="GetOrAddVariantAsync(FileId, string, string?, FileProcessPipeline, CancellationToken)"/>
@@ -166,7 +166,7 @@ partial class FileRepo
         FileProcessor processor,
         CancellationToken cancellationToken = default)
     {
-        return TryAddVariantAsync(fileId, variantId, null, new FileProcessPipeline([processor]), cancellationToken);
+        return TryAddVariantAsync(fileId, variantId, null, processor.SingleProcessorPipeline, cancellationToken);
     }
 
     /// <summary>
@@ -185,7 +185,7 @@ partial class FileRepo
         FileProcessor processor,
         CancellationToken cancellationToken = default)
     {
-        return TryAddVariantAsync(fileId, variantId, sourceVariantId, new FileProcessPipeline([processor]), cancellationToken);
+        return TryAddVariantAsync(fileId, variantId, sourceVariantId, processor.SingleProcessorPipeline, cancellationToken);
     }
 
     /// <inheritdoc cref="TryAddVariantAsync(FileId, string, string?, FileProcessPipeline, CancellationToken)"/>

@@ -36,7 +36,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <returns>The file ID and extension of the resulting file.</returns>
     public async Task<AddFileResult> AddAsync(FileStream stream, bool leaveOpen, FileProcessor processor, CancellationToken cancellationToken = default)
     {
-        return await AddAsync(stream, leaveOpen, new FileProcessPipeline([processor]), cancellationToken).ConfigureAwait(false);
+        return await AddAsync(stream, leaveOpen, processor.SingleProcessorPipeline, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         FileProcessor processor,
         CancellationToken cancellationToken = default)
     {
-        return await AddAsync(stream, extension, leaveOpen, new FileProcessPipeline([processor]), cancellationToken).ConfigureAwait(false);
+        return await AddAsync(stream, extension, leaveOpen, processor.SingleProcessorPipeline, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

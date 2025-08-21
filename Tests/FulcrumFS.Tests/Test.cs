@@ -1,6 +1,6 @@
 using PrefixClassName.MsTest;
 
-namespace Singulink.FulcrumFS.Tests;
+namespace FulcrumFS;
 
 [PrefixTestClass]
 public class Test

@@ -3,16 +3,16 @@ using Singulink.Enums;
 namespace FulcrumFS.Images;
 
 /// <summary>
-/// Options for resizing images in a file repository.
+/// Provides options for resizing images.
 /// </summary>
 public class ImageResizeOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageResizeOptions"/> class with the specified dimensions and resize mode.
     /// </summary>
-    /// <param name="mode">The resize mode to apply. Must be a valid <see cref="ImageResizeMode"/> value.</param>
-    /// <param name="width">The width (or max width) of the image in pixels. Must be greater than or equal to 1.</param>
-    /// <param name="height">The height (or max height) of the image in pixels. Must be greater than or equal to 1.</param>
+    /// <param name="mode">The resize mode to apply.</param>
+    /// <param name="width">The target width in pixels. Must be greater than or equal to 1.</param>
+    /// <param name="height">The target height in pixels. Must be greater than or equal to 1.</param>
     public ImageResizeOptions(ImageResizeMode mode, int width, int height)
     {
         mode.ThrowIfNotDefined(nameof(mode));
@@ -25,31 +25,37 @@ public class ImageResizeOptions
     }
 
     /// <summary>
-    /// Gets the mode to use for resizing the image. This determines how the image is scaled down to fit within the specified width and height.
+    /// Gets the resize mode, which determines how the image is scaled to fit within the target width and height.
     /// </summary>
     public ImageResizeMode Mode { get; }
 
     /// <summary>
-    /// Gets the width (or max width) of the resized image.
+    /// Gets the target width in pixels.
     /// </summary>
     public int Width { get; }
 
     /// <summary>
-    /// Gets the height (or max height) of the resized image.
+    /// Gets the target height in pixels.
     /// </summary>
     public int Height { get; }
 
     /// <summary>
-    /// Gets or initializes the padding color to use when <see cref="Mode"/> is set to <see cref="ImageResizeMode.Pad"/>. Falls back <see
-    /// cref="ImageProcessOptions.BackgroundColor"/> if set to <see langword="null"/>.
+    /// Gets or initializes the padding color to use when <see cref="Mode"/> is set to a padding mode. If the value is <see langword="null"/>, padding
+    /// operations will fall back to using <see cref="ImageProcessorOptions.BackgroundColor"/> as the padding color. Default is <see langword="null"/>.
     /// </summary>
     public BackgroundColor? PadColor { get; init; }
 
 #pragma warning disable SA1623 // Property summary documentation should match accessors
 
     /// <summary>
-    /// Gets or initializes a value indicating whether a <see cref="ImageResizeSkippedException"/> should be throw if the image was not resized due to the
-    /// source image already being the desired size.
+    /// Gets or initializes a value indicating whether an <see cref="ImageResizeSkippedException"/> should be thrown when resizing is skipped because no pixel
+    /// geometry would change for the selected <see cref="Mode"/> and target size.
     /// </summary>
-    public bool ThrowIfSkipped { get; init; }
+    /// <remarks>
+    /// Setting this property to <see langword="true"/> can help avoid storing duplicate images in a repository. For example, if you attempt to generate a
+    /// thumbnail from an existing repository image that is already equal to or smaller than the desired thumbnail size, <see
+    /// cref="ImageResizeSkippedException"/> will be thrown. You can catch this exception and use the reference to the existing image, rather than storing
+    /// a new identical thumbnail.
+    /// </remarks>
+    public bool ThrowWhenSkipped { get; init; }
 }
