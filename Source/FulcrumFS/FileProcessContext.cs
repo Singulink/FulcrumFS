@@ -8,8 +8,7 @@ public sealed class FileProcessContext : IAsyncDisposable
 {
     private readonly IAbsoluteDirectoryPath _workRootDirectory;
 
-    private IAbsoluteFilePath? _file;
-    private Stream? _stream;
+    private object? _source;
     private bool _leaveOpen;
 
     private int _lastWorkEntryId;
@@ -37,14 +36,14 @@ public sealed class FileProcessContext : IAsyncDisposable
 
     internal CancellationToken CancellationToken { get; }
 
-    internal FileProcessContext(FileId fileId, string? variantId, IAbsoluteDirectoryPath workRootDirectory, IAbsoluteFilePath filePath, CancellationToken cancellationToken)
+    internal FileProcessContext(FileId fileId, string? variantId, IAbsoluteDirectoryPath workRootDirectory, IAbsoluteFilePath sourceFile, CancellationToken cancellationToken)
     {
         FileId = fileId;
         VariantId = variantId;
         _workRootDirectory = workRootDirectory;
 
-        _file = filePath;
-        Extension = FileExtension.Normalize(filePath.Extension);
+        _source = sourceFile;
+        Extension = FileExtension.Normalize(sourceFile.Extension);
         CancellationToken = cancellationToken;
     }
 
@@ -54,8 +53,8 @@ public sealed class FileProcessContext : IAsyncDisposable
         VariantId = variantId;
         _workRootDirectory = workRootDirectory;
 
-        _stream = stream;
-        Extension = extension;
+        _source = stream;
+        Extension = FileExtension.Normalize(extension);
         _leaveOpen = leaveOpen;
         CancellationToken = cancellationToken;
     }
@@ -68,6 +67,7 @@ public sealed class FileProcessContext : IAsyncDisposable
     /// <param name="extension">The file extension to use for the work file. Must be empty for no extension or start with a dot (e.g., ".jpg", ".png").</param>
     public IAbsoluteFilePath GetNewWorkFile(string extension)
     {
+        ObjectDisposedException.ThrowIf(_source is null, this);
         extension = FileExtension.Normalize(extension);
         return _workRootDirectory.CombineFile(GetNextWorkId() + extension, PathOptions.None);
     }
@@ -79,74 +79,69 @@ public sealed class FileProcessContext : IAsyncDisposable
     /// </summary>
     public IAbsoluteDirectoryPath GetNewWorkDirectory()
     {
+        ObjectDisposedException.ThrowIf(_source is null, this);
         return _workRootDirectory.CombineDirectory(GetNextWorkId().ToString(), PathOptions.None);
     }
 
     /// <summary>
-    /// Gets the source file as an <see cref="IAbsoluteFilePath"/> if it is available. If the source is a non-file stream, it will be copied to a new work file
-    /// and returned. If the source is already an <see cref="IAbsoluteFilePath"/>, it will be returned directly.
+    /// Gets the source as an <see cref="IAbsoluteFilePath"/>. If the source is a non-file stream, it will be copied to a new work file and returned. If the
+    /// source is already an <see cref="IAbsoluteFilePath"/>, it will be returned directly.
     /// </summary>
     public async ValueTask<IAbsoluteFilePath> GetSourceAsFileAsync()
     {
-        if (_file is IAbsoluteFilePath file)
-        {
-            _file = null; // Clear source to prevent multiple calls.
+        ObjectDisposedException.ThrowIf(_source is null, this);
+
+        if (_source is IAbsoluteFilePath file)
             return file;
-        }
 
-        if (_stream is not Stream stream)
-            throw new InvalidOperationException("Source was already retrieved. Multiple calls to get the source are not allowed.");
-
-        _stream = null; // Clear source to prevent multiple calls.
+        var stream = (Stream)_source;
 
         if (stream is FileStream fileStream)
         {
             // If the source is already a file stream, we can return the file path it is associated with directly.
-
             file = FilePath.ParseAbsolute(fileStream.Name, PathOptions.None);
-
-            if (!_leaveOpen)
-                await fileStream.DisposeAsync().ConfigureAwait(false);
-
-            return file;
         }
-
-        var newWorkFile = GetNewWorkFile(Extension);
-        newWorkFile.ParentDirectory.Create();
-        fileStream = newWorkFile.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.Delete);
-
-        await using (fileStream.ConfigureAwait(false))
+        else
         {
-            await stream.CopyToAsync(fileStream, CancellationToken).ConfigureAwait(false);
+            file = GetNewWorkFile(Extension);
+            file.ParentDirectory.Create();
+            fileStream = file.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.Delete);
+
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await stream.CopyToAsync(fileStream, CancellationToken).ConfigureAwait(false);
+            }
         }
 
         if (!_leaveOpen)
             await stream.DisposeAsync().ConfigureAwait(false);
 
-        return newWorkFile;
+        _leaveOpen = false;
+
+        _source = file;
+        return file;
     }
 
     /// <summary>
-    /// Gets the source as a seekable <see cref="Stream"/>. If the source is already a seekable stream, it will be returned directly. If the source is a stream
-    /// that cannot seek, it will be copied to either a new work file or a memory stream depending on <paramref name="maxInMemoryCopySize"/> before being
-    /// returned.
+    /// Gets the source as a seekable <see cref="Stream"/>.
     /// </summary>
-    /// <param name="maxInMemoryCopySize">The maximum size in bytes that the source stream can be copied to memory. If the source stream exceeds this size, it
+    /// <param name="preferInMemory">If <see langword="true"/>, a memory stream will always be returned as long as the source is smaller than <paramref
+    /// name="maxInMemoryCopySize"/>. If <see langword="false"/>, different stream types can be returned depending on what the source is, but it will always be
+    /// a seekable stream.</param>
+    /// <param name="maxInMemoryCopySize">The maximum number of bytes that will be copied from the source stream to a memory stream before falling back to. If the source stream exceeds this size, it
     /// will be copied to a new work file instead.</param>
-    public async ValueTask<Stream> GetSourceAsSeekableStreamAsync(long maxInMemoryCopySize)
+    public async ValueTask<Stream> GetSourceAsSeekableStreamAsync(bool preferInMemory, long maxInMemoryCopySize)
     {
-        if (_file is IAbsoluteFilePath file)
+        ObjectDisposedException.ThrowIf(_source is null, this);
+
+        if (_source is not Stream stream)
         {
-            _file = null; // Clear source to prevent multiple calls.
-            return file.OpenAsyncStream(FileMode.Open, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete);
+            var file = (IAbsoluteFilePath)_source;
+            _source = stream = file.OpenAsyncStream(FileMode.Open, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete);
+            _leaveOpen = false;
         }
 
-        if (_stream is not Stream stream)
-            throw new InvalidOperationException("Source was already retrieved. Multiple calls to get the source are not allowed.");
-
-        _stream = null; // Clear source to prevent multiple calls.
-
-        if (stream.CanSeek)
+        if (stream.CanSeek && (!preferInMemory || stream is MemoryStream || stream.Length > maxInMemoryCopySize))
             return stream;
 
         var fallbackFile = GetNewWorkFile(Extension);
@@ -157,6 +152,8 @@ public sealed class FileProcessContext : IAsyncDisposable
         if (!_leaveOpen)
             await stream.DisposeAsync().ConfigureAwait(false);
 
+        _source = streamCopy;
+        _leaveOpen = false;
         return streamCopy;
     }
 
@@ -165,49 +162,27 @@ public sealed class FileProcessContext : IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        _file = null;
+        if (!_leaveOpen && _source is IAsyncDisposable disposable)
+            await disposable.DisposeAsync().ConfigureAwait(false);
 
-        if (_stream is Stream stream)
-        {
-            _stream = null;
-
-            if (!_leaveOpen)
-                await stream.DisposeAsync().ConfigureAwait(false);
-        }
+        _source = null;
     }
 
-    internal async Task SetResult(FileProcessResult result, bool isLastStep)
+    internal async Task SetResultAsync(FileProcessResult result, bool isLastStep)
     {
+        ObjectDisposedException.ThrowIf(_source is null, this);
+
         Extension = result.Extension;
         IsLastProcessStep = isLastStep;
 
-        if (result.IsFileResult)
-        {
-            if (_stream is not null)
-            {
-                if (!_leaveOpen)
-                    await _stream.DisposeAsync().ConfigureAwait(false);
-
-                _stream = null;
-            }
-
-            _leaveOpen = false;
-            _file = result.FileResult;
-
-            return;
-        }
-
-        // Result is a stream result
-
-        if (_stream == result.StreamResult)
+        if (_source == result.Result)
             return;
 
-        if (_stream is not null)
-            await _stream.DisposeAsync().ConfigureAwait(false);
+        if (!_leaveOpen && _source is IAsyncDisposable disposable)
+            await disposable.DisposeAsync().ConfigureAwait(false);
 
+        _source = result.Result;
         _leaveOpen = false;
-        _stream = result.StreamResult;
-        _file = null;
     }
 
     private int GetNextWorkId() => Interlocked.Increment(ref _lastWorkEntryId);

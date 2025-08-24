@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Runtime.InteropServices;
 using Microsoft.IO;
 
 namespace FulcrumFS.Utilities;
@@ -19,7 +18,7 @@ internal static class StreamExtensions
         if (source.CanSeek)
         {
             if (source.Length > maxInMemorySize)
-                return await CopyToFallbackFileAsync(null, default, source, fallbackFile, cancellationToken).ConfigureAwait(false);
+                return await CopyToFallbackFileAsync(null, source, fallbackFile, cancellationToken).ConfigureAwait(false);
 
             requestedMemoryStreamSize = source.Length;
         }
@@ -37,19 +36,15 @@ internal static class StreamExtensions
                 if (bytesRead is 0)
                     break;
 
+                memoryStream.Write(buffer, 0, bytesRead);
                 totalBytesRead += bytesRead;
 
-                if (totalBytesRead <= maxInMemorySize)
+                if (totalBytesRead > maxInMemorySize)
                 {
-                    memoryStream.Write(buffer, 0, bytesRead);
-                }
-                else
-                {
-                    // CopyToFallbackFileAsync will return the buffer to the array pool.
-                    var overflowRead = buffer.AsMemory(0, bytesRead);
+                    ArrayPool<byte>.Shared.Return(buffer);
                     buffer = null;
 
-                    return await CopyToFallbackFileAsync(memoryStream, overflowRead, source, fallbackFile, cancellationToken).ConfigureAwait(false);
+                    return await CopyToFallbackFileAsync(memoryStream, source, fallbackFile, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -65,37 +60,20 @@ internal static class StreamExtensions
 
     private static async Task<Stream> CopyToFallbackFileAsync(
         RecyclableMemoryStream? memoryStream,
-        ReadOnlyMemory<byte> rentedOverflowRead,
         Stream source,
         IAbsoluteFilePath fallbackFile,
         CancellationToken cancellationToken)
     {
-        FileStream fileStream = null;
+        fallbackFile.ParentDirectory.Create();
+        var fileStream = fallbackFile.OpenAsyncStream(FileMode.Create, FileAccess.ReadWrite, FileShare.Delete);
 
-        try
+        if (memoryStream is not null)
         {
-            fallbackFile.ParentDirectory.Create();
-            fileStream = fallbackFile.OpenAsyncStream(FileMode.Create, FileAccess.ReadWrite, FileShare.Delete);
+            // Write what we have in memory so far
 
-            if (memoryStream is not null)
-            {
-                // Write what we have in memory so far
-
-                memoryStream.Position = 0;
-                await memoryStream.CopyToAsync(fileStream, CopySeekableBufferSize, cancellationToken).ConfigureAwait(false);
-                memoryStream.Dispose();
-            }
-
-            if (!rentedOverflowRead.IsEmpty)
-            {
-                // Write the overflow data from last read
-                await fileStream.WriteAsync(rentedOverflowRead, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            if (MemoryMarshal.TryGetArray(rentedOverflowRead, out var segment) && segment.Array is not null)
-                ArrayPool<byte>.Shared.Return(segment.Array);
+            memoryStream.Position = 0;
+            await memoryStream.CopyToAsync(fileStream, CopySeekableBufferSize, cancellationToken).ConfigureAwait(false);
+            memoryStream.Dispose();
         }
 
         // Write the rest of the source stream

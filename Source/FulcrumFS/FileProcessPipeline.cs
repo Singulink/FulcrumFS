@@ -31,7 +31,7 @@ public class FileProcessPipeline
             var result = await processor.CallProcessAsync(context, context.CancellationToken).ConfigureAwait(false);
 
             bool isNextProcessorLast = i >= Processors.Count - 2;
-            await context.SetResult(result, isNextProcessorLast).ConfigureAwait(false);
+            await context.SetResultAsync(result, isNextProcessorLast).ConfigureAwait(false);
         }
     }
 }

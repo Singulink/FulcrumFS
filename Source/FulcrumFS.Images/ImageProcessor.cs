@@ -30,7 +30,7 @@ public class ImageProcessor : FileProcessor
     /// <inheritdoc/>
     protected override async Task<FileProcessResult> ProcessAsync(FileProcessContext context, CancellationToken cancellationToken)
     {
-        var stream = await context.GetSourceAsSeekableStreamAsync(maxInMemoryCopySize: 256 * 1024 * 1024).ConfigureAwait(false);
+        var stream = await context.GetSourceAsSeekableStreamAsync(preferInMemory: true, maxInMemoryCopySize: 256 * 1024 * 1024).ConfigureAwait(false);
 
         var sourceFormat = Image.DetectFormat(stream);
 

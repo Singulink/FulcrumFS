@@ -3,7 +3,7 @@
     <TargetFramework>net9.0</TargetFramework>
 
     <PackageId>Singulink.FulcrumFS</PackageId>
-    <Version>0.15</Version>
+    <Version>0.16</Version>
     <Description>Transactional file processing pipeline and storage engine with two-phase commit and file variant management.</Description>
     <PackageTags></PackageTags>
   </PropertyGroup>
