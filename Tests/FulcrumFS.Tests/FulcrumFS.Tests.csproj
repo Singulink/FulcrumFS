@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="MSTest.TestFramework" Version="3.10.4" />
     <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
   </ItemGroup>
 </Project>
