@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+
+    <PackageId>Singulink.FulcrumFS.Videos</PackageId>
+    <Version>0.16</Version>
+    <Description>
+      FulcrumFS extension that adds customizable video processing capabilities, including validation, thumbnail generation, resizing, format conversion,
+      metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.
+    </Description>
+    <PackageTags></PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FulcrumFS\FulcrumFS.csproj" />
+  </ItemGroup>
+
+</Project>
