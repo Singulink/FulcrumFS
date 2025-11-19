@@ -13,7 +13,7 @@ public class VideoProcessor : FileProcessor
     /// Gets or initializes the collection of video file processing options, which are attempted in order until one matches the predicate. The
     /// <see cref="VideoFileProcessingOptions" /> specifies what to do with the video and each stream.
     /// The list must not be empty and should not contain duplicate / otherwise unnecessary source formats (but these are currently not validated).
-    /// By default, it is initialized to a convertor that takes in any recognised video file and always re-encodes to standardised H.264 + AAC streams in MP4
+    /// By default, it is initialized to a convertor that takes in any recognized video file and always re-encodes to standardised H.264 + AAC streams in MP4
     /// file format, that preserves metadata and discards thumbnails.
     /// </summary>
     public IReadOnlyList<VideoFileProcessingOptions> FileProcessingOptions
@@ -29,7 +29,7 @@ public class VideoProcessor : FileProcessor
             if (v.Any((x) => x is null))
                 throw new ArgumentException("Options cannot contain null values.", nameof(value));
 
-            field = value;
+            field = v;
         }
     } = [new VideoFileProcessingOptions()];
 
@@ -39,7 +39,7 @@ public class VideoProcessor : FileProcessor
     public VideoSourceValidationOptions? SourceValidation { get; init; }
 
     /// <summary>
-    /// Gets or initializes the directory containing ffmpeg binaries to use for processing.
+    /// Initializes the directory containing ffmpeg binaries to use for processing.
     /// On Windows: should contain ffmpeg.exe and ffprobe.exe.
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.
     /// Note: this method is not thread-safe and should be called once at application startup before any video processing is performed.
@@ -51,10 +51,10 @@ public class VideoProcessor : FileProcessor
             : (dirPath.CombineFile("ffmpeg"), dirPath.CombineFile("ffprobe"));
 
         if (!ffmpeg.Exists)
-            throw new FileNotFoundException("FFMpeg executable not found in specified directory.", dirPath.ToString());
+            throw new FileNotFoundException($"FFMpeg executable not found in specified directory.", ffmpeg.ToString());
 
         if (!ffprobe.Exists)
-            throw new FileNotFoundException("FFProbe executable not found in specified directory.", dirPath.ToString());
+            throw new FileNotFoundException($"FFProbe executable not found in specified directory.", ffprobe.ToString());
 
         FFMpegExePath = ffmpeg;
         FFProbeExePath = ffprobe;

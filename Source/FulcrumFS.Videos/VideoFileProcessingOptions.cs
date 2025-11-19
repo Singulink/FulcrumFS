@@ -178,7 +178,7 @@ public class VideoFileProcessingOptions
     public bool? StripMetadata { get; init; } = false;
 
     /// <summary>
-    /// Gets or initializes a value indicating whether to ensure the 'moov atom' in an MP4 file is at the start.
+    /// Gets or initializes a value indicating whether to ensure the 'moov atom' in an MP4 file is at the beginning of the file.
     /// Note: this does not enable true streaming, but it does allow playback to begin before the entire streams are downloaded.
     /// Default is <see langword="true" />.
     /// </summary>
@@ -215,12 +215,12 @@ public class VideoFileProcessingOptions
     } = StreamSelectionBehavior.KeepAll;
 
     /// <summary>
-    /// Gets or initializes a value indicating whether to preserve unrecognised streams in the output video.
-    /// Note: <see langword="null" /> is the default behavior, meaning unrecognised streams are removed when changing container format only - however more
-    /// streams (e.g., subtitle streams) may become recognised in the future.
+    /// Gets or initializes a value indicating whether to preserve unrecognized streams in the output video.
+    /// Note: <see langword="null" /> is the default behavior, meaning unrecognized streams are removed when changing container format only - however more
+    /// streams (e.g., subtitle streams) may become recognized in the future.
     /// Default is <see langword="null" />.
     /// </summary>
-    public bool? PreserveUnrecognisedStreams { get; init; }
+    public bool? PreserveUnrecognizedStreams { get; init; }
 
     /// <summary>
     /// Gets or initializes a value indicating whether to trim the thumbnail from the video.
