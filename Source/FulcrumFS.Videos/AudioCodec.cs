@@ -14,9 +14,14 @@ public abstract class AudioCodec
     }
 
     /// <summary>
-    /// Gets the AAC (Advanced Audio Coding) audio codec, supports encoding.
+    /// Gets the AAC (AAC-LE) audio codec, supports encoding.
     /// </summary>
     public static AudioCodec AAC { get; } = new AACImpl();
+
+    /// <summary>
+    /// Gets the HE-AAC audio codec, supports encoding.
+    /// </summary>
+    public static AudioCodec HEAAC { get; } = new HEAACImpl();
 
     /// <summary>
     /// Gets the MP2 audio codec, does not support encoding.

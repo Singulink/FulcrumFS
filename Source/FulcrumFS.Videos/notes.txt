@@ -16,8 +16,8 @@ Audio quality presets for AAC via libfdk_aac (vbr mode):
 - Worst: 1
 - Low: 2
 - Medium: 3
-- High: 4, todo: investigate good cutoff value for this, if necessary
-- Best: 5, todo: investigate good cutoff value for this, if necessary; todo: investigate if we should be using a fixed bitrate for this mode, and potentially 5 for 'high'
+- High: 4, TODO: investigate good cutoff value for this, if necessary
+- Best: 5, TODO: investigate good cutoff value for this, if necessary; TODO: investigate if we should be using a fixed bitrate for this mode, and potentially 5 for 'high'
 
 Compression presets:
 - Worst: superfast

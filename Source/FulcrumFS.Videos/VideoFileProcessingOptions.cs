@@ -117,7 +117,7 @@ public class VideoFileProcessingOptions
 
     /// <summary>
     /// Gets or initializes additional options in the form of <see cref="VideoSourceValidationOptions" /> for validating the source video file before
-    /// processing.
+    /// processing. Uses the same format as validation options, but acts as a predicate here.
     /// If <see langword="null" />, no additional validation is performed.
     /// Default is <see langword="null" />.
     /// </summary>
