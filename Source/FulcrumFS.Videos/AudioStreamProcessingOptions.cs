@@ -1,3 +1,5 @@
+using Singulink.Enums;
+
 namespace FulcrumFS.Videos;
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
@@ -36,7 +38,7 @@ public class AudioStreamProcessingOptions
                 throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
 
             if (result.Distinct().Count() != result.Count)
-                throw new ArgumentException("Codecs cannot contain duplicate result codecs.", nameof(value));
+                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
 
             if (!result[0].SupportsEncoding)
                 throw new ArgumentException("The first codec in the list must support encoding.", nameof(value));
@@ -54,9 +56,7 @@ public class AudioStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid re-encode behavior specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = ReencodeBehavior.Always;
@@ -78,9 +78,7 @@ public class AudioStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid audio quality specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = AudioQuality.Medium;
@@ -95,9 +93,7 @@ public class AudioStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid audio channels specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = AudioChannels.Stereo;
@@ -111,9 +107,7 @@ public class AudioStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid audio sample rate specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = AudioSampleRate.Hz48000;

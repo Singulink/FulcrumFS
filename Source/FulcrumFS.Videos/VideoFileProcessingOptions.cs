@@ -1,3 +1,5 @@
+using Singulink.Enums;
+
 namespace FulcrumFS.Videos;
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
@@ -159,7 +161,7 @@ public class VideoFileProcessingOptions
                 throw new ArgumentException("Formats cannot contain null values.", nameof(value));
 
             if (result.Distinct().Count() != result.Count)
-                throw new ArgumentException("Formats cannot contain duplicate result formats.", nameof(value));
+                throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
 
             if (!result[0].SupportsWriting)
                 throw new ArgumentException("The first format in the list must support writing.", nameof(value));
@@ -193,9 +195,7 @@ public class VideoFileProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid stream selection behavior specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = StreamSelectionBehavior.KeepAll;
@@ -209,9 +209,7 @@ public class VideoFileProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid stream selection behavior specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = StreamSelectionBehavior.KeepAll;

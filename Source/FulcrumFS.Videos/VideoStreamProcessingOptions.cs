@@ -1,3 +1,5 @@
+using Singulink.Enums;
+
 namespace FulcrumFS.Videos;
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
@@ -36,7 +38,7 @@ public class VideoStreamProcessingOptions
                 throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
 
             if (result.Distinct().Count() != result.Count)
-                throw new ArgumentException("Codecs cannot contain duplicate result codecs.", nameof(value));
+                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
 
             if (!result[0].SupportsEncoding)
                 throw new ArgumentException("The first codec in the list must support encoding.", nameof(value));
@@ -54,9 +56,7 @@ public class VideoStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid re-encode behavior specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = ReencodeBehavior.Always;
@@ -78,9 +78,7 @@ public class VideoStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid video quality specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = VideoQuality.Medium;
@@ -94,9 +92,7 @@ public class VideoStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid bits per channel specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = BitsPerChannel.Bits8;
@@ -110,9 +106,7 @@ public class VideoStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid chroma subsampling specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = ChromaSubsampling.Subsampling420;
@@ -127,9 +121,7 @@ public class VideoStreamProcessingOptions
         get;
         init
         {
-            if (!Enum.IsDefined(value))
-                throw new ArgumentException("Invalid video compression preset specified.", nameof(value));
-
+            value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
     } = VideoCompressionPreset.Medium;
