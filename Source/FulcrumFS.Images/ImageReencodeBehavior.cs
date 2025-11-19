@@ -25,8 +25,8 @@ namespace FulcrumFS.Images;
 ///   </item>
 /// </list>
 /// <para>
-///  These rules apply regardless of the configured behavior. The enum values control when re-encoding is performed and how to prefer source v.s. re-encoded
-///  bytes in other scenarios (for example, when only metadata is changed).</para>
+/// These rules apply regardless of the configured behavior. The enum values control when re-encoding is performed and how to prefer source v.s. re-encoded
+/// bytes in other scenarios (for example, when only metadata is changed).</para>
 /// </remarks>
 public enum ImageReencodeBehavior
 {

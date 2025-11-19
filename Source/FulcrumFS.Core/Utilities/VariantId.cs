@@ -25,11 +25,6 @@ public static class VariantId
     /// <summary>
     /// Checks if the given variant ID is valid and normalized.
     /// </summary>
-    public static bool IsNormalized(string variantId) => IsValidAndNormalized(variantId.AsSpan());
-
-    /// <summary>
-    /// Checks if the given variant ID is valid and normalized.
-    /// </summary>
     public static bool IsValidAndNormalized(ReadOnlySpan<char> variantId)
     {
         if (variantId.Length is 0)
@@ -37,10 +32,7 @@ public static class VariantId
 
         foreach (char c in variantId)
         {
-            if (!char.IsAsciiDigit(c) && !char.IsAsciiLetter(c) && c is not ('-' or '_'))
-                return false;
-
-            if (char.IsUpper(c))
+            if (!char.IsAsciiLetterLower(c) && !char.IsAsciiDigit(c) && c is not ('-' or '_'))
                 return false;
         }
 

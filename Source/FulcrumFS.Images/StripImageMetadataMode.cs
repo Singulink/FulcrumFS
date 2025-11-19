@@ -17,7 +17,7 @@ public enum StripImageMetadataMode
 
     /// <summary>
     /// Strip all metadata from the image (except for the EXIF orientation, if it is required to properly orient the image). Use in combination with the <see
-    /// cref="ImageProcessorOptions.OrientToNormal"/> option if you want to ensure EXIF orientation metadata is also removed.
+    /// cref="ImageProcessor.OrientToNormal"/> option if you want to ensure EXIF orientation metadata is also removed.
     /// </summary>
     All,
 }

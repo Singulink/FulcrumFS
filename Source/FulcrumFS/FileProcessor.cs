@@ -9,50 +9,36 @@ public abstract class FileProcessor
 {
     private FileProcessPipeline? _singleProcessorPipeline;
 
-    private readonly ImmutableArray<string> _allowedFileExtensions;
-
     /// <summary>
     /// Gets the file extensions that this processor allows, including the leading dot (e.g., ".jpg", ".png"), or an empty collection if all file extensions are
     /// allowed.
     /// </summary>
-    public IReadOnlyList<string> AllowedFileExtensions => _allowedFileExtensions;
+    public abstract IReadOnlyList<string> AllowedFileExtensions { get; }
 
     internal FileProcessPipeline SingleProcessorPipeline => _singleProcessorPipeline ??= new([this]);
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FileProcessor"/> class with the specified allowed file extensions.
-    /// </summary>
-    /// <param name="allowedFileExtensions">The file extensions that this processor can handle, including the leading dot (e.g., ".jpg", ".png"), or an empty
-    /// collection to allow all file extensions.</param>
-    protected FileProcessor(IEnumerable<string> allowedFileExtensions)
-    {
-        _allowedFileExtensions = allowedFileExtensions
-            .Select(FileExtension.Normalize)
-            .ToImmutableArray();
-    }
-
-    /// <summary>
     /// Processes the file represented by the specified <see cref="FileProcessContext"/>.
     /// </summary>
-    protected abstract Task<FileProcessResult> ProcessAsync(FileProcessContext context, CancellationToken cancellationToken);
+    protected abstract Task<FileProcessResult> ProcessAsync(FileProcessContext context);
 
-    internal async Task<FileProcessResult> CallProcessAsync(FileProcessContext context, CancellationToken cancellationToken)
+    internal async Task<FileProcessResult> CallProcessAsync(FileProcessContext context)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        context.CancellationToken.ThrowIfCancellationRequested();
 
-        if (_allowedFileExtensions.Length is not 0 && !_allowedFileExtensions.Contains(context.Extension, StringComparer.Ordinal))
+        if (AllowedFileExtensions.Count is not 0 && !AllowedFileExtensions.Contains(context.Extension, StringComparer.Ordinal))
         {
-            string allowedExtensions = string.Join(", ", _allowedFileExtensions);
+            string allowedExtensions = string.Join(", ", AllowedFileExtensions);
             throw new FileProcessException($"Extension '{context.Extension}' is not allowed. Allowed extensions: {allowedExtensions}.");
         }
 
         try
         {
-            return await ProcessAsync(context, cancellationToken).ConfigureAwait(false);
+            return await ProcessAsync(context).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not FileProcessException)
         {
-            throw new FileProcessException("An error occurred while processing the file.", ex);
+            throw new FileProcessException($"An error occurred while processing the file: {ex.Message}", ex);
         }
     }
 }

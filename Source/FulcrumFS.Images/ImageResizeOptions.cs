@@ -5,7 +5,7 @@ namespace FulcrumFS.Images;
 /// <summary>
 /// Provides options for resizing images.
 /// </summary>
-public class ImageResizeOptions
+public sealed class ImageResizeOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageResizeOptions"/> class with the specified dimensions and resize mode.
@@ -41,9 +41,9 @@ public class ImageResizeOptions
 
     /// <summary>
     /// Gets or initializes the padding color to use when <see cref="Mode"/> is set to a padding mode. If the value is <see langword="null"/>, padding
-    /// operations will fall back to using <see cref="ImageProcessorOptions.BackgroundColor"/> as the padding color. Default is <see langword="null"/>.
+    /// operations will fall back to using <see cref="ImageProcessor.BackgroundColor"/> as the padding color. Default is <see langword="null"/>.
     /// </summary>
-    public BackgroundColor? PadColor { get; init; }
+    public ImageBackgroundColor? PadColor { get; init; }
 
 #pragma warning disable SA1623 // Property summary documentation should match accessors
 

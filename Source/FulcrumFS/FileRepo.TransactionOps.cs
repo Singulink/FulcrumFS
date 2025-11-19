@@ -11,7 +11,32 @@ partial class FileRepo
     public async ValueTask<FileRepoTransaction> BeginTransactionAsync()
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
-        return new FileRepoTransaction(this);
+        var txn = new FileRepoTransaction(this);
+
+        lock (_activeTransactions)
+            _activeTransactions.Add(txn);
+
+        return txn;
+    }
+
+    internal void UnregisterTransaction(FileRepoTransaction fileRepoTransaction)
+    {
+        lock (_activeTransactions)
+            _activeTransactions.Remove(fileRepoTransaction);
+    }
+
+    internal bool IsFilePendingTxnOutcome(FileId fileId)
+    {
+        lock (_activeTransactions)
+        {
+            foreach (var txn in _activeTransactions)
+            {
+                if (txn.IsFilePendingOutcome(fileId))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     internal async Task<AddFileResult> TxnAddAsync(
@@ -19,6 +44,7 @@ partial class FileRepo
         string extension,
         bool leaveOpen,
         FileProcessPipeline pipeline,
+        Action<FileId> onFileIdCreated,
         CancellationToken cancellationToken = default)
     {
         extension = FileExtension.Normalize(extension);
@@ -44,15 +70,17 @@ partial class FileRepo
                 if (deleteMarkerState is not EntryState.ParentExists)
                     throw new IOException("An error occurred while accessing the repository: Cleanup directory does not exist.");
 
-                lock (_processingFileIds)
+                lock (_processingFiles)
                 {
-                    if (!_processingFileIds.Add(fileId))
+                    if (!_processingFiles.Add(fileId))
                         continue;
                 }
 
                 break;
             }
         }
+
+        onFileIdCreated.Invoke(fileId);
 
         try
         {
@@ -61,8 +89,8 @@ partial class FileRepo
         }
         finally
         {
-            lock (_processingFileIds)
-                _processingFileIds.Remove(fileId);
+            lock (_processingFiles)
+                _processingFiles.Remove(fileId);
         }
     }
 
@@ -72,9 +100,9 @@ partial class FileRepo
 
         using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
         {
-            lock (_processingFileIds)
+            lock (_processingFiles)
             {
-                if (_processingFileIds.Contains(fileId))
+                if (_processingFiles.Contains(fileId))
                     throw new InvalidOperationException($"File ID '{fileId}' is currently being processed and cannot be deleted.");
             }
 

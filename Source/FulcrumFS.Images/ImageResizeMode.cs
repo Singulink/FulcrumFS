@@ -12,14 +12,14 @@ public enum ImageResizeMode
     FitDown,
 
     /// <summary>
-    /// Pad (letterbox): Pad the source image to match the target aspect ratio and scale down as needed to fit within the target size. Unused area is filled
-    /// using <see cref="ImageResizeOptions.PadColor"/>. Does not upscale smaller images; output dimensions are less than or equal to the target size.
-    /// </summary>
-    PadDown,
-
-    /// <summary>
     /// Crop (cover): Crop the source image to match the target aspect ratio and scale down as needed to fit within the target size. Does not upscale smaller
     /// images; output dimensions are less than or equal to the target size.
     /// </summary>
     CropDown,
+
+    /// <summary>
+    /// Pad (letterbox): Pad the source image to match the target aspect ratio and scale down as needed to fit within the target size. Unused area is filled
+    /// using <see cref="ImageResizeOptions.PadColor"/>. Does not upscale smaller images; output dimensions are less than or equal to the target size.
+    /// </summary>
+    PadDown,
 }

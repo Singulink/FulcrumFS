@@ -12,8 +12,8 @@ partial class FileRepo
         await CleanAsync(resolveIndeterminateCallback: (Func<FileId, Task<IndeterminateResolution>>?)null, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Cleans up the repository by removing files deleted longer ago than <see cref="FileRepoOptions.DeleteDelay"/> and updates the state of any indeterminate
-    /// files added longer ago than <see cref="FileRepoOptions.IndeterminateDelay"/> using the provided callback function.
+    /// Cleans up the repository by removing files deleted longer ago than <see cref="FileRepoOptions.DeleteDelay"/> and updates the state of indeterminate
+    /// files using the provided synchronous callback function.
     /// </summary>
     public async Task CleanAsync(Func<FileId, IndeterminateResolution>? resolveIndeterminateCallback, CancellationToken cancellationToken = default)
     {
@@ -26,8 +26,8 @@ partial class FileRepo
     }
 
     /// <summary>
-    /// Cleans up the repository by removing files deleted longer ago than <see cref="FileRepoOptions.DeleteDelay"/> and updates the state of any indeterminate
-    /// files added longer ago than <see cref="FileRepoOptions.IndeterminateDelay"/> using the provided callback function.
+    /// Cleans up the repository by removing files deleted longer ago than <see cref="FileRepoOptions.DeleteDelay"/> and updates the state of indeterminate
+    /// files using the provided asynchronous callback function.
     /// </summary>
     /// <exception cref="InvalidOperationException">Another clean operation is already in progress.</exception>
     public async Task CleanAsync(Func<FileId, Task<IndeterminateResolution>>? resolveIndeterminateCallback, CancellationToken cancellationToken = default)
@@ -48,9 +48,10 @@ partial class FileRepo
 
         await EnsureInitializedAsync(forceHealthCheck: true, cancellationToken).ConfigureAwait(false);
 
+        var deletedFiles = new HashSet<FileId>();
+        var indeterminateFiles = new List<(FileId Id, IAbsoluteFilePath Marker)>();
+
         var elc = new ExceptionListCapture(ex => ex is not (ArgumentException or ObjectDisposedException or TimeoutException));
-        var deletedFileIds = new HashSet<Guid>();
-        var indeterminateMarkers = new List<IAbsoluteFilePath>();
 
         foreach (var markerInfo in _cleanupDirectory.GetChildFilesInfo())
         {
@@ -58,25 +59,23 @@ partial class FileRepo
 
             var marker = markerInfo.Path;
 
-            if (marker.Extension == FileRepoPaths.IndeterminateMarkerExtension)
+            if (marker.Extension is FileRepoPaths.IndeterminateMarkerExtension)
             {
-                if (markerInfo.CreationTimeUtc + Options.IndeterminateDelay > DateTime.UtcNow)
-                    continue;
-
-                indeterminateMarkers.Add(marker);
+                if (FileId.TryParse(marker.NameWithoutExtension, out var fileId) && !IsFilePendingTxnOutcome(fileId))
+                    indeterminateFiles.Add((fileId, markerInfo.Path));
             }
-            else if (marker.Extension == FileRepoPaths.DeleteMarkerExtension)
+            else if (marker.Extension is FileRepoPaths.DeleteMarkerExtension)
             {
                 if (markerInfo.CreationTimeUtc + Options.DeleteDelay > DateTime.UtcNow)
                     continue;
 
-                if (!TryGetFileIdStringAndVariant(marker.NameWithoutExtension, out var deleteFileId, out string variantId))
+                if (!TryParseFileIdAndVariant(marker.NameWithoutExtension, out var deleteFileId, out string variantId))
                     continue;
 
                 if (variantId is null)
                 {
                     await elc.TryRunAsync(DeleteAsync(deleteFileId, immediateDelete: true)).ConfigureAwait(false);
-                    deletedFileIds.Add(deleteFileId);
+                    deletedFiles.Add(deleteFileId);
                 }
                 else
                 {
@@ -85,22 +84,19 @@ partial class FileRepo
             }
         }
 
-        foreach (var indeterminateMarker in indeterminateMarkers)
+        foreach (var indeterminateFile in indeterminateFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!FileId.TryParse(indeterminateMarker.NameWithoutExtension, out var indeterminateFileId))
-                continue;
-
-            var fileDir = GetFileDirectory(indeterminateFileId);
+            var fileDir = GetFileDirectory(indeterminateFile.Id);
             var fileDirState = fileDir.State;
 
-            if (fileDirState is EntryState.ParentExists || deletedFileIds.Contains(indeterminateFileId))
+            if (fileDirState is EntryState.ParentExists || deletedFiles.Contains(indeterminateFile.Id))
             {
                 // Parent dir of the file container dir exists but the file dir itself does not, so we can delete the indeterminate marker since the file dir is
                 // gone. Ignore errors, we don't want to recreate an indeterminate marker if it is gone.
 
-                indeterminateMarker.TryDelete(out _);
+                indeterminateFile.Marker.TryDelete(out _);
                 continue;
             }
 
@@ -110,12 +106,12 @@ partial class FileRepo
             if (resolveIndeterminateCallback is null)
                 continue;
 
-            var resolution = await resolveIndeterminateCallback.Invoke(indeterminateFileId).ConfigureAwait(false);
+            var resolution = await resolveIndeterminateCallback.Invoke(indeterminateFile.Id).ConfigureAwait(false);
 
             if (resolution is IndeterminateResolution.Keep)
-                await elc.TryRunAsync(DeleteIndeterminateMarkerAsync(indeterminateFileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(DeleteIndeterminateMarkerAsync(indeterminateFile.Id)).ConfigureAwait(false);
             else if (resolution is IndeterminateResolution.Delete)
-                await elc.TryRunAsync(DeleteAsync(indeterminateFileId, immediateDelete: true)).ConfigureAwait(false);
+                await elc.TryRunAsync(DeleteAsync(indeterminateFile.Id, immediateDelete: true)).ConfigureAwait(false);
             else
                 throw new ArgumentOutOfRangeException(nameof(resolveIndeterminateCallback), "The provided callback returned an invalid resolution value.");
         }

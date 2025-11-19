@@ -18,7 +18,7 @@ partial class FileRepo
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        var tempWorkingDir = _tempDirectory.CombineDirectory(GetEntryName(fileId, variantId), PathOptions.None);
+        var tempWorkingDir = _tempDirectory.CombineDirectory(GetFileIdAndVariantString(fileId, variantId), PathOptions.None);
         FileProcessContext context = null;
 
         try

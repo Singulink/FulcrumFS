@@ -54,7 +54,7 @@ partial class FileRepo
 
         try
         {
-            return fileDir.GetChildFiles().Where(f => VariantId.IsNormalized(f.NameWithoutExtension) && FileExtension.IsNormalized(f.Extension));
+            return fileDir.GetChildFiles().Where(f => VariantId.IsValidAndNormalized(f.NameWithoutExtension) && FileExtension.IsNormalized(f.Extension));
         }
         catch (DirectoryNotFoundException)
         {
