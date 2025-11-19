@@ -77,12 +77,12 @@ public class VideoSourceValidationOptions
     /// <summary>
     /// Gets or initializes the maximum video length (in seconds) in the source video file.
     /// </summary>
-    public double? MaxVideoLength
+    public TimeSpan? MaxVideoLength
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value ?? 1, 0, nameof(MaxVideoLength));
+            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MaxVideoLength));
             field = value;
         }
     }
@@ -156,12 +156,12 @@ public class VideoSourceValidationOptions
     /// <summary>
     /// Gets or initializes the minimum video length (in seconds) in the source video file.
     /// </summary>
-    public double? MinVideoLength
+    public TimeSpan? MinVideoLength
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value ?? 1, 0, nameof(MinVideoLength));
+            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MinVideoLength));
             field = value;
         }
     }

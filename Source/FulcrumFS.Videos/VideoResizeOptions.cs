@@ -6,19 +6,15 @@ namespace FulcrumFS.Videos;
 public class VideoResizeOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified resize mode.
+    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified target size.
+    /// Resizes the video to fit within the specified dimensions while preserving the original aspect ratio, final video may be smaller than target size.
+    /// Does not upscale the video if it is smaller than the specified dimensions (in both dimensions).
     /// </summary>
-    public VideoResizeOptions(VideoResizeMode mode, int width, int height)
+    public VideoResizeOptions(int width, int height)
     {
-        Mode = mode;
         Width = width;
         Height = height;
     }
-
-    /// <summary>
-    /// Gets or initializes the resize mode to use when resizing videos.
-    /// </summary>
-    public VideoResizeMode Mode { get; }
 
     /// <summary>
     /// Gets the target width in pixels.
@@ -32,7 +28,7 @@ public class VideoResizeOptions
 
     /// <summary>
     /// Gets or initializes a value indicating whether an <see cref="VideoResizeSkippedException" /> should be thrown when resizing is skipped because no pixel
-    /// geometry would change for the selected <see cref="Mode" /> and target size.
+    /// geometry would change for the selected target size.
     /// </summary>
     /// <remarks>
     /// Setting this property to <see langword="true" /> can help avoid storing duplicate videos in a repository. For example, if you attempt to generate a
