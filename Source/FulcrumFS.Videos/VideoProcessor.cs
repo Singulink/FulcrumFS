@@ -1,19 +1,19 @@
-﻿using Singulink.IO;
+using Singulink.IO;
 
 namespace FulcrumFS.Videos;
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
 
 /// <summary>
-/// Provides configuration options for processing videos in a file repository.
+/// Provides functionality to process video files with specified options.
 /// </summary>
-public class VideoProcessorOptions
+public class VideoProcessor : FileProcessor
 {
     /// <summary>
     /// Gets or initializes the collection of video file processing options, which are attempted in order until one matches the predicate. The
     /// <see cref="VideoFileProcessingOptions" /> specifies what to do the video and each stream.
     /// The list must not be empty and should not contain duplicate / otherwise unnecessary source formats (but these are currently not validated).
-    /// By default, it is initialized to a convertor that take in any recognised video file and always re-encoding to standardised H.264 + AAC streams in MP4
+    /// By default, it is initialized to a convertor that takes in any recognised video file and always re-encodes to standardised H.264 + AAC streams in MP4.
     /// file format, that preserves metadata and discards thumbnails.
     /// </summary>
     public IReadOnlyList<VideoFileProcessingOptions> FileProcessingOptions
@@ -61,4 +61,6 @@ public class VideoProcessorOptions
 
     internal static IFilePath? FFMpegExePath { get; private set; }
     internal static IFilePath? FFProbeExePath { get; private set; }
+
+    // TODO
 }

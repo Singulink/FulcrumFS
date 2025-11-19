@@ -7,7 +7,7 @@ public abstract class MediaContainerFormat
 {
     /// <summary>
     /// Gets the MP4 media container format.
-    /// Note: since the file structore of mp4, mov, m4a, 3gp, 3g2, and mj2 are all the same, they can all be matched by this format.
+    /// Note: since the file structure of mp4, mov, m4a, 3gp, 3g2, and mj2 are all the same, they can all be matched by this format.
     /// </summary>
     public static MediaContainerFormat MP4 { get; } = new MP4Impl();
 
@@ -16,7 +16,7 @@ public abstract class MediaContainerFormat
 
     /// <summary>
     /// Gets the MKV media container format.
-    /// Note: since the file structore of mkv, and webm are the same, they can both be matched by this format.
+    /// Note: since the file structure of mkv, and webm are the same, they can both be matched by this format.
     /// </summary>
     public static MediaContainerFormat Mkv { get; } = new MKVImpl();
 

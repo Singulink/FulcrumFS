@@ -136,7 +136,7 @@ public class VideoFileProcessingOptions
     /// <summary>
     /// Gets the result media container format for this mapping, or null to use the same as the input.
     /// If <see langword="null" />, the container format of the source video is preserved (when possible, i.e., if re-encoding, or otherwise requesting to
-    /// modfify things like metadata, it will automatically default to another container if unsupported for writing).
+    /// modify things like metadata, it will automatically default to another container if unsupported for writing).
     /// Default is a list containing <see cref="MediaContainerFormat.MP4" />.
     /// </summary>
     public IReadOnlyList<MediaContainerFormat>? ResultMediaContainerFormat
