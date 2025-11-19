@@ -3,12 +3,13 @@ namespace FulcrumFS.Videos;
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
 
 /// <summary>
-/// Options for validating a source video during processing.
+/// Options for validating video streams during processing.
 /// </summary>
-public class VideoSourceValidationOptions
+public class VideoStreamValidationOptions
 {
     /// <summary>
     /// Gets or initializes the maximum width of the source video in pixels.
+    /// Default is <see langword="null" />, indicating no maximum.
     /// </summary>
     public int? MaxWidth
     {
@@ -22,6 +23,7 @@ public class VideoSourceValidationOptions
 
     /// <summary>
     /// Gets or initializes the maximum height of the source video in pixels.
+    /// Default is <see langword="null" />, indicating no maximum.
     /// </summary>
     public int? MaxHeight
     {
@@ -35,6 +37,7 @@ public class VideoSourceValidationOptions
 
     /// <summary>
     /// Gets or initializes the maximum number of pixels in the source video.
+    /// Default is <see langword="null" />, indicating no maximum.
     /// </summary>
     public int? MaxPixels
     {
@@ -48,47 +51,35 @@ public class VideoSourceValidationOptions
 
     /// <summary>
     /// Gets or initializes the maximum number of video streams in the source video file.
-    /// Defaults to 1.
+    /// Default is 1.
     /// </summary>
-    public int? MaxVideoStreams
+    public int? MaxStreams
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxVideoStreams));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxStreams));
             field = value;
         }
     } = 1;
 
     /// <summary>
-    /// Gets or initializes the maximum number of audio streams in the source video file.
-    /// Defaults to 1.
+    /// Gets or initializes the maximum length of each video stream in the source video file.
+    /// Default is <see langword="null" />, indicating no maximum.
     /// </summary>
-    public int? MaxAudioStreams
+    public TimeSpan? MaxLength
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxAudioStreams));
-            field = value;
-        }
-    } = 1;
-
-    /// <summary>
-    /// Gets or initializes the maximum video length (in seconds) in the source video file.
-    /// </summary>
-    public TimeSpan? MaxVideoLength
-    {
-        get;
-        init
-        {
-            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MaxVideoLength));
+            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MaxLength));
             field = value;
         }
     }
 
     /// <summary>
     /// Gets or initializes the minimum width of the source video in pixels.
+    /// Default is <see langword="null" />, indicating no minimum.
     /// </summary>
     public int? MinWidth
     {
@@ -102,6 +93,7 @@ public class VideoSourceValidationOptions
 
     /// <summary>
     /// Gets or initializes the minimum height of the source video in pixels.
+    /// Default is <see langword="null" />, indicating no minimum.
     /// </summary>
     public int? MinHeight
     {
@@ -115,6 +107,7 @@ public class VideoSourceValidationOptions
 
     /// <summary>
     /// Gets or initializes the minimum number of pixels in the source video.
+    /// Default is <see langword="null" />, indicating no minimum.
     /// </summary>
     public int? MinPixels
     {
@@ -128,40 +121,28 @@ public class VideoSourceValidationOptions
 
     /// <summary>
     /// Gets or initializes the minimum number of video streams in the source video file.
-    /// Defaults to 1.
+    /// Default is 1.
     /// </summary>
-    public int? MinVideoStreams
+    public int? MinStreams
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MinVideoStreams));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MinStreams));
             field = value;
         }
     } = 1;
 
     /// <summary>
-    /// Gets or initializes the minimum number of audio streams in the source video file.
+    /// Gets or initializes the maximum length of each video stream in the source video file.
+    /// Default is <see langword="null" />, indicating no minimum.
     /// </summary>
-    public int? MinAudioStreams
+    public TimeSpan? MinLength
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MinAudioStreams));
-            field = value;
-        }
-    }
-
-    /// <summary>
-    /// Gets or initializes the minimum video length (in seconds) in the source video file.
-    /// </summary>
-    public TimeSpan? MinVideoLength
-    {
-        get;
-        init
-        {
-            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MinVideoLength));
+            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MinLength));
             field = value;
         }
     }

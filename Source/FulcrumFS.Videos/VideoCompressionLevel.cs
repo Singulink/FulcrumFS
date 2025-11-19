@@ -3,7 +3,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Controls how long it takes to compress the video, and how small the file is - does not affect quality.
 /// </summary>
-public enum VideoCompressionPreset
+public enum VideoCompressionLevel
 {
     /// <summary>
     /// Worst compression level, resulting in the largest file size but fastest encoding.

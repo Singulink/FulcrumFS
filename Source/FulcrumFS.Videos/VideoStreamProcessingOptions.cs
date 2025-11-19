@@ -112,11 +112,11 @@ public class VideoStreamProcessingOptions
     } = ChromaSubsampling.Subsampling420;
 
     /// <summary>
-    /// Gets or initializes the compression preset to use for video encoding.
+    /// Gets or initializes the compression level to use for video encoding.
     /// Note: does not affect quality, only affects file size and encoding speed trade-off.
-    /// Default is <see cref="VideoCompressionPreset.Medium" />.
+    /// Default is <see cref="VideoCompressionLevel.Medium" />.
     /// </summary>
-    public VideoCompressionPreset CompressionPreference
+    public VideoCompressionLevel CompressionPreference
     {
         get;
         init
@@ -124,7 +124,7 @@ public class VideoStreamProcessingOptions
             value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
-    } = VideoCompressionPreset.Medium;
+    } = VideoCompressionLevel.Medium;
 
     /// <summary>
     /// Gets or initializes the options for resizing the video.

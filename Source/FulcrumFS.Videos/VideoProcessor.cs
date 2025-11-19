@@ -10,39 +10,194 @@ namespace FulcrumFS.Videos;
 public class VideoProcessor : FileProcessor
 {
     /// <summary>
-    /// Gets or initializes the collection of video file processing options, which are attempted in order until one matches the predicate. The
-    /// <see cref="VideoFileProcessingOptions" /> specifies what to do with the video and each stream.
-    /// The list must not be empty and should not contain duplicate / otherwise unnecessary source formats (but these are currently not validated).
-    /// By default, it is initialized to a convertor that takes in any recognized video file and always re-encodes to standardised H.264 + AAC streams in MP4
-    /// file format, that preserves metadata and discards thumbnails.
+    /// Gets the source video codecs for this mapping (it matches any of these, but all streams must match).
+    /// If <see langword="null" />, matches any supported video codec.
+    /// Default is <see langword="null" />.
     /// </summary>
-    public IReadOnlyList<VideoFileProcessingOptions> FileProcessingOptions
+    public IReadOnlyList<VideoCodec>? SourceVideoCodecs
     {
         get;
         init
         {
-            IReadOnlyList<VideoFileProcessingOptions> v = [.. value];
+            if (value is null)
+            {
+                field = null;
+                return;
+            }
 
-            if (v.Count is 0)
-                throw new ArgumentException("Options cannot be empty.", nameof(value));
+            IReadOnlyList<VideoCodec> result = [.. value];
 
-            if (v.Any((x) => x is null))
-                throw new ArgumentException("Options cannot contain null values.", nameof(value));
+            if (result.Count is 0)
+                throw new ArgumentException("Codecs cannot be empty.", nameof(value));
 
-            field = v;
+            if (result.Any((x) => x is null))
+                throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+
+            if (result.Distinct().Count() != result.Count)
+                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+
+            field = result;
         }
-    } = [new VideoFileProcessingOptions()];
+    }
 
     /// <summary>
-    /// Gets or initializes the options for validating the source video before processing.
+    /// Gets the source audio codecs for this mapping (it matches any of these, but all streams must match).
+    /// If <see langword="null" />, matches any supported audio codec.
+    /// Default is <see langword="null" />.
     /// </summary>
-    public VideoSourceValidationOptions? SourceValidation { get; init; }
+    public IReadOnlyList<AudioCodec>? SourceAudioCodecs
+    {
+        get;
+        init
+        {
+            if (value is null)
+            {
+                field = null;
+                return;
+            }
+
+            IReadOnlyList<AudioCodec> result = [.. value];
+
+            if (result.Count is 0)
+                throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+
+            if (result.Any((x) => x is null))
+                throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+
+            if (result.Distinct().Count() != result.Count)
+                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+
+            field = result;
+        }
+    }
+
+    /// <summary>
+    /// Gets the source media container format for this mapping (it matches any of these).
+    /// If <see langword="null" />, matches any supported container format.
+    /// Default is <see langword="null" />.
+    /// </summary>
+    public IReadOnlyList<MediaContainerFormat>? SourceMediaContainerFormats
+    {
+        get;
+        init
+        {
+            if (value is null)
+            {
+                field = null;
+                return;
+            }
+
+            IReadOnlyList<MediaContainerFormat> result = [.. value];
+
+            if (result.Count is 0)
+                throw new ArgumentException("Formats cannot be empty.", nameof(value));
+
+            if (result.Any((x) => x is null))
+                throw new ArgumentException("Formats cannot contain null values.", nameof(value));
+
+            if (result.Distinct().Count() != result.Count)
+                throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
+
+            field = result;
+        }
+    }
+
+    /// <summary>
+    /// Gets the video stream processing options for the video streams in the source video.
+    /// Default is a new instance of <see cref="VideoStreamProcessingOptions" /> that specifies always re-encoding to a standardised H.264 stream.
+    /// </summary>
+    public VideoStreamProcessingOptions VideoStreamOptions { get; init; } = new VideoStreamProcessingOptions();
+
+    /// <summary>
+    /// Gets the audio stream processing options for the audio streams in the source video.
+    /// Default is a new instance of <see cref="AudioStreamProcessingOptions" /> that specifies always re-encoding to a standardised AAC stream.
+    /// </summary>
+    public AudioStreamProcessingOptions AudioStreamOptions { get; init; } = new AudioStreamProcessingOptions();
+
+    /// <summary>
+    /// Gets the result media container format for this mapping, or null to use the same as the input.
+    /// If <see langword="null" />, the container format of the source video is preserved (when possible, i.e., if re-encoding, or otherwise requesting to
+    /// modify things like metadata, it will automatically default to another container if unsupported for writing).
+    /// Default is a list containing <see cref="MediaContainerFormat.MP4" />.
+    /// </summary>
+    public IReadOnlyList<MediaContainerFormat>? ResultMediaContainerFormat
+    {
+        get;
+        init
+        {
+            if (value is null)
+            {
+                field = null;
+                return;
+            }
+
+            IReadOnlyList<MediaContainerFormat> result = [.. value];
+
+            if (result.Count is 0)
+                throw new ArgumentException("Formats cannot be empty.", nameof(value));
+
+            if (result.Any((x) => x is null))
+                throw new ArgumentException("Formats cannot contain null values.", nameof(value));
+
+            if (result.Distinct().Count() != result.Count)
+                throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
+
+            if (!result[0].SupportsWriting)
+                throw new ArgumentException("The first format in the list must support writing.", nameof(value));
+
+            field = result;
+        }
+    } = [MediaContainerFormat.MP4];
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether to strip metadata from this stream.
+    /// If set to <see langword="null" />, metadata preservation is undefined, and it may only be partially preserved.
+    /// Default is <see langword="false" />.
+    /// </summary>
+    public bool? StripMetadata { get; init; } = false;
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether to ensure the 'moov atom' in an MP4 file is at the beginning of the file.
+    /// Note: this does not enable true streaming, but it does allow playback to begin before the entire streams are downloaded.
+    /// Default is <see langword="true" />.
+    /// </summary>
+#pragma warning disable SA1623 // Property summary documentation should match accessors
+    public bool ForceProgressiveDownload { get; init; } = true;
+#pragma warning restore SA1623 // Property summary documentation should match accessors
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether to preserve unrecognized streams in the output video.
+    /// Note: <see langword="null" /> is the default behavior, meaning unrecognized streams are removed when changing container format only - however more
+    /// streams (e.g., subtitle streams) may become recognized in the future.
+    /// Default is <see langword="null" />.
+    /// </summary>
+    public bool? PreserveUnrecognizedStreams { get; init; }
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether to trim the thumbnail from the video.
+    /// Default is <see langword="true" />.
+    /// Note: disabling trimming may not be respected if the container format is changed.
+    /// </summary>
+#pragma warning disable SA1623 // Property summary documentation should match accessors
+    public bool StripThumbnail { get; init; } = true;
+#pragma warning restore SA1623 // Property summary documentation should match accessors
+
+    /// <summary>
+    /// Gets or initializes the options for validating audio streams in the source video before processing.
+    /// Default is <see langword="null" />.
+    /// </summary>
+    public AudioStreamValidationOptions? AudioSourceValidation { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the options for validating video streams in the source video before processing.
+    /// Default is <see langword="null" />.
+    /// </summary>
+    public VideoStreamValidationOptions? VideoSourceValidation { get; init; }
 
     /// <summary>
     /// Initializes the directory containing ffmpeg binaries to use for processing.
     /// On Windows: should contain ffmpeg.exe and ffprobe.exe.
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.
-    /// Note: this method is not thread-safe and should be called once at application startup before any video processing is performed.
     /// </summary>
     public static void InitializeWithFFMpegExecutablesFromPath(IAbsoluteDirectoryPath dirPath)
     {
@@ -51,17 +206,31 @@ public class VideoProcessor : FileProcessor
             : (dirPath.CombineFile("ffmpeg"), dirPath.CombineFile("ffprobe"));
 
         if (!ffmpeg.Exists)
-            throw new FileNotFoundException($"FFMpeg executable not found in specified directory.", ffmpeg.ToString());
+            throw new FileNotFoundException("FFMpeg executable not found in specified directory.", ffmpeg.ToString());
 
         if (!ffprobe.Exists)
-            throw new FileNotFoundException($"FFProbe executable not found in specified directory.", ffprobe.ToString());
+            throw new FileNotFoundException("FFProbe executable not found in specified directory.", ffprobe.ToString());
+
+        if (Interlocked.CompareExchange(ref _ffmpegPathInitialized, true, false))
+            throw new InvalidOperationException("FFMpeg executable paths have already been initialized.");
 
         FFMpegExePath = ffmpeg;
         FFProbeExePath = ffprobe;
     }
 
-    internal static IFilePath? FFMpegExePath { get; private set; }
-    internal static IFilePath? FFProbeExePath { get; private set; }
+    private static bool _ffmpegPathInitialized;
+
+    internal static IFilePath FFMpegExePath
+    {
+        get => field ?? throw new InvalidOperationException("Cannot access FFMpeg executable path before it has been initialized. Call InitializeWithFFMpegExecutablesFromPath first.");
+        private set => field = value;
+    }
+
+    internal static IFilePath FFProbeExePath
+    {
+        get => field ?? throw new InvalidOperationException("Cannot access FFMpeg executable path before it has been initialized. Call InitializeWithFFMpegExecutablesFromPath first.");
+        private set => field = value;
+    }
 
     // TODO
 }
