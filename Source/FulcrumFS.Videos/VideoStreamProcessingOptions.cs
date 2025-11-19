@@ -1,105 +1,143 @@
 namespace FulcrumFS.Videos;
 
+#pragma warning disable SA1513 // Closing brace should be followed by blank line
+
 /// <summary>
 /// Represents options for processing a video stream.
 /// </summary>
 public class VideoStreamProcessingOptions
 {
     /// <summary>
-    /// Gets the options that indicate to copy the codec without re-encoding.
+    /// Gets or initializes the allowable result video codecs.
+    /// Any streams of the video not matching one of these codecs will be re-encoded to use one of them.
+    /// Video streams already using one of these codecs may be copied without re-encoding, depending on <see cref="ReencodeBehavior" />.
+    /// When video streams are re-encoded, they are re-encoded to the first codec in this list.
+    /// Providing an empty list is not allowed.
+    /// Providing <see langword="null" /> indicates to preserve the video streams as-is.
+    /// Default is a list containing <see cref="VideoCodec.H264" />.
     /// </summary>
-    public static VideoStreamProcessingOptions CopyCodecOptions { get; } = new();
+    public IReadOnlyList<VideoCodec>? ResultCodecs
+    {
+        get;
+        init
+        {
+            if (value is null)
+            {
+                field = null;
+                return;
+            }
+
+            IReadOnlyList<VideoCodec> result = [.. value];
+
+            if (!result.Any())
+                throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+
+            if (result.Any((x) => x is null))
+                throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+
+            if (result.Distinct().Count() != result.Count)
+                throw new ArgumentException("Codecs cannot contain duplicate result codecs.", nameof(value));
+
+            if (!result[0].SupportsEncoding)
+                throw new ArgumentException("The first codec in the list must support encoding.", nameof(value));
+
+            field = result;
+        }
+    } = [VideoCodec.H264];
 
     /// <summary>
-    /// Gets the options that indicate to remove this stream.
+    /// Gets or initializes the behavior for re-encoding the video stream.
+    /// Default is <see cref="ReencodeBehavior.Always" />.
     /// </summary>
-    public static VideoStreamProcessingOptions RemoveStreamOptions { get; } = new() { ShouldRemove = true };
+    public ReencodeBehavior ReencodeBehavior
+    {
+        get;
+        init
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentException("Invalid re-encode behavior specified.", nameof(value));
 
-    /// <summary>
-    /// Gets or initializes the result video codec for this mapping, or null for copy.
-    /// Note: if using the copy codec, options that require re-encoding will be ignored.
-    /// </summary>
-    public VideoCodec? ResultCodec { get; init; }
-
-    /// <summary>
-    /// Gets or initializes a value indicating whether to remove this stream.
-    /// </summary>
-#pragma warning disable SA1623 // Property summary documentation should match accessors
-    public bool ShouldRemove { get; init; }
-#pragma warning restore SA1623 // Property summary documentation should match accessors
-
-    /// <summary>
-    /// Gets or initializes a value indicating whether to copy the stream without re-encoding if it makes the final file smaller overall than otherwise.
-    /// Default is false.
-    /// </summary>
-#pragma warning disable SA1623 // Property summary documentation should match accessors
-    public bool ShouldCopyIfLarger { get; init; }
-#pragma warning restore SA1623 // Property summary documentation should match accessors
+            field = value;
+        }
+    } = ReencodeBehavior.Always;
 
     /// <summary>
     /// Gets or initializes a value indicating whether to strip metadata from this stream.
-    /// If unset, metadata preservation is undefined, and it may only be partially preserved.
+    /// If set to <see langword="null" />, metadata preservation is undefined, and it may only be partially preserved.
     /// Note: if stripping metadata is enabled globally, it will be removed regardless.
+    /// Default is <see langword="false" />.
     /// </summary>
-    public bool? StripMetadata { get; init; }
+    public bool? StripMetadata { get; init; } = false;
 
     /// <summary>
-    /// Gets or intializes a value indicating how to re-order this stream.
-    /// If set, adjusts the index of this stream within its stream type (video) by the specified amount with respect to other streams of the same type; if
-    /// movement exceeds the maximum amount possible, it is clamped.
-    /// The re-ordering is performed after any streams with <see cref="ShouldRemove" /> have been removed, and is performed in order for each stream as per the
-    /// original order.
+    /// Gets or initializes the quality to use for video encoding.
+    /// Default is <see cref="VideoQuality.Medium" />.
     /// </summary>
-    public int? IndexAdjustmentWithinStreamType { get; init; }
+    public VideoQuality Quality
+    {
+        get;
+        init
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentException("Invalid video quality specified.", nameof(value));
+
+            field = value;
+        }
+    } = VideoQuality.Medium;
 
     /// <summary>
-    /// Gets or initializes the CRF (constant rate factor) for the video encoding.
-    /// CRF values range from 0 to 51 for 8-bit formats, or 0 to 63 for 10 bit formats - a lower value is higher quality.
-    /// Currently only supported for H.264 (default is 23) and H.265 (default is 28, visually similar to 23 in H.264, but about half the file size) - ignored
-    /// for unsupported codecs (including the copy codec).
-    /// A CRF value of 0 is lossless for supported video profiles (otherwise, it is just the best possible); however, generally around 16 for H.264 it is
-    /// visually lossless (depending on the particular file).
-    /// The resulting quality also depends on if a maximum bitrate is set though.
+    /// Gets or initializes the maximum bits per channel to use for video encoding.
+    /// Default is <see cref="BitsPerChannel.Bits8" />.
     /// </summary>
-    public int? ConstantRateFactor { get; init; }
+    public BitsPerChannel MaximumBitsPerChannel
+    {
+        get;
+        init
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentException("Invalid bits per channel specified.", nameof(value));
+
+            field = value;
+        }
+    } = BitsPerChannel.Bits8;
 
     /// <summary>
-    /// Gets or initializes maximum bitrate of the stream (in bits / second).
-    /// Note: some video codecs do not support a maximum bitrate in the traditional sense (e.g., H.264 without 2-pass encoding), so for these codecs it will
-    /// instead conceptually correspond to a target / average maximum bitrate.
+    /// Gets or initializes the maximum chroma subsampling to use for video encoding.
+    /// Default is <see cref="ChromaSubsampling.Subsampling420" />.
     /// </summary>
-    public int? MaximumBitRate { get; init; }
+    public ChromaSubsampling MaximumChromaSubsampling
+    {
+        get;
+        init
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentException("Invalid chroma subsampling specified.", nameof(value));
 
-    /// <summary>
-    /// Gets or initializes the tuning options for video encoding.
-    /// Ignored for codecs that do not support tuning.
-    /// </summary>
-    public VideoTune? VideoTune { get; init; }
-
-    /// <summary>
-    /// Gets or initializes the H.264 profile to use when encoding with the H.264 codec.
-    /// </summary>
-    public H264Profile? H264Profile { get; init; }
-
-    /// <summary>
-    /// Gets or initializes the H.265 profile to use when encoding with the H.265 codec.
-    /// </summary>
-    public H265Profile? H265Profile { get; init; }
+            field = value;
+        }
+    } = ChromaSubsampling.Subsampling420;
 
     /// <summary>
     /// Gets or initializes the compression preset to use for video encoding.
+    /// Note: does not affect quality, only affects file size and encoding speed trade-off.
+    /// Default is <see cref="VideoCompressionPreset.Medium" />.
     /// </summary>
-    public VideoCompressionPreset? CompressionPreset { get; init; }
+    public VideoCompressionPreset CompressionPreference
+    {
+        get;
+        init
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentException("Invalid video compression preset specified.", nameof(value));
+
+            field = value;
+        }
+    } = VideoCompressionPreset.Medium;
 
     /// <summary>
-    /// Gets or initializes the bit depth to use for video encoding - default is 8.
-    /// If set to an unsupported bit depth, the value will be ignored and defaulted instead.
-    /// Note: this option might be overridden if a profile is selected that requires a specific bit depth.
-    /// </summary>
-    public int? BitDepth { get; init; }
-
-    /// <summary>
-    /// Gets or initializes the options for resizing the video. If set to <see langword="null"/>, the video will not be resized.
+    /// Gets or initializes the options for resizing the video.
+    /// If set to <see langword="null" />, the video will not be resized.
+    /// Default is <see langword="null" />.
     /// </summary>
     public VideoResizeOptions? ResizeOptions { get; init; }
 }

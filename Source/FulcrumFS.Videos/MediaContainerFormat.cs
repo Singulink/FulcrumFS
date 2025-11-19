@@ -6,31 +6,22 @@ namespace FulcrumFS.Videos;
 public abstract class MediaContainerFormat
 {
     /// <summary>
-    /// Gets the 3GP media container format.
-    /// </summary>
-#pragma warning disable SA1300 // Element should begin with upper-case letter
-    public static MediaContainerFormat _3GP { get; } = new _3GPImpl();
-#pragma warning restore SA1300 // Element should begin with upper-case letter
-
-    /// <summary>
     /// Gets the MP4 media container format.
+    /// Note: since the file structore of mp4, mov, m4a, 3gp, 3g2, and mj2 are all the same, they can all be matched by this format.
     /// </summary>
     public static MediaContainerFormat MP4 { get; } = new MP4Impl();
 
-    /// <summary>
-    /// Gets the MOV media container format.
-    /// </summary>
-    public static MediaContainerFormat Mov { get; } = new MovImpl();
+    /// <inheritdoc cref="MP4" />
+    public static MediaContainerFormat Mov => MP4;
 
     /// <summary>
     /// Gets the MKV media container format.
+    /// Note: since the file structore of mkv, and webm are the same, they can both be matched by this format.
     /// </summary>
     public static MediaContainerFormat Mkv { get; } = new MKVImpl();
 
-    /// <summary>
-    /// Gets the WebM media container format.
-    /// </summary>
-    public static MediaContainerFormat WebM { get; } = new WebMImpl();
+    /// <inheritdoc cref="Mkv" />
+    public static MediaContainerFormat WebM => Mkv;
 
     /// <summary>
     /// Gets the AVI media container format.
@@ -38,22 +29,49 @@ public abstract class MediaContainerFormat
     public static MediaContainerFormat Avi { get; } = new AviImpl();
 
     /// <summary>
-    /// Gets the WMV media container format.
-    /// </summary>
-    public static MediaContainerFormat Wmv { get; } = new WmvImpl();
-
-    /// <summary>
     /// Gets the TS media container format.
+    /// Note: since the file structure of ts, mts, and m2ts are all the same, they can all be matched by this format.
     /// </summary>
     public static MediaContainerFormat TS { get; } = new TSImpl();
 
     /// <summary>
-    /// Gets the MTS media container format.
+    /// Gets the MPEG media container format.
     /// </summary>
-    public static MediaContainerFormat MTS { get; } = new MTSImpl();
+    public static MediaContainerFormat Mpeg { get; } = new MpegImpl();
 
     /// <summary>
-    /// Gets the M2TS media container format.
+    /// Gets a value indicating whether this container format supports being written to, as we only implement writing for some formats.
     /// </summary>
-    public static MediaContainerFormat M2TS { get; } = new M2TSImpl();
+    public virtual bool SupportsWriting => false;
+
+    /// <summary>
+    /// Gets the name of the codec as used in ffprobe output (format_name).
+    /// </summary>
+    public abstract string Name { get; }
+
+    private sealed class MP4Impl : MediaContainerFormat
+    {
+        public override bool SupportsWriting => true;
+        public override string Name => "mov,mp4,m4a,3gp,3g2,mj2";
+    }
+
+    private sealed class MKVImpl : MediaContainerFormat
+    {
+        public override string Name => "matroska,webm";
+    }
+
+    private sealed class AviImpl : MediaContainerFormat
+    {
+        public override string Name => "avi";
+    }
+
+    private sealed class TSImpl : MediaContainerFormat
+    {
+        public override string Name => "mpegts";
+    }
+
+    private sealed class MpegImpl : MediaContainerFormat
+    {
+        public override string Name => "mpeg";
+    }
 }

@@ -1,0 +1,40 @@
+Video quality presets for H.264 (CRF):
+- Worst: 29
+- Low: 26
+- Medium: 23
+- High: 20
+- Best: 17
+
+Video quality presets for H.265 (CRF):
+- Worst: 34
+- Low: 31
+- Medium: 28
+- High: 23
+- Best: 19
+
+Audio quality presets for AAC via libfdk_aac (vbr mode):
+- Worst: 1
+- Low: 2
+- Medium: 3
+- High: 4, todo: investigate good cutoff value for this, if necessary
+- Best: 5, todo: investigate good cutoff value for this, if necessary; todo: investigate if we should be using a fixed bitrate for this mode, and potentially 5 for 'high'
+
+Compression presets:
+- Worst: superfast
+- Low: faster
+- Medium: medium
+- High: slow
+- Best: slower
+
+Only the following video codecs will be supported for writing initially:
+- H.264 (via libx264)
+- H.265 (via libx265)
+
+Only the following audio codecs will be supported for writing initially:
+- AAC-LC (via libfdk_aac, aac)
+
+ffmpeg output:
+- For reading metadata, ffprobe can emit to json
+- For progress reporting, ffmpeg has flags that allow changing the pipe or sending to a file if needed
+- For error handling, ffmpeg has stricter/looser options available (e.g., xerror)
+- We can detect file format & stream format by looking at format_name / codec_name / profile in ffprobe output, with "-show_format -show_streams"

@@ -28,7 +28,7 @@ public class VideoSourceValidationOptions
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxWidth));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxHeight));
             field = value;
         }
     }
@@ -41,7 +41,7 @@ public class VideoSourceValidationOptions
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxWidth));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxPixels));
             field = value;
         }
     }

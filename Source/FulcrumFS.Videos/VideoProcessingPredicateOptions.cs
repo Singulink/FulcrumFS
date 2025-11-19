@@ -7,14 +7,10 @@ namespace FulcrumFS.Videos;
 public class VideoProcessingPredicateOptions
 {
     /// <summary>
-    /// Gets the options for source video codecs for this mapping.
-    /// At each position, a list of allowed source video codecs is specified for the corresponding video stream index.
-    /// If the list at a position is null, any codec is allowed for that stream.
-    /// If the entire property is null, any codec is allowed for all streams.
-    /// If there are more streams than entries in this collection, the extra streams use the last value.
-    /// If there are fewer streams than entries in this collection, the extra entries are ignored.
+    /// Gets the source video codecs for this mapping (it matches any of these, but all streams must match).
+    /// If <see langword="null" />, matches any supported video codec.
     /// </summary>
-    public IReadOnlyList<IReadOnlyList<VideoCodec>?>? SourceVideoCodecs
+    public IReadOnlyList<VideoCodec>? SourceVideoCodecs
     {
         get;
         init
@@ -25,23 +21,30 @@ public class VideoProcessingPredicateOptions
                 field = null;
             }
 
-            // Make a deep copy and store it
+            // Make a copy, and validate it and store it
             else
             {
-                field = [.. value.Select((x) => x is null ? null : (IReadOnlyList<VideoCodec>)[.. x])];
+                IReadOnlyList<VideoCodec> result = [.. value];
+
+                if (result.Count is 0)
+                    throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+
+                if (result.Any((x) => x is null))
+                    throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+
+                if (result.Distinct().Count() != result.Count)
+                    throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+
+                field = result;
             }
         }
     }
 
     /// <summary>
-    /// Gets the options for source audio codecs for this mapping.
-    /// At each position, a list of allowed source audio codecs is specified for the corresponding audio stream index.
-    /// If the list at a position is null, any codec is allowed for that stream.
-    /// If the entire property is null, any codec is allowed for all streams.
-    /// If there are more streams than entries in this collection, the extra streams use the last value.
-    /// If there are fewer streams than entries in this collection, the extra entries are ignored.
+    /// Gets the source audio codecs for this mapping (it matches any of these, but all streams must match).
+    /// If <see langword="null" />, matches any supported audio codec.
     /// </summary>
-    public IReadOnlyList<IReadOnlyList<AudioCodec>?>? SourceAudioCodecs
+    public IReadOnlyList<AudioCodec>? SourceAudioCodecs
     {
         get;
         init
@@ -52,17 +55,28 @@ public class VideoProcessingPredicateOptions
                 field = null;
             }
 
-            // Make a deep copy and store it
+            // Make a copy, and validate it and store it
             else
             {
-                field = [.. value.Select((x) => x is null ? null : (IReadOnlyList<AudioCodec>)[.. x])];
+                IReadOnlyList<AudioCodec> result = [.. value];
+
+                if (result.Count is 0)
+                    throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+
+                if (result.Any((x) => x is null))
+                    throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+
+                if (result.Distinct().Count() != result.Count)
+                    throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+
+                field = result;
             }
         }
     }
 
     /// <summary>
     /// Gets the source media container format for this mapping (it matches any of these).
-    /// If null, matches any container format.
+    /// If <see langword="null" />, matches any supported container format.
     /// </summary>
     public IReadOnlyList<MediaContainerFormat>? SourceMediaContainerFormats
     {
@@ -78,7 +92,18 @@ public class VideoProcessingPredicateOptions
             // Make a copy and store it
             else
             {
-                field = [.. value];
+                IReadOnlyList<MediaContainerFormat> result = [.. value];
+
+                if (result.Count is 0)
+                    throw new ArgumentException("Formats cannot be empty.", nameof(value));
+
+                if (result.Any((x) => x is null))
+                    throw new ArgumentException("Formats cannot contain null values.", nameof(value));
+
+                if (result.Distinct().Count() != result.Count)
+                    throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
+
+                field = result;
             }
         }
     }
