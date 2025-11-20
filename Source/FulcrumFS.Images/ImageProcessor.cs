@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using FulcrumFS.Utilities;
 using Microsoft.IO;
 using Singulink.Enums;
 using SixLabors.ImageSharp;
@@ -91,7 +90,8 @@ public sealed class ImageProcessor : FileProcessor
     } = StripImageMetadataMode.ThumbnailOnly;
 
     /// <summary>
-    /// Gets or initializes the options for resizing the image. If set to <see langword="null"/>, the image will not be resized.
+    /// Gets or initializes the options for resizing the image. A value of <see langword="null"/> indicates that the image will not be resized. Default is <see
+    /// langword="null"/>.
     /// </summary>
     public ImageResizeOptions? ResizeOptions { get; init; }
 
@@ -229,8 +229,7 @@ public sealed class ImageProcessor : FileProcessor
 
         if (sourceSupportsTransparency && !BackgroundColor.SkipIfTransparencySupported)
         {
-            var bgColor = BackgroundColor.ToLibColor();
-            image.Mutate(x => x.BackgroundColor(bgColor));
+            image.Mutate(x => x.BackgroundColor(BackgroundColor.ToLibColor()));
             changedData = true;
         }
 

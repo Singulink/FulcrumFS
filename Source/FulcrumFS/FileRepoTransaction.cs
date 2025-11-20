@@ -94,15 +94,16 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     {
         using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
 
-        var onFileIdCreated = (FileId fileId) => {
-            lock (_pendingOutcome)
-                _pendingOutcome.Add(fileId);
-        };
-
-        var result = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, onFileIdCreated, cancellationToken).ConfigureAwait(false);
+        var result = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, OnFileIdCreated, cancellationToken).ConfigureAwait(false);
         _added.Add(result.FileId);
 
         return result;
+
+        void OnFileIdCreated(FileId fileId)
+        {
+            lock (_pendingOutcome)
+                _pendingOutcome.Add(fileId);
+        }
     }
 
     /// <summary>

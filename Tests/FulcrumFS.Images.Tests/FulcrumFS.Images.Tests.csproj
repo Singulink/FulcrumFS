@@ -1,7 +1,7 @@
-﻿<Project Sdk="MSTest.Sdk/3.10.2">
+﻿<Project Sdk="MSTest.Sdk/4.0.2">
   <PropertyGroup>
     <RootNamespace>FulcrumFS.Images</RootNamespace>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
