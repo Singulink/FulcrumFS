@@ -65,7 +65,7 @@ public abstract class MediaContainerFormat
     public virtual bool SupportsWriting => false;
 
     /// <summary>
-    /// Gets the name of the codec as used in ffprobe output (format_name).
+    /// Gets the name of the container format as used in ffprobe output (format_name).
     /// </summary>
     public abstract string Name { get; }
 

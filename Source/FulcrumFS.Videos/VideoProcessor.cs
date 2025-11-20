@@ -164,36 +164,36 @@ public class VideoProcessor : FileProcessor
     /// On Windows: should contain ffmpeg.exe and ffprobe.exe.
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.
     /// </summary>
-    public static void InitializeWithFFMpegExecutablesFromPath(IAbsoluteDirectoryPath dirPath)
+    public static void InitializeWithFFmpegExecutablesFromPath(IAbsoluteDirectoryPath dirPath)
     {
         var (ffmpeg, ffprobe) = OperatingSystem.IsWindows()
             ? (dirPath.CombineFile("ffmpeg.exe"), dirPath.CombineFile("ffprobe.exe"))
             : (dirPath.CombineFile("ffmpeg"), dirPath.CombineFile("ffprobe"));
 
         if (!ffmpeg.Exists)
-            throw new FileNotFoundException("FFMpeg executable not found in specified directory.", ffmpeg.ToString());
+            throw new FileNotFoundException("FFmpeg executable not found in specified directory.", ffmpeg.ToString());
 
         if (!ffprobe.Exists)
-            throw new FileNotFoundException("FFProbe executable not found in specified directory.", ffprobe.ToString());
+            throw new FileNotFoundException("FFprobe executable not found in specified directory.", ffprobe.ToString());
 
         if (!_ffmpegPathInitialized.TrySet())
-            throw new InvalidOperationException("FFMpeg executable paths have already been initialized.");
+            throw new InvalidOperationException("FFmpeg executable paths have already been initialized.");
 
-        FFMpegExePath = ffmpeg;
-        FFProbeExePath = ffprobe;
+        FFmpegExePath = ffmpeg;
+        FFprobeExePath = ffprobe;
     }
 
     private static InterlockedFlag _ffmpegPathInitialized;
 
-    internal static IFilePath FFMpegExePath
+    internal static IFilePath FFmpegExePath
     {
-        get => field ?? throw new InvalidOperationException("Cannot access FFMpeg executable path before it has been initialized. Call InitializeWithFFMpegExecutablesFromPath first.");
+        get => field ?? throw new InvalidOperationException("Cannot access ffmpeg executable path before it has been initialized. Call InitializeWithFFmpegExecutablesFromPath first.");
         private set;
     }
 
-    internal static IFilePath FFProbeExePath
+    internal static IFilePath FFprobeExePath
     {
-        get => field ?? throw new InvalidOperationException("Cannot access FFMpeg executable path before it has been initialized. Call InitializeWithFFMpegExecutablesFromPath first.");
+        get => field ?? throw new InvalidOperationException("Cannot access ffprobe executable path before it has been initialized. Call InitializeWithFFmpegExecutablesFromPath first.");
         private set;
     }
 

@@ -134,7 +134,7 @@ public class VideoStreamValidationOptions
     } = 1;
 
     /// <summary>
-    /// Gets or initializes the maximum length of each video stream in the source video file.
+    /// Gets or initializes the minimum length of each video stream in the source video file.
     /// Default is <see langword="null" />, indicating no minimum.
     /// </summary>
     public TimeSpan? MinLength
