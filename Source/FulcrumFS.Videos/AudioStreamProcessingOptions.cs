@@ -14,21 +14,14 @@ public class AudioStreamProcessingOptions
     /// Any streams of the audio not matching one of these codecs will be re-encoded to use one of them.
     /// Audio streams already using one of these codecs may be copied without re-encoding, depending on <see cref="ReencodeBehavior" />.
     /// When audio streams are re-encoded, they are re-encoded to the first codec in this list.
-    /// Default is a list containing <see cref="AudioCodec.AAC" />.
     /// Providing an empty list is not allowed.
-    /// Providing <see langword="null" /> indicates to preserve the audio streams as-is.
+    /// Default is a list containing <see cref="AudioCodec.AAC" />.
     /// </summary>
-    public IReadOnlyList<AudioCodec>? ResultCodecs
+    public IReadOnlyList<AudioCodec> ResultCodecs
     {
         get;
         init
         {
-            if (value is null)
-            {
-                field = null;
-                return;
-            }
-
             IReadOnlyList<AudioCodec> result = [.. value];
 
             if (!result.Any())

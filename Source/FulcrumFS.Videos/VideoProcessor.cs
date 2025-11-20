@@ -1,4 +1,5 @@
 using Singulink.IO;
+using Singulink.Threading;
 
 namespace FulcrumFS.Videos;
 
@@ -11,20 +12,13 @@ public class VideoProcessor : FileProcessor
 {
     /// <summary>
     /// Gets the source video codecs for this mapping (it matches any of these, but all streams must match).
-    /// If <see langword="null" />, matches any supported video codec.
-    /// Default is <see langword="null" />.
+    /// Default is <see cref="VideoCodec.AllSourceCodecs" />.
     /// </summary>
-    public IReadOnlyList<VideoCodec>? SourceVideoCodecs
+    public IReadOnlyList<VideoCodec> SourceVideoCodecs
     {
         get;
         init
         {
-            if (value is null)
-            {
-                field = null;
-                return;
-            }
-
             IReadOnlyList<VideoCodec> result = [.. value];
 
             if (result.Count is 0)
@@ -38,24 +32,17 @@ public class VideoProcessor : FileProcessor
 
             field = result;
         }
-    }
+    } = VideoCodec.AllSourceCodecs;
 
     /// <summary>
     /// Gets the source audio codecs for this mapping (it matches any of these, but all streams must match).
-    /// If <see langword="null" />, matches any supported audio codec.
-    /// Default is <see langword="null" />.
+    /// Default is <see cref="AudioCodec.AllSourceCodecs" />.
     /// </summary>
-    public IReadOnlyList<AudioCodec>? SourceAudioCodecs
+    public IReadOnlyList<AudioCodec> SourceAudioCodecs
     {
         get;
         init
         {
-            if (value is null)
-            {
-                field = null;
-                return;
-            }
-
             IReadOnlyList<AudioCodec> result = [.. value];
 
             if (result.Count is 0)
@@ -69,24 +56,17 @@ public class VideoProcessor : FileProcessor
 
             field = result;
         }
-    }
+    } = AudioCodec.AllSourceCodecs;
 
     /// <summary>
     /// Gets the source media container format for this mapping (it matches any of these).
-    /// If <see langword="null" />, matches any supported container format.
-    /// Default is <see langword="null" />.
+    /// Default is <see cref="MediaContainerFormat.AllSourceFormats" />.
     /// </summary>
-    public IReadOnlyList<MediaContainerFormat>? SourceMediaContainerFormats
+    public IReadOnlyList<MediaContainerFormat> SourceFormats
     {
         get;
         init
         {
-            if (value is null)
-            {
-                field = null;
-                return;
-            }
-
             IReadOnlyList<MediaContainerFormat> result = [.. value];
 
             if (result.Count is 0)
@@ -100,7 +80,7 @@ public class VideoProcessor : FileProcessor
 
             field = result;
         }
-    }
+    } = MediaContainerFormat.AllSourceFormats;
 
     /// <summary>
     /// Gets the video stream processing options for the video streams in the source video.
@@ -116,21 +96,16 @@ public class VideoProcessor : FileProcessor
 
     /// <summary>
     /// Gets the result media container format for this mapping, or null to use the same as the input.
-    /// If <see langword="null" />, the container format of the source video is preserved (when possible, i.e., if re-encoding, or otherwise requesting to
-    /// modify things like metadata, it will automatically default to another container if unsupported for writing).
+    /// If re-encoding is required, or other modifications (e.g., metadata changes) are requested, and the source format does not support writing, the first
+    /// format in the list is used, so it must be writable as per <see cref="MediaContainerFormat.SupportsWriting" /> - otherwise, non-writable formats will
+    /// only be emitted when copying the file in full.
     /// Default is a list containing <see cref="MediaContainerFormat.MP4" />.
     /// </summary>
-    public IReadOnlyList<MediaContainerFormat>? ResultMediaContainerFormat
+    public IReadOnlyList<MediaContainerFormat> ResultFormats
     {
         get;
         init
         {
-            if (value is null)
-            {
-                field = null;
-                return;
-            }
-
             IReadOnlyList<MediaContainerFormat> result = [.. value];
 
             if (result.Count is 0)
@@ -150,13 +125,6 @@ public class VideoProcessor : FileProcessor
     } = [MediaContainerFormat.MP4];
 
     /// <summary>
-    /// Gets or initializes a value indicating whether to strip metadata from this stream.
-    /// If set to <see langword="null" />, metadata preservation is undefined, and it may only be partially preserved.
-    /// Default is <see langword="false" />.
-    /// </summary>
-    public bool? StripMetadata { get; init; } = false;
-
-    /// <summary>
     /// Gets or initializes a value indicating whether to ensure the 'moov atom' in an MP4 file is at the beginning of the file.
     /// Note: this does not enable true streaming, but it does allow playback to begin before the entire streams are downloaded.
     /// Default is <see langword="true" />.
@@ -174,13 +142,10 @@ public class VideoProcessor : FileProcessor
     public bool? PreserveUnrecognizedStreams { get; init; }
 
     /// <summary>
-    /// Gets or initializes a value indicating whether to trim the thumbnail from the video.
-    /// Default is <see langword="true" />.
-    /// Note: disabling trimming may not be respected if the container format is changed.
+    /// Gets or initializes a value indicating whether to strip metadata and/or thumbnails from this file.
+    /// Default is <see cref="StripVideoMetadataMode.ThumbnailOnly" />.
     /// </summary>
-#pragma warning disable SA1623 // Property summary documentation should match accessors
-    public bool StripThumbnail { get; init; } = true;
-#pragma warning restore SA1623 // Property summary documentation should match accessors
+    public StripVideoMetadataMode StripMetadata { get; init; } = StripVideoMetadataMode.ThumbnailOnly;
 
     /// <summary>
     /// Gets or initializes the options for validating audio streams in the source video before processing.
@@ -211,25 +176,25 @@ public class VideoProcessor : FileProcessor
         if (!ffprobe.Exists)
             throw new FileNotFoundException("FFProbe executable not found in specified directory.", ffprobe.ToString());
 
-        if (Interlocked.CompareExchange(ref _ffmpegPathInitialized, true, false))
+        if (!_ffmpegPathInitialized.TrySet())
             throw new InvalidOperationException("FFMpeg executable paths have already been initialized.");
 
         FFMpegExePath = ffmpeg;
         FFProbeExePath = ffprobe;
     }
 
-    private static bool _ffmpegPathInitialized;
+    private static InterlockedFlag _ffmpegPathInitialized;
 
     internal static IFilePath FFMpegExePath
     {
         get => field ?? throw new InvalidOperationException("Cannot access FFMpeg executable path before it has been initialized. Call InitializeWithFFMpegExecutablesFromPath first.");
-        private set => field = value;
+        private set;
     }
 
     internal static IFilePath FFProbeExePath
     {
         get => field ?? throw new InvalidOperationException("Cannot access FFMpeg executable path before it has been initialized. Call InitializeWithFFMpegExecutablesFromPath first.");
-        private set => field = value;
+        private set;
     }
 
     // TODO

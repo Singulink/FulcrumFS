@@ -19,7 +19,7 @@ public abstract class AudioCodec
     public static AudioCodec AAC { get; } = new AACImpl();
 
     /// <summary>
-    /// Gets the HE-AAC audio codec, supports encoding.
+    /// Gets the HE-AAC audio codec, does not support encoding.
     /// </summary>
     public static AudioCodec HEAAC { get; } = new HEAACImpl();
 
@@ -42,6 +42,27 @@ public abstract class AudioCodec
     /// Gets the Opus audio codec, does not support encoding.
     /// </summary>
     public static AudioCodec Opus { get; } = new OpusImpl();
+
+    /// <summary>
+    /// Gets a list of all supported audio codecs (with encodable ones first).
+    /// </summary>
+    public static IReadOnlyList<AudioCodec> AllSourceCodecs { get; } =
+    [
+        AAC,
+        HEAAC,
+        MP2,
+        MP3,
+        Vorbis,
+        Opus,
+    ];
+
+    /// <summary>
+    /// Gets a list of all supported audio codecs, that have encoding support (<see cref="SupportsEncoding" />).
+    /// </summary>
+    public static IReadOnlyList<AudioCodec> AllResultCodecs { get; } =
+    [
+        AAC,
+    ];
 
     /// <summary>
     /// Gets a value indicating whether this codec supports encoding, as some codecs only support decoding.
@@ -67,7 +88,6 @@ public abstract class AudioCodec
 
     private sealed class HEAACImpl : AudioCodec
     {
-        public override bool SupportsEncoding => true;
         public override string Name => "aac";
         public override string? Profile => "HE-AAC";
     }

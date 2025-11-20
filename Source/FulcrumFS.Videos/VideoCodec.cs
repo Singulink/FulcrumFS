@@ -76,6 +76,32 @@ public abstract class VideoCodec
     public static VideoCodec AV1 { get; } = new AV1Impl();
 
     /// <summary>
+    /// Gets a list of all supported video codecs (with encodable ones first).
+    /// </summary>
+    public static IReadOnlyList<VideoCodec> AllSourceCodecs { get; } =
+    [
+        H264,
+        H265,
+        H262,
+        H263,
+        H266,
+        Mpeg1,
+        Mpeg4,
+        VP8,
+        VP9,
+        AV1,
+    ];
+
+    /// <summary>
+    /// Gets a list of all supported video codecs, that have encoding support (<see cref="SupportsEncoding" />).
+    /// </summary>
+    public static IReadOnlyList<VideoCodec> AllResultCodecs { get; } =
+    [
+        H264,
+        H265,
+    ];
+
+    /// <summary>
     /// Gets a value indicating whether this codec supports encoding, as some codecs only support decoding.
     /// </summary>
     public virtual bool SupportsEncoding => false;

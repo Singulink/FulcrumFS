@@ -40,6 +40,26 @@ public abstract class MediaContainerFormat
     public static MediaContainerFormat Mpeg { get; } = new MpegImpl();
 
     /// <summary>
+    /// Gets a list of all supported media container formats (with writable ones first).
+    /// </summary>
+    public static IReadOnlyList<MediaContainerFormat> AllSourceFormats { get; } =
+    [
+        MP4,
+        Mkv,
+        Avi,
+        TS,
+        Mpeg,
+    ];
+
+    /// <summary>
+    /// Gets a list of all supported media container formats, that have writing support (<see cref="SupportsWriting" />).
+    /// </summary>
+    public static IReadOnlyList<MediaContainerFormat> AllResultFormats { get; } =
+    [
+        MP4,
+    ];
+
+    /// <summary>
     /// Gets a value indicating whether this container format supports being written to, as we only implement writing for some formats.
     /// </summary>
     public virtual bool SupportsWriting => false;

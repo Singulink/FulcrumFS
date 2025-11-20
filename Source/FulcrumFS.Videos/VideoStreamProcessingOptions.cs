@@ -15,20 +15,13 @@ public class VideoStreamProcessingOptions
     /// Video streams already using one of these codecs may be copied without re-encoding, depending on <see cref="ReencodeBehavior" />.
     /// When video streams are re-encoded, they are re-encoded to the first codec in this list.
     /// Providing an empty list is not allowed.
-    /// Providing <see langword="null" /> indicates to preserve the video streams as-is.
     /// Default is a list containing <see cref="VideoCodec.H264" />.
     /// </summary>
-    public IReadOnlyList<VideoCodec>? ResultCodecs
+    public IReadOnlyList<VideoCodec> ResultCodecs
     {
         get;
         init
         {
-            if (value is null)
-            {
-                field = null;
-                return;
-            }
-
             IReadOnlyList<VideoCodec> result = [.. value];
 
             if (!result.Any())
