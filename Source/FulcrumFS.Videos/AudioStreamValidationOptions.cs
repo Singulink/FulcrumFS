@@ -5,7 +5,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Options for validating audio streams during processing.
 /// </summary>
-public class AudioStreamValidationOptions
+public sealed class AudioStreamValidationOptions
 {
     /// <summary>
     /// Gets or initializes the maximum number of audio streams in the source video file.

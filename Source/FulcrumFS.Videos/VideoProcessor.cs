@@ -8,7 +8,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Provides functionality to process video files with specified options.
 /// </summary>
-public class VideoProcessor : FileProcessor
+public sealed class VideoProcessor : FileProcessor
 {
     /// <summary>
     /// Gets the source video codecs for this mapping (it matches any of these, but all streams must match).
@@ -160,11 +160,11 @@ public class VideoProcessor : FileProcessor
     public VideoStreamValidationOptions? VideoSourceValidation { get; init; }
 
     /// <summary>
-    /// Initializes the directory containing ffmpeg binaries to use for processing.
+    /// Configures the directory containing ffmpeg binaries to use for processing.
     /// On Windows: should contain ffmpeg.exe and ffprobe.exe.
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.
     /// </summary>
-    public static void InitializeWithFFmpegExecutablesFromPath(IAbsoluteDirectoryPath dirPath)
+    public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath)
     {
         var (ffmpeg, ffprobe) = OperatingSystem.IsWindows()
             ? (dirPath.CombineFile("ffmpeg.exe"), dirPath.CombineFile("ffprobe.exe"))
@@ -185,15 +185,15 @@ public class VideoProcessor : FileProcessor
 
     private static InterlockedFlag _ffmpegPathInitialized;
 
-    internal static IFilePath FFmpegExePath
+    internal static IAbsoluteFilePath FFmpegExePath
     {
-        get => field ?? throw new InvalidOperationException("Cannot access ffmpeg executable path before it has been initialized. Call InitializeWithFFmpegExecutablesFromPath first.");
+        get => field ?? throw new InvalidOperationException("Cannot access ffmpeg executable path before it has been initialized. Call ConfigureWithFFmpegExecutables first.");
         private set;
     }
 
-    internal static IFilePath FFprobeExePath
+    internal static IAbsoluteFilePath FFprobeExePath
     {
-        get => field ?? throw new InvalidOperationException("Cannot access ffprobe executable path before it has been initialized. Call InitializeWithFFmpegExecutablesFromPath first.");
+        get => field ?? throw new InvalidOperationException("Cannot access ffprobe executable path before it has been initialized. Call ConfigureWithFFmpegExecutables first.");
         private set;
     }
 

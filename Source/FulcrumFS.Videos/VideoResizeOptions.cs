@@ -3,7 +3,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Represents options for resizing videos.
 /// </summary>
-public class VideoResizeOptions
+public sealed class VideoResizeOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified target size.

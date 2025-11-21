@@ -7,7 +7,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Represents options for processing a video stream.
 /// </summary>
-public class VideoStreamProcessingOptions
+public sealed class VideoStreamProcessingOptions
 {
     /// <summary>
     /// Gets or initializes the allowable result video codecs.

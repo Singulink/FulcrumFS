@@ -5,7 +5,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Options for validating video streams during processing.
 /// </summary>
-public class VideoStreamValidationOptions
+public sealed class VideoStreamValidationOptions
 {
     /// <summary>
     /// Gets or initializes the maximum width of the source video in pixels.

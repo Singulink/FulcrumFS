@@ -7,7 +7,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Represents options for processing an audio stream.
 /// </summary>
-public class AudioStreamProcessingOptions
+public sealed class AudioStreamProcessingOptions
 {
     /// <summary>
     /// Gets or initializes the allowable result audio codecs.

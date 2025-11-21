@@ -4,7 +4,7 @@ namespace FulcrumFS.Videos;
 /// Exception thrown when a video resize operation is attempted but the video does not require resizing. Only thrown if the
 /// <see cref="VideoResizeOptions.ThrowWhenSkipped"/> resize option is set.
 /// </summary>
-public class VideoResizeSkippedException : Exception
+public sealed class VideoResizeSkippedException : Exception
 {
     private const string DefaultMessage = "Video resize operation skipped (source video does not require resizing).";
 
