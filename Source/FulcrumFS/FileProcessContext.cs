@@ -1,8 +1,7 @@
 namespace FulcrumFS;
 
 /// <summary>
-/// Represents the context for processing a file, providing access to the source file or stream and methods to create new work files or
-/// directories.
+/// Represents the context for processing a file, providing access to the source file or stream and methods to create new work files or directories.
 /// </summary>
 public sealed class FileProcessContext : IAsyncDisposable
 {
@@ -34,9 +33,17 @@ public sealed class FileProcessContext : IAsyncDisposable
     /// </summary>
     public bool IsLastProcessStep { get; private set; }
 
-    internal CancellationToken CancellationToken { get; }
+    /// <summary>
+    /// Gets the cancellation token that can be used to observe cancellation requests.
+    /// </summary>
+    public CancellationToken CancellationToken { get; }
 
-    internal FileProcessContext(FileId fileId, string? variantId, IAbsoluteDirectoryPath workRootDirectory, IAbsoluteFilePath sourceFile, CancellationToken cancellationToken)
+    internal FileProcessContext(
+        FileId fileId,
+        string? variantId,
+        IAbsoluteDirectoryPath workRootDirectory,
+        IAbsoluteFilePath sourceFile,
+        CancellationToken cancellationToken)
     {
         FileId = fileId;
         VariantId = variantId;
@@ -47,7 +54,14 @@ public sealed class FileProcessContext : IAsyncDisposable
         CancellationToken = cancellationToken;
     }
 
-    internal FileProcessContext(FileId fileId, string? variantId, IAbsoluteDirectoryPath workRootDirectory, Stream stream, string extension, bool leaveOpen, CancellationToken cancellationToken)
+    internal FileProcessContext(
+        FileId fileId,
+        string? variantId,
+        IAbsoluteDirectoryPath workRootDirectory,
+        Stream stream,
+        string extension,
+        bool leaveOpen,
+        CancellationToken cancellationToken)
     {
         FileId = fileId;
         VariantId = variantId;
@@ -128,8 +142,8 @@ public sealed class FileProcessContext : IAsyncDisposable
     /// <param name="preferInMemory">If <see langword="true"/>, a memory stream will always be returned as long as the source is smaller than <paramref
     /// name="maxInMemoryCopySize"/>. If <see langword="false"/>, different stream types can be returned depending on what the source is, but it will always be
     /// a seekable stream.</param>
-    /// <param name="maxInMemoryCopySize">The maximum number of bytes that will be copied from the source stream to a memory stream before falling back to. If the source stream exceeds this size, it
-    /// will be copied to a new work file instead.</param>
+    /// <param name="maxInMemoryCopySize">The maximum number of bytes that will be copied from the source stream to a memory stream. If the source stream
+    /// exceeds this size, it will be copied to a new work file instead.</param>
     public async ValueTask<Stream> GetSourceAsSeekableStreamAsync(bool preferInMemory, long maxInMemoryCopySize)
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
@@ -146,7 +160,7 @@ public sealed class FileProcessContext : IAsyncDisposable
 
         var fallbackFile = GetNewWorkFile(Extension);
         var streamCopy = await stream
-            .CopyToSeekableAsync(maxInMemoryCopySize, fallbackFile, cancellationToken: CancellationToken)
+            .CopyToSeekableAsync(maxInMemoryCopySize, fallbackFile, CancellationToken)
             .ConfigureAwait(false);
 
         if (!_leaveOpen)

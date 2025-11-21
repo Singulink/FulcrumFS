@@ -34,14 +34,14 @@ public class FileRepoOptions
     public required IAbsoluteDirectoryPath BaseDirectory {
         get;
         set {
-            CheckFrozen();
+            EnsureNotFrozen();
             field = value;
         }
     }
 
     /// <summary>
-    /// Gets or sets the time delay between when files are marked for deletion and when they are actually deleted from the repository. A value of <see
-    /// cref="TimeSpan.Zero"/> indicates immediate deletion upon transaction commit. Default is 48 hours.
+    /// Gets or sets the time delay between when files are marked for deletion and when they are physically deleted from the repository. A value of <see
+    /// cref="TimeSpan.Zero"/> indicates immediate deletion upon transaction commit. Default is 1 hour.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -55,39 +55,11 @@ public class FileRepoOptions
     {
         get;
         set {
-            CheckFrozen();
+            EnsureNotFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero, nameof(value));
             field = value;
         }
-    } = TimeSpan.FromHours(48);
-
-    /// <summary>
-    /// Gets or sets the time delay after which files are considered indeterminate if they are not successfully committed or rolled back. Default is 48
-    /// hours.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This delay must be long enough to ensure that files added during long-running transactions — both in the file repository and in any external databases
-    /// used as a source of truth for indeterminate resolution — are not considered indeterminate before those transactions have committed. See the <see
-    /// cref="FileRepo.CleanAsync(Func{FileId, IndeterminateResolution}?, CancellationToken)"/> method for details on indeterminate file state resolution.
-    /// </para>
-    /// <para>
-    /// If the delay is too short, newly added files may be prematurely deleted during <see cref="FileRepo.CleanAsync(Func{FileId, IndeterminateResolution}?,
-    /// CancellationToken)"/> operations before they are committed, resulting in potential data loss. In practice, even a very large delay should have no
-    /// impact on the repository unless there is an problem with the application that is causing frequent transaction commit/rollback failures, so a very
-    /// generous safety margin is recommended when configuring this value. The delay should be at least several times longer than the longest possible
-    /// transaction that may add files to the repository.
-    /// </para>
-    /// </remarks>
-    public TimeSpan IndeterminateDelay
-    {
-        get;
-        set {
-            CheckFrozen();
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero, nameof(value));
-            field = value;
-        }
-    } = TimeSpan.FromHours(48);
+    } = TimeSpan.FromHours(1);
 
     /// <summary>
     /// Gets or sets the interval at which health checks on the repo volume/directory are performed. Minimum value is 1 second. Default is 15 seconds.
@@ -101,7 +73,7 @@ public class FileRepoOptions
     public TimeSpan HealthCheckInterval {
         get;
         set {
-            CheckFrozen();
+            EnsureNotFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1), nameof(value));
             field = value;
         }
@@ -114,7 +86,7 @@ public class FileRepoOptions
     public LoggingMode MarkerFileLogging {
         get;
         set {
-            CheckFrozen();
+            EnsureNotFrozen();
             value.ThrowIfNotDefined(nameof(value));
             field = value;
         }
@@ -127,7 +99,7 @@ public class FileRepoOptions
     public TimeSpan MaxAccessWaitOrRetryTime {
         get;
         set {
-            CheckFrozen();
+            EnsureNotFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1), nameof(value));
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value, TimeSpan.FromMilliseconds(int.MaxValue), nameof(value));
 
@@ -140,7 +112,7 @@ public class FileRepoOptions
         _frozen = true;
     }
 
-    private void CheckFrozen()
+    private void EnsureNotFrozen()
     {
         if (_frozen)
             throw new InvalidOperationException("Cannot modify options after the repository has been initialized.");

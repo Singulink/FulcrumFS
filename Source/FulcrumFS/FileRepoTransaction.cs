@@ -5,9 +5,9 @@ namespace FulcrumFS;
 /// </summary>
 public sealed class FileRepoTransaction : IAsyncDisposable
 {
-    private readonly FileRepo _repository;
-    private readonly HashSet<FileId> _addedIds = [];
-    private readonly HashSet<FileId> _deletedIds = [];
+    private readonly HashSet<FileId> _added = [];
+    private readonly HashSet<FileId> _deleted = [];
+    private readonly HashSet<FileId> _pendingOutcome = [];
 
     private readonly AsyncLock _sync = new();
 
@@ -16,14 +16,18 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <summary>
     /// Gets the file repository associated with this transaction.
     /// </summary>
-    public FileRepo Repository => !_isDisposed ? _repository : throw new ObjectDisposedException(nameof(FileRepoTransaction));
+    public FileRepo Repository
+    {
+        get => !_isDisposed ? field : throw new ObjectDisposedException(nameof(FileRepoTransaction));
+        private init;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepoTransaction"/> class for the specified file repository.
     /// </summary>
     internal FileRepoTransaction(FileRepo repository)
     {
-        _repository = repository;
+        Repository = repository;
     }
 
     /// <summary>
@@ -90,28 +94,40 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     {
         using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
 
-        var result = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
-        _addedIds.Add(result.FileId);
+        var result = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, OnFileIdCreated, cancellationToken).ConfigureAwait(false);
+        _added.Add(result.FileId);
 
         return result;
+
+        void OnFileIdCreated(FileId fileId)
+        {
+            lock (_pendingOutcome)
+                _pendingOutcome.Add(fileId);
+        }
     }
 
     /// <summary>
     /// Deletes an existing or tentatively added file from the repository by its file ID.
     /// </summary>
-    public async Task DeleteAsync(FileId fileId)
+    public async Task DeleteAsync(FileId fileId, CancellationToken cacnellationToken = default)
     {
-        using var syncLock = await _sync.LockAsync().ConfigureAwait(false);
+        using var syncLock = await _sync.LockAsync(cacnellationToken).ConfigureAwait(false);
 
-        if (_addedIds.Contains(fileId))
+        if (_added.Contains(fileId))
         {
             await Repository.TxnRollbackAddAsync(fileId).ConfigureAwait(false);
-            _addedIds.Remove(fileId);
+            _added.Remove(fileId);
+
+            lock (_pendingOutcome)
+                _pendingOutcome.Remove(fileId);
         }
         else
         {
             await Repository.TxnDeleteAsync(fileId).ConfigureAwait(false);
-            _deletedIds.Add(fileId);
+            _deleted.Add(fileId);
+
+            lock (_pendingOutcome)
+                _pendingOutcome.Add(fileId);
         }
     }
 
@@ -124,19 +140,20 @@ public sealed class FileRepoTransaction : IAsyncDisposable
 
         using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
         {
-            foreach (var fileId in _addedIds)
+            foreach (var fileId in _added)
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 await elc.TryRunAsync(Repository.TxnCommitAddAsync(fileId)).ConfigureAwait(false);
-                _addedIds.Remove(fileId);
+                _added.Remove(fileId);
             }
 
-            foreach (var fileId in _deletedIds)
+            foreach (var fileId in _deleted)
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 await elc.TryRunAsync(Repository.TxnCommitDeleteAsync(fileId)).ConfigureAwait(false);
-                _deletedIds.Remove(fileId);
+                _deleted.Remove(fileId);
             }
+
+            lock (_pendingOutcome)
+                _pendingOutcome.Clear();
         }
 
         if (elc.HasExceptions)
@@ -156,11 +173,13 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         if (_isDisposed)
             return;
 
-        _isDisposed = true;
-
         try
         {
-            await RollbackAsync(_repository, default).ConfigureAwait(false);
+            var repository = Repository;
+            _isDisposed = true;
+
+            await RollbackAsync(repository, default).ConfigureAwait(false);
+            repository.UnregisterTransaction(this);
         }
         catch { }
     }
@@ -171,22 +190,29 @@ public sealed class FileRepoTransaction : IAsyncDisposable
 
         using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
         {
-            foreach (var fileId in _addedIds)
+            foreach (var fileId in _added)
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 await elc.TryRunAsync(repository.TxnRollbackAddAsync(fileId)).ConfigureAwait(false);
-                _addedIds.Remove(fileId);
+                _added.Remove(fileId);
             }
 
-            foreach (var fileId in _deletedIds)
+            foreach (var fileId in _deleted)
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 await elc.TryRunAsync(repository.TxnRollbackDeleteAsync(fileId)).ConfigureAwait(false);
-                _deletedIds.Remove(fileId);
+                _deleted.Remove(fileId);
             }
+
+            lock (_pendingOutcome)
+                _pendingOutcome.Clear();
         }
 
         if (elc.HasExceptions)
             await repository.OnTxnRollbackErrorAsync(elc.ResultException).ConfigureAwait(false);
+    }
+
+    internal bool IsFilePendingOutcome(FileId fileId)
+    {
+        lock (_pendingOutcome)
+            return _pendingOutcome.Contains(fileId);
     }
 }

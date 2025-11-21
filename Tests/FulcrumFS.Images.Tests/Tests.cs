@@ -24,12 +24,12 @@ public sealed class Tests
     {
         ResetRepository();
 
-        var processor = new ImageProcessor(new() {
+        var processor = new ImageProcessor {
             Formats = [new(ImageFormat.Jpeg)],
             SourceValidation = new() {
                 MaxPixels = 500 * 500,
             },
-        });
+        };
 
         await using var stream = _imageFile.OpenAsyncStream();
 
@@ -40,13 +40,13 @@ public sealed class Tests
 
         ex.Message.ShouldBe("The image is too large.");
 
-        processor = new ImageProcessor(new() {
+        processor = new ImageProcessor {
             Formats = [new(ImageFormat.Jpeg)],
             SourceValidation = new() {
                 MaxWidth = 500,
                 MaxHeight = 500,
             },
-        });
+        };
 
         stream.Position = 0;
 
@@ -69,12 +69,12 @@ public sealed class Tests
 
         await using (var repoTxn = await _repo.BeginTransactionAsync())
         {
-            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
+            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor());
             fileId = added.FileId;
 
-            await _repo.AddVariantAsync(added.FileId, "thumbnail", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.FitDown, 100, 100),
-            }));
+            await _repo.AddVariantAsync(added.FileId, "thumbnail", new ImageProcessor {
+                ResizeOptions = new(ImageResizeMode.FitDown, 100, 100),
+            });
 
             await repoTxn.CommitAsync();
         }
@@ -129,10 +129,10 @@ public sealed class Tests
         i75.Length.ShouldBeGreaterThan(i50.Length);
         i50.Length.ShouldBeGreaterThan(i25.Length);
 
-        static FileProcessor GetProcessor(int quality) => new ImageProcessor(new() {
-            Resize = new(ImageResizeMode.FitDown, 300, 300),
+        static FileProcessor GetProcessor(int quality) => new ImageProcessor {
+            ResizeOptions = new(ImageResizeMode.FitDown, 300, 300),
             Quality = quality,
-        });
+        };
     }
 
     [TestMethod]
@@ -146,27 +146,27 @@ public sealed class Tests
 
         await using (var repoTxn = await _repo.BeginTransactionAsync())
         {
-            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor(new()));
+            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor());
             fileId = added.FileId;
 
-            await _repo.AddVariantAsync(fileId, "max", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.FitDown, 2000, 2000),
-            }));
+            await _repo.AddVariantAsync(fileId, "max", new ImageProcessor {
+                ResizeOptions = new(ImageResizeMode.FitDown, 2000, 2000),
+            });
 
-            await _repo.AddVariantAsync(fileId, "crop", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.CropDown, 2000, 2000),
-            }));
+            await _repo.AddVariantAsync(fileId, "crop", new ImageProcessor {
+                ResizeOptions = new(ImageResizeMode.CropDown, 2000, 2000),
+            });
 
-            await _repo.AddVariantAsync(fileId, "pad1", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.PadDown, 800, 800),
-                BackgroundColor = BackgroundColor.FromRgb(0, 255, 0, true),
-            }));
+            await _repo.AddVariantAsync(fileId, "pad1", new ImageProcessor {
+                ResizeOptions = new(ImageResizeMode.PadDown, 800, 800),
+                BackgroundColor = ImageBackgroundColor.FromRgb(0, 255, 0, true),
+            });
 
-            await _repo.AddVariantAsync(fileId, "pad2", new ImageProcessor(new() {
-                Resize = new(ImageResizeMode.PadDown, 2000, 2000) {
-                    PadColor = BackgroundColor.FromRgb(255, 0, 0, true),
+            await _repo.AddVariantAsync(fileId, "pad2", new ImageProcessor {
+                ResizeOptions = new(ImageResizeMode.PadDown, 2000, 2000) {
+                    PadColor = ImageBackgroundColor.FromRgb(255, 0, 0, true),
                 },
-            }));
+            });
 
             await repoTxn.CommitAsync();
         }

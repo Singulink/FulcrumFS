@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.IO;
+using Singulink.Enums;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Metadata;
@@ -9,34 +10,151 @@ using SixLabors.ImageSharp.Processing;
 
 namespace FulcrumFS.Images;
 
+#pragma warning disable SA1513 // Closing brace should be followed by blank line
+
 /// <summary>
 /// Provides functionality to process image files with specified options.
 /// </summary>
-public class ImageProcessor : FileProcessor
+public sealed class ImageProcessor : FileProcessor
 {
-    /// <summary>
-    /// Gets the options used for processing images with this processor.
-    /// </summary>
-    public ImageProcessorOptions Options { get; }
+    /// <inheritdoc/>
+    public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Formats.SelectMany(format => format.SourceFormat.Extensions)];
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ImageProcessor"/> class with the specified processing options.
+    /// Gets or initializes the collection of per-format image processing options. The default value contains an entry for every supported image format and maps
+    /// each source format to itself (no format conversion).
     /// </summary>
-    public ImageProcessor(ImageProcessorOptions options) : base(GetAllowedFileExtensions(options))
+    /// <remarks>
+    /// Each entry in the collection specifies how to handle a specific image format during processing. Individual entries can optionally override the image
+    /// processor's <see cref="Quality"/>, <see cref="CompressionLevel"/>, and <see cref="ReencodeBehavior"/> settings for their specific source format. The
+    /// collection must not be empty and cannot contain duplicate source formats. Only source formats included in the collection are supported by the image
+    /// processor.
+    /// </remarks>
+    public IReadOnlyList<ImageFormatProcessingOptions> Formats
     {
-        Options = options;
-    }
+        get;
+        init {
+            IReadOnlyList<ImageFormatProcessingOptions> values = [.. value];
+
+            if (values.Count is 0)
+                throw new ArgumentException("Formats cannot be empty.", nameof(value));
+
+            if (values.Any(f => f is null))
+                throw new ArgumentException("Formats cannot contain null values.", nameof(value));
+
+            if (values.Select(f => f.SourceFormat).Distinct().Count() != value.Count)
+                throw new ArgumentException("Formats cannot contain duplicate source formats.", nameof(value));
+
+            field = values;
+        }
+    } = [.. ImageFormat.AllFormats.Select(f => new ImageFormatProcessingOptions(f))];
+
+    /// <summary>
+    /// Gets or initializes the options for validating the source image before processing.
+    /// </summary>
+    public ImageSourceValidationOptions? SourceValidation { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the maximum number of frames to process in a multi-frame image (e.g., animated GIFs). Default is <see cref="int.MaxValue"/>, meaning
+    /// all frames will be processed.
+    /// </summary>
+    public int MaxFrames
+    {
+        get;
+        init {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1, nameof(MaxFrames));
+            field = value;
+        }
+    } = int.MaxValue;
+
+#pragma warning disable SA1623 // Property summary documentation should match accessors
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether the image should be rotated to normal orientation based on its EXIF data. If set to <see
+    /// langword="true"/> and a rotation was performed, the EXIF orientation metadata is adjusted accordingly. Default is <see langword="false"/>.
+    /// </summary>
+    public bool OrientToNormal { get; init; }
+
+#pragma warning restore SA1623
+
+    /// <summary>
+    /// Gets or initializes the metadata stripping mode. Default is <see cref="StripImageMetadataMode.ThumbnailOnly"/>.
+    /// </summary>
+    public StripImageMetadataMode StripMetadataMode
+    {
+        get;
+        init {
+            value.ThrowIfNotDefined(nameof(value));
+            field = value;
+        }
+    } = StripImageMetadataMode.ThumbnailOnly;
+
+    /// <summary>
+    /// Gets or initializes the options for resizing the image. A value of <see langword="null"/> indicates that the image will not be resized. Default is <see
+    /// langword="null"/>.
+    /// </summary>
+    public ImageResizeOptions? ResizeOptions { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the background color to use for the image. Default is white <c>(RGB: 255, 255, 255)</c> with <see
+    /// cref="ImageBackgroundColor.SkipIfTransparencySupported"/> set to <see langword="true"/>.
+    /// </summary>
+    public ImageBackgroundColor BackgroundColor { get; init; } = new ImageBackgroundColor(255, 255, 255, true);
+
+    /// <summary>
+    /// Gets or initializes the compression level to use for resulting images. This setting only affects the computational effort of compression (and thus the
+    /// resulting file size), not the visual quality. The setting has no effect on formats that do not support compression. Can be overridden per-format by
+    /// setting <see cref="ImageFormatProcessingOptions.CompressionLevelOverride"/> in the <see cref="Formats"/> collection. The default setting is <see
+    /// cref="ImageCompressionLevel.High"/>.
+    /// </summary>
+    public ImageCompressionLevel CompressionLevel
+    {
+        get;
+        init {
+            value.ThrowIfNotDefined(nameof(value));
+            field = value;
+        }
+    } = ImageCompressionLevel.High;
+
+    /// <summary>
+    /// Gets or initializes the quality to use for resulting images. Valid values are <c>1</c> to <c>100</c> (inclusive). This setting has no effect on lossless
+    /// formats. When source image quality can be determined, the result quality is capped to the source quality to avoid unnecessarily increasing file size.
+    /// Can be overridden per-format by setting <see cref="ImageFormatProcessingOptions.QualityOverride"/> in the <see cref="Formats"/> collection. The default
+    /// setting is <c>82</c>.
+    /// </summary>
+    public int Quality
+    {
+        get;
+        init {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1, nameof(value));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 100, nameof(value));
+            field = value;
+        }
+    } = 82;
+
+    /// <summary>
+    /// Gets or initializes the behavior for re-encoding images. Default setting is <see cref="ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged"/>.
+    /// </summary>
+    public ImageReencodeBehavior ReencodeBehavior
+    {
+        get;
+        init {
+            value.ThrowIfNotDefined(nameof(value));
+            field = value;
+        }
+    } = ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged;
 
     /// <inheritdoc/>
-    protected override async Task<FileProcessResult> ProcessAsync(FileProcessContext context, CancellationToken cancellationToken)
+    protected override async Task<FileProcessResult> ProcessAsync(FileProcessContext context)
     {
-        var stream = await context.GetSourceAsSeekableStreamAsync(preferInMemory: true, maxInMemoryCopySize: 256 * 1024 * 1024).ConfigureAwait(false);
+        const int MaxInMemoryCopySize = 100 * 1024 * 1024; // 100 MB
+        var stream = await context.GetSourceAsSeekableStreamAsync(preferInMemory: true, MaxInMemoryCopySize).ConfigureAwait(false);
 
         var sourceFormat = Image.DetectFormat(stream);
 
-        if (Options.Formats.FirstOrDefault(fo => fo.SourceFormat.ImageSharpFormat == sourceFormat) is not { } formatOptions)
+        if (Formats.FirstOrDefault(fo => fo.SourceFormat.LibFormat == sourceFormat) is not { } formatOptions)
         {
-            string allowedFormats = string.Join(", ", Options.Formats.Select(f => f.SourceFormat.Name));
+            string allowedFormats = string.Join(", ", Formats.Select(f => f.SourceFormat.Name));
             throw new FileProcessException($"The image format '{sourceFormat.Name}' is not allowed. Allowed formats: {allowedFormats}.");
         }
 
@@ -45,13 +163,13 @@ public class ImageProcessor : FileProcessor
 
         (ushort orientation, bool swapDimensions) = GetOrientationInfo(info.Metadata);
 
-        if (Options.SourceValidation is not null)
-            Validate(info, Options.SourceValidation, swapDimensions);
+        if (SourceValidation is not null)
+            Validate(info, SourceValidation, swapDimensions);
 
         // Load 1 extra frame so we can check if we had to remove any frames later.
 
         stream.Position = 0;
-        uint maxLoadFrames = (uint)(Options.MaxFrames < int.MaxValue ? Options.MaxFrames + 1 : Options.MaxFrames);
+        uint maxLoadFrames = (uint)(MaxFrames < int.MaxValue ? MaxFrames + 1 : MaxFrames);
         using var image = Image.Load(new DecoderOptions { MaxFrames = maxLoadFrames }, stream);
 
         bool changedData = false;
@@ -59,7 +177,7 @@ public class ImageProcessor : FileProcessor
 
         // MaxFrames
 
-        if (Options.MaxFrames < int.MaxValue && image.Frames.Count > Options.MaxFrames)
+        if (MaxFrames < int.MaxValue && image.Frames.Count > MaxFrames)
         {
             image.Frames.RemoveFrame(image.Frames.Count - 1);
             changedData = true;
@@ -67,7 +185,7 @@ public class ImageProcessor : FileProcessor
 
         // OrientToNormal
 
-        if (Options.OrientToNormal && orientation is not 1)
+        if (OrientToNormal && orientation is not 1)
         {
             image.Mutate(x => x.AutoOrient());
             image.Metadata.ExifProfile!.SetValue(ExifTag.Orientation, orientation = 1);
@@ -78,7 +196,7 @@ public class ImageProcessor : FileProcessor
 
         // StripMetadata
 
-        switch (Options.StripMetadata)
+        switch (StripMetadataMode)
         {
             case StripImageMetadataMode.All:
                 StripStandardMetadata(image.Metadata, orientation, ref changedMetadata);
@@ -93,28 +211,29 @@ public class ImageProcessor : FileProcessor
                 break;
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
+        context.CancellationToken.ThrowIfCancellationRequested();
 
-        // Resize
+        // Transparency support
 
         bool sourceSupportsTransparency = image.PixelType.AlphaRepresentation is not PixelAlphaRepresentation.None;
         bool resultSupportsTransparency = sourceSupportsTransparency && formatOptions.ResultFormat.SupportsTransparency;
 
-        if (Options.Resize is not null)
-            Resize(image, Options.Resize, Options.BackgroundColor, swapDimensions, resultSupportsTransparency, ref changedData);
+        // Resize
 
-        cancellationToken.ThrowIfCancellationRequested();
+        if (ResizeOptions is not null)
+            Resize(image, ResizeOptions, BackgroundColor, swapDimensions, resultSupportsTransparency, ref changedData);
+
+        context.CancellationToken.ThrowIfCancellationRequested();
 
         // BackgroundColor
 
-        if (sourceSupportsTransparency && !Options.BackgroundColor.SkipIfTransparencySupported)
+        if (sourceSupportsTransparency && !BackgroundColor.SkipIfTransparencySupported)
         {
-            var bgColor = Options.BackgroundColor.ToLibColor();
-            image.Mutate(x => x.BackgroundColor(bgColor));
+            image.Mutate(x => x.BackgroundColor(BackgroundColor.ToLibColor()));
             changedData = true;
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
+        context.CancellationToken.ThrowIfCancellationRequested();
 
         // Encode/Reencode
 
@@ -124,14 +243,16 @@ public class ImageProcessor : FileProcessor
         string resultExtension = formatOptions.ResultFormat.Extensions.First();
 
         int sourceQuality = formatOptions.SourceFormat.GetQuality(info.Metadata);
-        int resultQuality = Math.Min(sourceQuality, formatOptions.QualityOverride ?? Options.Quality);
-        bool reducedQuality = sourceQuality != resultQuality;
+        int resultQuality = Math.Min(sourceQuality, formatOptions.QualityOverride ?? Quality);
+        bool reducedQuality = sourceQuality > resultQuality;
         bool resultCompressible = formatOptions.ResultFormat.SupportsCompression;
 
-        (bool reencode, bool discardIfLarger) = (formatOptions.ReencodeOverride ?? Options.ReencodeBehavior) switch {
-            ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged => (changedData || changedMetadata || reducedQuality || resultCompressible, !changedData && !changedMetadata),
-            ImageReencodeBehavior.DiscardLargerEvenIfMetadataChanged => (changedData || changedMetadata || reducedQuality || resultCompressible, !changedData),
-            ImageReencodeBehavior.SkipUnlessMetadataOrQualityChanged => (changedData || changedMetadata || reducedQuality, !changedData && !changedMetadata),
+        bool changedAnything = changedData || changedMetadata || reducedQuality;
+
+        (bool reencode, bool discardIfLarger) = (formatOptions.ReencodeOverride ?? ReencodeBehavior) switch {
+            ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged => (changedAnything || resultCompressible, !changedData && !changedMetadata),
+            ImageReencodeBehavior.DiscardLargerEvenIfMetadataChanged => (changedAnything || resultCompressible, !changedData),
+            ImageReencodeBehavior.SkipUnlessMetadataOrQualityChanged => (changedAnything, !changedData && !changedMetadata),
             _ => throw new UnreachableException("Unexpected re-encode behavior."),
         };
 
@@ -143,8 +264,8 @@ public class ImageProcessor : FileProcessor
 
             try
             {
-                var resultCompressionLevel = formatOptions.CompressionLevelOverride ?? Options.CompressionLevel;
-                var resultEncoder = formatOptions.ResultFormat.GetEncoder(resultCompressionLevel, resultQuality, Options.StripMetadata);
+                var resultCompressionLevel = formatOptions.CompressionLevelOverride ?? CompressionLevel;
+                var resultEncoder = formatOptions.ResultFormat.GetEncoder(resultCompressionLevel, resultQuality, StripMetadataMode);
                 image.Save(outputStream, resultEncoder);
             }
             catch (Exception)
@@ -243,7 +364,7 @@ public class ImageProcessor : FileProcessor
     private static void Resize(
         Image image,
         ImageResizeOptions options,
-        BackgroundColor fallbackBgColor,
+        ImageBackgroundColor fallbackBgColor,
         bool swapDimensions,
         bool supportsTransparency,
         ref bool changedData)
@@ -358,6 +479,4 @@ public class ImageProcessor : FileProcessor
 
         return (resizeWidth, resizeHeight, mode);
     }
-
-    private static IEnumerable<string> GetAllowedFileExtensions(ImageProcessorOptions options) => options.Formats.SelectMany(format => format.SourceFormat.Extensions);
 }

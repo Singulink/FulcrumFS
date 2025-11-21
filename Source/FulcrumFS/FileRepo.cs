@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
 using Microsoft.IO;
+using Singulink.Collections;
 
 namespace FulcrumFS;
 
@@ -23,9 +24,10 @@ public sealed partial class FileRepo : IDisposable
     private readonly IAbsoluteDirectoryPath _tempDirectory;
     private readonly IAbsoluteDirectoryPath _cleanupDirectory;
 
-    private readonly HashSet<Guid> _processingFileIds = [];
+    private readonly HashSet<FileId> _processingFiles = [];
+    private readonly WeakCollection<FileRepoTransaction> _activeTransactions = [];
 
-    private readonly KeyLocker<(Guid FileId, string? VariantId)> _fileSync = new();
+    private readonly KeyLocker<(FileId FileId, string? VariantId)> _fileSync = new();
     private readonly AsyncLock _stateSync = new();
     private readonly AsyncLock _cleanSync = new();
 
@@ -224,7 +226,7 @@ public sealed partial class FileRepo : IDisposable
 
     private IAbsoluteFilePath GetDeleteMarker(FileId fileId, string? variant)
     {
-        string name = variant is null ? fileId.ToString() : GetEntryName(fileId, variant);
+        string name = variant is null ? fileId.ToString() : GetFileIdAndVariantString(fileId, variant);
         return _cleanupDirectory.CombineFile(name + FileRepoPaths.DeleteMarkerExtension, PathOptions.None);
     }
 
@@ -290,27 +292,28 @@ public sealed partial class FileRepo : IDisposable
     /// <summary>
     /// Gets a unique entry name for a given file ID and variant ID which is used to name temp work directories or cleanup files associated with the file.
     /// </summary>
-    private static string GetEntryName(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
+    private static string GetFileIdAndVariantString(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
 
-    private static bool TryGetFileIdStringAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
+    private static bool TryParseFileIdAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
     {
-        int dashIndex = entryName.IndexOf(' ');
-        string fileIdString;
+        int separatorIndex = entryName.IndexOf(' ');
 
-        if (dashIndex < 0)
+        if (separatorIndex < 0)
         {
-            fileIdString = entryName;
             variantId = null;
+            return FileId.TryParse(entryName, out fileId);
         }
-        else
+
+        var fileIdChars = entryName.AsSpan()[..separatorIndex];
+        var variantIdChars = entryName.AsSpan()[(separatorIndex + 1)..];
+
+        if (FileId.TryParse(fileIdChars, out fileId) && VariantId.IsValidAndNormalized(variantIdChars))
         {
-            fileIdString = entryName[..dashIndex];
-            variantId = entryName[(dashIndex + 1)..];
+            variantId = variantIdChars.ToString();
+            return true;
         }
 
-        if (FileId.TryParse(fileIdString, out fileId))
-            return true;
-
+        fileId = null;
         variantId = null;
         return false;
     }

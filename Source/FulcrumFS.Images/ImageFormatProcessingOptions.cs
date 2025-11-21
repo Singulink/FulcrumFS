@@ -30,7 +30,7 @@ public sealed class ImageFormatProcessingOptions
     public ImageFormat ResultFormat { get; }
 
     /// <summary>
-    /// Gets or initializes an optional compression level override for the image processor's <see cref="ImageProcessorOptions.CompressionLevel"/> setting when
+    /// Gets or initializes an optional compression level override for the image processor's <see cref="ImageProcessor.CompressionLevel"/> setting when
     /// processing images in the configured source format.
     /// </summary>
     public ImageCompressionLevel? CompressionLevelOverride {
@@ -42,7 +42,7 @@ public sealed class ImageFormatProcessingOptions
     }
 
     /// <summary>
-    /// Gets or initializes an optional quality override for the image processor's <see cref="ImageProcessorOptions.Quality"/> setting when
+    /// Gets or initializes an optional quality override for the image processor's <see cref="ImageProcessor.Quality"/> setting when
     /// processing images in the configured source format.
     /// </summary>
     public int? QualityOverride
@@ -60,7 +60,7 @@ public sealed class ImageFormatProcessingOptions
     }
 
     /// <summary>
-    /// Gets or initializes an optional re-encode behavior override for the image processor's <see cref="ImageProcessorOptions.ReencodeBehavior"/> setting when
+    /// Gets or initializes an optional re-encode behavior override for the image processor's <see cref="ImageProcessor.ReencodeBehavior"/> setting when
     /// processing images in the configured source format.
     /// </summary>
     public ImageReencodeBehavior? ReencodeOverride { get; init; }

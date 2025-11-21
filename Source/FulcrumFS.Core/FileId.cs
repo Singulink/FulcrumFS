@@ -5,7 +5,7 @@ namespace FulcrumFS;
 /// <summary>
 /// Represents a validated file identifier.
 /// </summary>
-public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
+public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
 {
     private static DateTimeOffset _lastTimeStamp = DateTimeOffset.MinValue;
     private static readonly Lock _timeSync = new();
@@ -42,23 +42,23 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public IRelativeDirectoryPath RelativeDirectory => field ??= GetRelativeDirectory();
 
-    private string String => field ??= Guid.ToString("D");
+    private string FileIdString => field ??= Guid.ToString("D");
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileId"/> class with the specified GUID.
     /// </summary>
     public FileId(Guid guid)
     {
-        if (!IsValidFileIdGuid(guid))
+        if (!IsValidGuidForFileId(guid))
             throw new ArgumentException("Invalid File ID.");
 
         Guid = guid;
     }
 
-    private FileId(Guid guid, string s)
+    private FileId(Guid guid, string? s)
     {
         Guid = guid;
-        String = s;
+        FileIdString = s;
     }
 
     /// <summary>
@@ -102,11 +102,6 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// <summary>
     /// Parses the specified string representation of a file identifier.
     /// </summary>
-    public static FileId Parse(string s, IFormatProvider? provider) => Parse(s);
-
-    /// <summary>
-    /// Parses the specified string representation of a file identifier.
-    /// </summary>
     public static FileId Parse(string s)
     {
         if (!TryParse(s, out var fileId))
@@ -118,18 +113,37 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// <summary>
     /// Parses the specified string representation of a file identifier.
     /// </summary>
-    static bool IParsable<FileId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, [MaybeNullWhen(false)] out FileId result) => TryParse(s, out result);
+    public static FileId Parse(ReadOnlySpan<char> s)
+    {
+        if (!TryParse(s, out var fileId))
+            throw new FormatException($"Input File ID string '{s}' was in an incorrect format");
+
+        return fileId;
+    }
 
     /// <summary>
     /// Parses the specified string representation of a file identifier.
     /// </summary>
     public static bool TryParse([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out FileId fileId)
     {
-        s = s?.ToLowerInvariant();
-
-        if (Guid.TryParseExact(s, "D", out var guid) && IsValidFileIdGuid(guid))
+        if (Guid.TryParseExact(s, "D", out var guid) && IsValidGuidForFileId(guid))
         {
             fileId = new(guid, s);
+            return true;
+        }
+
+        fileId = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Parses the specified string representation of a file identifier.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, [MaybeNullWhen(false)] out FileId fileId)
+    {
+        if (Guid.TryParseExact(s, "D", out var guid) && IsValidGuidForFileId(guid))
+        {
+            fileId = new(guid, null);
             return true;
         }
 
@@ -161,13 +175,35 @@ public sealed class FileId : IParsable<FileId>, IEquatable<FileId>
     /// <summary>
     /// Gets the string representation of the file ID.
     /// </summary>
-    public override string ToString() => String;
+    public override string ToString() => FileIdString;
 
-    private static bool IsValidFileIdGuid(Guid guid) => guid.Version is 7;
+    private static bool IsValidGuidForFileId(Guid guid) => guid.Version is 7;
 
     private IRelativeDirectoryPath GetRelativeDirectory()
     {
-        var fileIdSpan = String.AsSpan();
+        var fileIdSpan = FileIdString.AsSpan();
         return DirectoryPath.ParseRelative($"{fileIdSpan[9..11]}/{fileIdSpan[11..13]}/{fileIdSpan}", PathFormat.Universal, PathOptions.None);
     }
+
+    #region Explicit Interface Implementations
+
+    /// <inheritdoc/>
+    static FileId IParsable<FileId>.Parse(string s, IFormatProvider? provider) => Parse(s);
+
+    /// <inheritdoc/>
+    static FileId ISpanParsable<FileId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+
+    /// <inheritdoc/>
+    static bool IParsable<FileId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, [MaybeNullWhen(false)] out FileId result)
+    {
+        return TryParse(s, out result);
+    }
+
+    /// <inheritdoc/>
+    static bool ISpanParsable<FileId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, [MaybeNullWhen(false)] out FileId result)
+    {
+        return TryParse(s, out result);
+    }
+
+    #endregion
 }
