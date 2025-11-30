@@ -17,26 +17,39 @@ public sealed class VideoResizeOptions
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class - this constructor is the copy constructor.
+    /// </summary>
+    public VideoResizeOptions(VideoResizeOptions baseConfig)
+    {
+        // Note: I haven't used PropertyHelpers here as there are no "base configs", we have another publicly exposed constructor, there are no configurable
+        // sub-classes, it is unlikely we will add more config options, etc.
+        Width = baseConfig.Width;
+        Height = baseConfig.Height;
+    }
+
+    /// <summary>
     /// Gets the target width in pixels.
     /// </summary>
-    public int Width { get; }
+    public int Width
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value, nameof(Width));
+            field = value;
+        }
+    }
 
     /// <summary>
     /// Gets the target height in pixels.
     /// </summary>
-    public int Height { get; }
-
-    /// <summary>
-    /// Gets or initializes a value indicating whether an <see cref="VideoResizeSkippedException" /> should be thrown when resizing is skipped because no pixel
-    /// geometry would change for the selected target size.
-    /// </summary>
-    /// <remarks>
-    /// Setting this property to <see langword="true" /> can help avoid storing duplicate videos in a repository. For example, if you attempt to generate a
-    /// low-res version from an existing repository video that is already equal to or smaller than the desired low-res size, <see
-    /// cref="VideoResizeSkippedException" /> will be thrown. You can catch this exception and use the reference to the existing video, rather than storing
-    /// a new identical low-res version.
-    /// </remarks>
-#pragma warning disable SA1623 // Property summary documentation should match accessors
-    public bool ThrowWhenSkipped { get; init; }
-#pragma warning restore SA1623 // Property summary documentation should match accessors
+    public int Height
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value, nameof(Height));
+            field = value;
+        }
+    }
 }

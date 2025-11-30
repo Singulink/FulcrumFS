@@ -111,55 +111,95 @@ public abstract class VideoCodec
     /// </summary>
     public abstract string Name { get; }
 
+    // Internal helper to get a file extension suitable for writing an audio stream in a file with this codec - does not necessarily correspond to a
+    // MediaContainerFormat with writing support:
+    internal abstract string WritableFileExtension { get; }
+
+    // Internal helper to get whether this codec supports muxing into mp4 container:
+    internal abstract bool SupportsMP4Muxing { get; }
+
+    // Internal helper to get whether this codec has a supported decoder in the current ffmpeg configuration:
+    internal abstract bool HasSupportedDecoder { get; }
+
     private sealed class H262Impl : VideoCodec
     {
         public override string Name => "mpeg2video";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMpeg2VideoDecoder;
     }
 
     private sealed class H263Impl : VideoCodec
     {
         public override string Name => "h263";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsH263Decoder;
     }
 
     private sealed class H264Impl : VideoCodec
     {
         public override bool SupportsEncoding => true;
         public override string Name => "h264";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsH264Decoder;
     }
 
     private sealed class H265Impl : VideoCodec
     {
         public override bool SupportsEncoding => true;
         public override string Name => "hevc";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsHEVCDecoder;
     }
 
     private sealed class H266Impl : VideoCodec
     {
         public override string Name => "vvc";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVVCDecoder;
     }
 
     private sealed class Mpeg1Impl : VideoCodec
     {
         public override string Name => "mpeg1video";
+        internal override string WritableFileExtension => ".mpeg";
+        internal override bool SupportsMP4Muxing => false;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMpeg1VideoDecoder;
     }
 
     private sealed class Mpeg4Impl : VideoCodec
     {
         public override string Name => "mpeg4";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMpeg4Decoder;
     }
 
     private sealed class VP8Impl : VideoCodec
     {
         public override string Name => "vp8";
+        internal override string WritableFileExtension => ".webm";
+        internal override bool SupportsMP4Muxing => false;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVP8Decoder;
     }
 
     private sealed class VP9Impl : VideoCodec
     {
         public override string Name => "vp9";
+        internal override string WritableFileExtension => ".webm";
+        internal override bool SupportsMP4Muxing => false;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVP9Decoder;
     }
 
     private sealed class AV1Impl : VideoCodec
     {
         public override string Name => "av1";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsAV1Decoder;
     }
 }

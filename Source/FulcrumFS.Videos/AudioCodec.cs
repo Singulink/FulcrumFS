@@ -79,36 +79,64 @@ public abstract class AudioCodec
     /// </summary>
     public virtual string? Profile => null;
 
+    // Internal helper to get a file extension suitable for writing an audio stream in a file with this codec - does not necessarily correspond to a
+    // MediaContainerFormat with writing support:
+    internal abstract string WritableFileExtension { get; }
+
+    // Internal helper to get whether this codec supports muxing into mp4 container:
+    internal abstract bool SupportsMP4Muxing { get; }
+
+    // Internal helper to get whether this codec has a supported decoder in the current ffmpeg configuration:
+    internal abstract bool HasSupportedDecoder { get; }
+
     private sealed class AACImpl : AudioCodec
     {
         public override bool SupportsEncoding => true;
         public override string Name => "aac";
         public override string? Profile => "LC";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsAACDecoder;
     }
 
     private sealed class HEAACImpl : AudioCodec
     {
         public override string Name => "aac";
         public override string? Profile => "HE-AAC";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsAACDecoder;
     }
 
     private sealed class MP2Impl : AudioCodec
     {
         public override string Name => "mp2";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMP2Decoder;
     }
 
     private sealed class MP3Impl : AudioCodec
     {
         public override string Name => "mp3";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMP3Decoder;
     }
 
     private sealed class VorbisImpl : AudioCodec
     {
         public override string Name => "vorbis";
+        internal override string WritableFileExtension => ".webm";
+        internal override bool SupportsMP4Muxing => false;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVorbisDecoder;
     }
 
     private sealed class OpusImpl : AudioCodec
     {
         public override string Name => "opus";
+        internal override string WritableFileExtension => ".webm";
+        internal override bool SupportsMP4Muxing => false;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsOpusDecoder;
     }
 }

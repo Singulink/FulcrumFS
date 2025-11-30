@@ -10,10 +10,14 @@
       metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.
     </Description>
     <PackageTags></PackageTags>
+    <WarningsAsErrors>$(WarningsAsErrors);CA1304;CA1305;HAM0001;HAM0002;HAM0003;HAM0004</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FulcrumFS\FulcrumFS.csproj" />
+
+    <!-- Analyzers -->
+    <PackageReference Include="hamarb123.Analyzers" Version="1.2.2" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>
