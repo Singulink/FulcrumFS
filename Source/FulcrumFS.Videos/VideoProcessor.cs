@@ -1366,7 +1366,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     double progressPortion = ReservedProgress * 0.5 / (streamsToCheckSize.Count + 2);
                     double progressValue = 1.0 - ReservedProgress + (progressPortion * (i + 1));
-                    ProgressCallback!((context.FileId, context.VariantId), progressValue * maxDuration);
+                    ProgressCallback!((context.FileId, context.VariantId), progressValue);
                 }
             }
 

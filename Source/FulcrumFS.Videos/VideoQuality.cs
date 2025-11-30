@@ -21,7 +21,7 @@ public enum VideoQuality
     Medium,
 
     /// <summary>
-    /// High quality, resulting in the very good quality but larger file size - quality should be close to visually lossless for most videos.
+    /// High quality, resulting in very good quality but larger file size - quality should be close to visually lossless for most videos.
     /// </summary>
     High,
 

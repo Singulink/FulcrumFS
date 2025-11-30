@@ -21,7 +21,7 @@ public enum AudioQuality
     Medium,
 
     /// <summary>
-    /// High quality, resulting in the very good quality but larger file size - quality should be close to audibly lossless to most humans for most audio.
+    /// High quality, resulting in very good quality but larger file size - quality should be close to audibly lossless to most humans for most audio.
     /// </summary>
     High,
 
