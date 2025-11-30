@@ -94,8 +94,8 @@ internal static class PropertyHelpers
     }
 
     private static readonly CompositeFormat _checkFieldInitializedErrorMessageFormat = CompositeFormat.Parse(
-        "Cannot read property '{0}' as it is an uninitialized property on an incomplete VideoStreamProcessingOptions object. " +
-        "Please use the copy constructor on a pre-existing full object, or assign this object to VideoProcessor.VideoStreamOptions " +
+        "Cannot read property '{0}' as it is an uninitialized property on an incomplete options object. " +
+        "Please use the copy constructor on a pre-existing full object, or assign this object to the appropriate property on VideoProcessor " +
         "(which will assign the new full object) to create a full object.");
 
     // Helper method to check if the object is fully initialized for reading.

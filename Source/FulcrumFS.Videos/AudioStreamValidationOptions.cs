@@ -29,7 +29,7 @@ public sealed class AudioStreamValidationOptions
     /// It allows you to use object initializer syntax to adjust any combination of properties when creating the options by writing code like
     /// <c>new VideoProcessor(VideoProcessor.Preserve) { AudioSourceValidation = new() { MaxStreams = 3 } }</c>.
     /// </summary>
-    private AudioStreamValidationOptions()
+    public AudioStreamValidationOptions()
     {
     }
 

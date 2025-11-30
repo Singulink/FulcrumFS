@@ -80,8 +80,8 @@ public sealed class AudioStreamProcessingOptions
         ReencodeBehavior = ReencodeBehavior.IfNeeded,
         StripMetadata = false,
         Quality = AudioQuality.Medium,
-        MaxChannels = AudioChannels.Stereo,
-        SampleRate = AudioSampleRate.Hz48000,
+        MaxChannels = AudioChannels.Preserve,
+        SampleRate = AudioSampleRate.Preserve,
     };
 
     /// <summary>

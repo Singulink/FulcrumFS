@@ -433,7 +433,7 @@ internal static class FFmpegUtils
                                 if (lineSpan.StartsWith("out_time_us="u8))
                                 {
                                     ReadOnlySpan<byte> timeSpan = lineSpan["out_time_us="u8.Length..];
-                                    if (int.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int outTimeUs))
+                                    if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
                                     {
                                         double progress = outTimeUs / 1_000_000.0;
                                         progressCallback?.Invoke(progress);

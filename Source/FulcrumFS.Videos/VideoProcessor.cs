@@ -272,9 +272,9 @@ public sealed class VideoProcessor : FileProcessor
     }
 
     /// <summary>
-    /// Gets or initializes a value indicating whether an <see cref="VideoReencodeOptionalException" /> should be thrown when recoding all streams in a video
-    /// is skippable (if we were using IfNeeded modes). Note: this includes the following causes of re-encoding, but not any others: video resize options, max
-    /// bits per channel, max chroma subsampling, FPS limit, HDR to SDR conversion, max audio channels, and max audio sample rate.
+    /// Gets or initializes a value indicating whether an <see cref="VideoReencodeOptionalException" /> should be thrown when re-encoding all streams in a
+    /// video is skippable (if we were using IfNeeded modes). Note: this includes the following causes of re-encoding, but not any others: video resize
+    /// options, max bits per channel, max chroma subsampling, FPS limit, HDR to SDR conversion, max audio channels, and max audio sample rate.
     /// </summary>
     /// <remarks>
     /// Setting this property to <see langword="true" /> can help avoid storing duplicate videos in a repository. For example, if you attempt to generate a
@@ -465,7 +465,7 @@ public sealed class VideoProcessor : FileProcessor
         {
             if (stream is FFprobeUtils.VideoStreamInfo videoStream)
             {
-                // Skip thumbails
+                // Skip thumbnails
                 if (videoStream.IsAttachedPic || videoStream.IsTimedThumbnail)
                 {
                     continue;
