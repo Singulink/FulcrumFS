@@ -851,14 +851,15 @@ public sealed class VideoProcessor : FileProcessor
                 if (VideoStreamOptions.ResizeOptions is { } resizeOptions &&
                     ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height)))
                 {
+                    // Note: we already checked for invalid dimensions earlier, so no need to worry about 0 or -1.
                     reencode = true;
                     isRequiredReencode = true;
                     filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
                     perOutputStreamOverrides.Add(filterOverride);
                     double potentialWidth1 = resizeOptions.Width;
+                    double potentialHeight1 = (double)videoStream.Height / videoStream.Width * potentialWidth1;
                     double potentialHeight2 = resizeOptions.Height;
-                    double potentialHeight1 = (double)videoStream.Width / videoStream.Height * potentialWidth1;
-                    double potentialWidth2 = (double)videoStream.Height / videoStream.Width * potentialHeight2;
+                    double potentialWidth2 = (double)videoStream.Width / videoStream.Height * potentialHeight2;
                     var (newWidth, newHeight) = potentialWidth1 < potentialWidth2
                         ? ((int)Math.Round(potentialWidth1), (int)Math.Round(potentialHeight1))
                         : ((int)Math.Round(potentialWidth2), (int)Math.Round(potentialHeight2));
@@ -1394,10 +1395,10 @@ public sealed class VideoProcessor : FileProcessor
                 foreach (var (kind, inputIndex, outputIndex, mapMetadata) in streamMapping)
                 {
                     // Determine if we are using the original or re-encoded stream:
-                    bool useOriginal = true;
+                    bool useOriginal = false;
                     if (nextWasSmaller.Value.InputIndex == inputIndex && nextWasSmaller.Value.Kind == kind)
                     {
-                        useOriginal = false;
+                        useOriginal = true;
                         wasSmallerIdx++;
                         if (wasSmallerIdx < wasSmaller.Count)
                         {
