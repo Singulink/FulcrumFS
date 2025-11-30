@@ -595,10 +595,10 @@ public sealed class VideoProcessor : FileProcessor
                         anyWouldReencodeForReencodeOptionalPurposes = true;
                         continue;
                     }
-                    else if (VideoStreamOptions.MaximumChromaSubsampling != ChromaSubsampling.Preserve && (
+                    else if (
                         !pixFormatInfo.Value.IsStandard ||
                         !pixFormatInfo.Value.IsYUV ||
-                        pixFormatInfo.Value.ChromaSubsampling > (GetChromaSubsampling(VideoStreamOptions.MaximumChromaSubsampling) ?? 444)))
+                        pixFormatInfo.Value.ChromaSubsampling > (GetChromaSubsampling(VideoStreamOptions.MaximumChromaSubsampling) ?? 444))
                     {
                         anyWouldReencodeForReencodeOptionalPurposes = true;
                         continue;
@@ -648,16 +648,16 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Check channels:
-                if ((AudioStreamOptions.MaxChannels != AudioChannels.Preserve && audioStream.Channels < 0) ||
-                    audioStream.Channels > GetAudioChannelCount(AudioStreamOptions.MaxChannels))
+                if ((AudioStreamOptions.MaxChannels != AudioChannels.Preserve && audioStream.Channels <= 0) ||
+                    audioStream.Channels > (GetAudioChannelCount(AudioStreamOptions.MaxChannels) ?? int.MaxValue))
                 {
                     anyWouldReencodeForReencodeOptionalPurposes = true;
                     continue;
                 }
 
                 // Check sample rate:
-                if ((AudioStreamOptions.SampleRate != AudioSampleRate.Preserve && audioStream.SampleRate < 0) ||
-                    audioStream.SampleRate > GetAudioSampleRate(AudioStreamOptions.SampleRate))
+                if ((AudioStreamOptions.SampleRate != AudioSampleRate.Preserve && audioStream.SampleRate <= 0) ||
+                    audioStream.SampleRate > (GetAudioSampleRate(AudioStreamOptions.SampleRate) ?? int.MaxValue))
                 {
                     anyWouldReencodeForReencodeOptionalPurposes = true;
                     continue;
@@ -920,10 +920,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Check if hdr (which will require re-encode if RemapHDRToSDR is set):
-                bool isHdr =
-                    videoStream.ColorTransfer is not (null or "bt709" or "bt601" or "smpte170m") ||
-                    videoStream.ColorPrimaries is not (null or "bt709" or "bt601") ||
-                    videoStream.ColorSpace is not (null or "bt709" or "bt601");
+                bool isHdr = !IsKnownSDRColorProfile(videoStream.ColorTransfer, videoStream.ColorPrimaries, videoStream.ColorSpace);
 
                 // Check if we have to select a pixel format:
                 // Note: if we're re-encoding, we don't try to preserve the original pixel format.
@@ -947,7 +944,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // If we're re-encoding, we want to specify the pixel format always:
-                // Note: we also check for what HDR remapping causing re-endoding would give here, since it also requires us to always specify something.
+                // Note: we also check for what HDR remapping causing re-encoding would give here, since it also requires us to always specify something.
                 string pixFormat = string.Empty;
                 if (reencode || (isHdr && VideoStreamOptions.RemapHDRToSDR))
                 {

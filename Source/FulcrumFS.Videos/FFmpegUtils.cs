@@ -477,6 +477,7 @@ internal static class FFmpegUtils
                     }
                     catch (OperationCanceledException)
                     {
+                        // Ignore cancellation exception, since we caused it to make the task exit.
                     }
                 }
             }
