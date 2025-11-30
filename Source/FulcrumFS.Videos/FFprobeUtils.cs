@@ -100,14 +100,7 @@ internal static class FFprobeUtils
     private static double? ReadStringPropertyAsDouble(JsonElement element, string propertyName)
     {
         string? strValue = ReadStringProperty(element, propertyName);
-        if (strValue != null && double.TryParse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
-        {
-            return value;
-        }
-        else
-        {
-            return null;
-        }
+        return (strValue != null && double.TryParse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)) ? value : null;
     }
 
     public static async Task<VideoFileInfo> GetVideoFileAsync(IAbsoluteFilePath filePath, CancellationToken cancellationToken = default)
@@ -146,7 +139,7 @@ internal static class FFprobeUtils
             int channels = ReadInt32Property(stream, "channels") ?? -1;
             int sampleRate = ReadInt32Property(stream, "sample_rate") ?? -1;
             int attachedPicValue = 0, timedThumbnailValue = 0;
-            if (!stream.TryGetProperty("disposition", out var dispositionsProp) || dispositionsProp.ValueKind != JsonValueKind.Object)
+            if (stream.TryGetProperty("disposition", out var dispositionsProp) && dispositionsProp.ValueKind == JsonValueKind.Object)
             {
                 attachedPicValue = ReadInt32Property(dispositionsProp, "attached_pic") ?? 0;
                 timedThumbnailValue = ReadInt32Property(dispositionsProp, "timed_thumbnail") ?? 0;

@@ -286,8 +286,8 @@ public sealed class VideoStreamProcessingOptions
     }
 
     /// <summary>
-    /// Gets or initializes the options for resizing the video.
-    /// If set to <see langword="null" />, the video will not be resized.
+    /// Gets or initializes the options for limiting the frames per second (FPS) of the video.
+    /// If set to <see langword="null" />, the video will not be resampled.
     /// </summary>
     public VideoFpsOptions? FpsOptions
     {

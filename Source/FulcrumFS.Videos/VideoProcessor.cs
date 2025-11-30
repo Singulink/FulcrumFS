@@ -232,7 +232,7 @@ public sealed class VideoProcessor : FileProcessor
     /// Note: incompatible/unrecognized metadata may be remapped on a best-effort basis, may be lost, or might cause an exception to be thrown when remuxing
     /// Note: attachments currently show up under unrecognized streams, so they are currently controlled by <see cref="PreserveUnrecognizedStreams" />.
     /// between different container formats or re-encoding streams.
-    /// Note: metadata is correctly preserved when the source file is copied as-is, but in other cases, metadata copying is subject to the aformentioned
+    /// Note: metadata is correctly preserved when the source file is copied as-is, but in other cases, metadata copying is subject to the aforementioned
     /// considerations.
     /// </summary>
     public StripVideoMetadataMode StripMetadata
@@ -274,7 +274,7 @@ public sealed class VideoProcessor : FileProcessor
     /// <summary>
     /// Gets or initializes a value indicating whether an <see cref="VideoReencodeOptionalException" /> should be thrown when recoding all streams in a video
     /// is skippable (if we were using IfNeeded modes). Note: this includes the following causes of re-encoding, but not any others: video resize options, max
-    /// bits per channel, max chroma subsamling, FPS limit, HDR to SDR conversion, max audio channels, and max audio sample rate.
+    /// bits per channel, max chroma subsampling, FPS limit, HDR to SDR conversion, max audio channels, and max audio sample rate.
     /// </summary>
     /// <remarks>
     /// Setting this property to <see langword="true" /> can help avoid storing duplicate videos in a repository. For example, if you attempt to generate a

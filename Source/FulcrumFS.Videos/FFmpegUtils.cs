@@ -59,7 +59,7 @@ internal static class FFmpegUtils
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamIndexWithinKind}"));
             }
-            else if (!AppliesToAllStreamsKinds)
+            else if (!AppliesToAllStreamsOfKind)
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamKind}"));
             }
@@ -267,7 +267,7 @@ internal static class FFmpegUtils
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}:{StreamIndexWithinKind}"));
             }
-            else if (!AppliesToAllStreamsKinds)
+            else if (!AppliesToAllStreamsOfKind)
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}:{StreamKind}"));
             }
@@ -281,7 +281,7 @@ internal static class FFmpegUtils
     // File index -1 means to discard the metadata.
     // Note: for global metadata, 'g' should be the streamKind and streamIndexWithinKind and outputIndex should be -1.
     // Note: streamIndexWithinKind is for the input file, outputIndex is for the output file.
-    // Note: we only expsose basic metadata remapping options here, as it's all we need currently.
+    // Note: we only expose basic metadata remapping options here, as it's all we need currently.
     // Note: we currently have metadata copying set up to be opt-in.
     public sealed class PerStreamMapMetadataOverride(int fileIndex, char streamKind, int streamIndexWithinKind, int outputIndex)
         : PerInputStreamOverride(fileIndex, streamKind, streamIndexWithinKind)
@@ -394,16 +394,13 @@ internal static class FFmpegUtils
         CancellationToken cancellationToken = default)
     {
         // Validate progress callback and progress temp file path args:
-        if (progressCallback is not null || progressFilePath is not null)
+        if (progressCallback is null != progressFilePath is null)
         {
-            if (progressFilePath is null || progressFilePath is null)
-            {
-                throw new ArgumentException("If a progress callback or progress file path is provided, both must be provided and non-null.");
-            }
+            throw new ArgumentException("If a progress callback or progress file path is provided, both must be provided and non-null.");
         }
 
         // Set up progress callback reading if needed:
-        var progressCallbackCts = new CancellationTokenSource();
+        using var progressCallbackCts = new CancellationTokenSource();
         var progressCallbackCt = progressCallbackCts.Token;
         var args = CreateArguments(command, progressFilePath?.PathExport);
         progressFilePath?.Delete();
