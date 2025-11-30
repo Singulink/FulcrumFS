@@ -55,17 +55,17 @@ internal static class FFmpegUtils
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamKind}:{StreamIndexWithinKind}"));
             }
-            else if (!AppliesToAllStreamsKinds)
+            else if (AppliesToAllStreamsKinds && AppliesToAllStreamsOfKind)
+            {
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}"));
+            }
+            else if (AppliesToAllStreamsKinds)
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamIndexWithinKind}"));
             }
-            else if (!AppliesToAllStreamsOfKind)
+            else // if (AppliesToAllStreamsOfKind)
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamKind}"));
-            }
-            else
-            {
-                args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}"));
             }
 
             args.Add(CommandArgument);
@@ -263,17 +263,17 @@ internal static class FFmpegUtils
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}:{StreamKind}:{StreamIndexWithinKind}"));
             }
-            else if (!AppliesToAllStreamsKinds)
+            else if (AppliesToAllStreamsKinds && AppliesToAllStreamsOfKind)
+            {
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}"));
+            }
+            else if (AppliesToAllStreamsKinds)
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}:{StreamIndexWithinKind}"));
             }
-            else if (!AppliesToAllStreamsOfKind)
+            else // if (AppliesToAllStreamsOfKind)
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}:{StreamKind}"));
-            }
-            else
-            {
-                args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}"));
             }
         }
     }
@@ -306,6 +306,12 @@ internal static class FFmpegUtils
                 if (FileIndex != -1) args.Add(string.Create(CultureInfo.InvariantCulture, $"{FileIndex}:g"));
                 else args.Add("-1");
             }
+            else if (!AppliesToAllStreamsOfKind && !AppliesToAllStreamsKinds)
+            {
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"-map_metadata:s:{StreamKind}:{OutputIndex}"));
+                if (FileIndex != -1) args.Add(string.Create(CultureInfo.InvariantCulture, $"{FileIndex}:s:{StreamKind}:{StreamIndexWithinKind}"));
+                else args.Add("-1");
+            }
             else if (AppliesToAllStreamsKinds && AppliesToAllStreamsOfKind)
             {
                 throw new ArgumentException("Cannot map metadata for all stream kinds and all streams of kind at once.");
@@ -316,16 +322,10 @@ internal static class FFmpegUtils
                 if (FileIndex != -1) args.Add(string.Create(CultureInfo.InvariantCulture, $"{FileIndex}:s:{StreamIndexWithinKind}"));
                 else args.Add("-1");
             }
-            else if (AppliesToAllStreamsOfKind)
+            else // if (AppliesToAllStreamsOfKind)
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-map_metadata:s:{StreamKind}"));
                 if (FileIndex != -1) args.Add(string.Create(CultureInfo.InvariantCulture, $"{FileIndex}:s:{StreamKind}"));
-                else args.Add("-1");
-            }
-            else
-            {
-                args.Add(string.Create(CultureInfo.InvariantCulture, $"-map_metadata:s:{StreamKind}:{OutputIndex}"));
-                if (FileIndex != -1) args.Add(string.Create(CultureInfo.InvariantCulture, $"{FileIndex}:s:{StreamKind}:{StreamIndexWithinKind}"));
                 else args.Add("-1");
             }
         }

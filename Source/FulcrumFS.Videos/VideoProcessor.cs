@@ -802,7 +802,7 @@ public sealed class VideoProcessor : FileProcessor
                             fileIndex: 0,
                             streamKind: 'v',
                             streamIndexWithinKind: inputVideoStreamIndex,
-                            mapToOutput: StripMetadata != StripVideoMetadataMode.None));
+                            mapToOutput: StripMetadata == StripVideoMetadataMode.None));
 
                     if (StripMetadata == StripVideoMetadataMode.None)
                     {
@@ -1186,7 +1186,7 @@ public sealed class VideoProcessor : FileProcessor
                             fileIndex: 0,
                             streamKind: '\0',
                             streamIndexWithinKind: inputStreamIndex,
-                            mapToOutput: StripMetadata != StripVideoMetadataMode.None));
+                            mapToOutput: StripMetadata == StripVideoMetadataMode.None));
 
                     if (StripMetadata == StripVideoMetadataMode.None)
                     {
@@ -1237,6 +1237,7 @@ public sealed class VideoProcessor : FileProcessor
         // Run the command
         // Note: The last 5% of progress is reserved for the "checking if smaller" pass & since the progress reported is the highest timestamp completed of any
         // stream, so we want to leave some headroom.
+        // Note: we compare duration to 0.0, as that's the value meaning "unknown".
         double maxDuration = ((IEnumerable<double>)[
             0.0,
             sourceInfo.Duration ?? 0.0,
