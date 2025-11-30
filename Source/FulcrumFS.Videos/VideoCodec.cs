@@ -111,7 +111,7 @@ public abstract class VideoCodec
     /// </summary>
     public abstract string Name { get; }
 
-    // Internal helper to get a file extension suitable for writing an audio stream in a file with this codec - does not necessarily correspond to a
+    // Internal helper to get a file extension suitable for writing a video stream in a file with this codec - does not necessarily correspond to a
     // MediaContainerFormat with writing support:
     internal abstract string WritableFileExtension { get; }
 
