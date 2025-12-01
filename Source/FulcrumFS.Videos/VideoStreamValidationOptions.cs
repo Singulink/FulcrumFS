@@ -39,7 +39,7 @@ public sealed class VideoStreamValidationOptions
     /// Note: this creates an incomplete object that cannot be used for reading properties until it is assigned to
     /// <see cref="VideoProcessor.VideoSourceValidation" /> (and then accessed by the reference stored there).
     /// It allows you to use object initializer syntax to adjust any combination of properties when creating the options by writing code like
-    /// <c>new VideoProcessor(VideoProcessor.Preserve) { VideoSourceValidation = new() { MaxWidth = 100 } }</c>.
+    /// <c>new VideoProcessor(VideoProcessors.Preserve) { VideoSourceValidation = new() { MaxWidth = 100 } }</c>.
     /// </summary>
     public VideoStreamValidationOptions()
     {

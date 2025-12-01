@@ -37,7 +37,7 @@ public sealed class AudioStreamProcessingOptions
     /// Note: this creates an incomplete object that cannot be used for reading properties until it is assigned to
     /// <see cref="VideoProcessor.AudioStreamOptions" /> (and then accessed by the reference stored there).
     /// It allows you to use object initializer syntax to adjust any combination of properties when creating the options by writing code like
-    /// <c>new VideoProcessor(VideoProcessor.Preserve) { AudioStreamOptions = new() { Quality = AudioQuality.High } }</c>.
+    /// <c>new VideoProcessor(VideoProcessors.Preserve) { AudioStreamOptions = new() { Quality = AudioQuality.High } }</c>.
     /// </summary>
     public AudioStreamProcessingOptions()
     {
