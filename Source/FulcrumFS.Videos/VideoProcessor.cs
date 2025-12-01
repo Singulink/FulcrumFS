@@ -899,13 +899,13 @@ public sealed class VideoProcessor : FileProcessor
                     finalChromaSubsampling = int.Min(videoSubsampling, maxSubsampling);
                     pixFormat = (finalChromaSubsampling, finalBitsPerChannel) switch
                     {
-                        (420, 8) => "yuvj420p",
+                        (420, 8) => "yuv420p",
                         (420, 10) => "yuv420p10le",
                         (420, 12) => "yuv420p12le",
-                        (422, 8) => "yuvj422p",
+                        (422, 8) => "yuv422p",
                         (422, 10) => "yuv422p10le",
                         (422, 12) => "yuv422p12le",
-                        (444, 8) => "yuvj444p",
+                        (444, 8) => "yuv444p",
                         (444, 10) => "yuv444p10le",
                         (444, 12) => "yuv444p12le",
                         _ => throw new UnreachableException("Unimplemented pixel format for video encoding."),
@@ -916,16 +916,13 @@ public sealed class VideoProcessor : FileProcessor
                     perOutputStreamOverrides.Add(
                         new FFmpegUtils.PerStreamColorRangeOverride(streamKind: 'v', streamIndexWithinKind: id, colorRange: "pc"));
 
-                    if (videoStream.ColorRange != "pc")
+                    if (filterOverride is null)
                     {
-                        if (filterOverride is null)
-                        {
-                            filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                            perOutputStreamOverrides.Add(filterOverride);
-                        }
-
-                        filterOverride.NewVideoRange = "pc";
+                        filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
+                        perOutputStreamOverrides.Add(filterOverride);
                     }
+
+                    filterOverride.NewVideoRange = "pc";
                 }
 
                 // Deal with HDR:
@@ -1421,10 +1418,11 @@ public sealed class VideoProcessor : FileProcessor
         _ => throw new UnreachableException("Unrecognized ChromaSubsampling value."),
     };
 
+    // Non-exhaustive list of common / standard / well-known SDR profiles configs:
     private static bool IsKnownSDRColorProfile(string? colorTransfer, string? colorPrimaries, string? colorSpace) =>
-        (colorTransfer is null or "bt709" or "bt601" or "smpte170m") &&
-        (colorPrimaries is null or "bt709" or "bt601") &&
-        (colorSpace is null or "bt709" or "bt601");
+        (colorTransfer is null or "bt709" or "bt601" or "bt470" or "bt470bg" or "smpte170m" or "smpte240m") &&
+        (colorPrimaries is null or "bt709" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m") &&
+        (colorSpace is null or "bt709" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m" or "srgb" or "iec61966-2-1");
 
     private static int? GetAudioChannelCount(AudioChannels audioChannels) => audioChannels switch
     {
