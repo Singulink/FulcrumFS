@@ -77,14 +77,14 @@ public sealed class VideoStreamProcessingOptions
     public static VideoStreamProcessingOptions StandardizedH264 { get; } = new VideoStreamProcessingOptions()
     {
         ResultCodecs = [VideoCodec.H264],
-        ReencodeBehavior = ReencodeBehavior.Always,
+        ReencodeBehavior = VideoReencodeBehavior.Always,
         StripMetadata = false,
         Quality = VideoQuality.Medium,
         MaximumBitsPerChannel = BitsPerChannel.Bits8,
         MaximumChromaSubsampling = ChromaSubsampling.Subsampling420,
         CompressionPreference = VideoCompressionLevel.Medium,
         ResizeOptions = null,
-        FpsOptions = new(VideoFpsLimitMode.DivideByInteger, (60, 1)),
+        FpsOptions = new(VideoFpsLimitMode.DivideByInteger, 60),
         RemapHDRToSDR = true,
     };
 
@@ -95,7 +95,7 @@ public sealed class VideoStreamProcessingOptions
     public static VideoStreamProcessingOptions Preserve { get; } = new VideoStreamProcessingOptions()
     {
         ResultCodecs = VideoCodec.AllSourceCodecs,
-        ReencodeBehavior = ReencodeBehavior.IfNeeded,
+        ReencodeBehavior = VideoReencodeBehavior.AvoidReencoding,
         StripMetadata = false,
         Quality = VideoQuality.Medium,
         MaximumBitsPerChannel = BitsPerChannel.Preserve,
@@ -153,7 +153,7 @@ public sealed class VideoStreamProcessingOptions
     /// <summary>
     /// Gets or initializes the behavior for re-encoding the video stream.
     /// </summary>
-    public ReencodeBehavior ReencodeBehavior
+    public VideoReencodeBehavior ReencodeBehavior
     {
         get
         {

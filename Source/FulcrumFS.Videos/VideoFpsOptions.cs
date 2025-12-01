@@ -11,7 +11,7 @@ public sealed class VideoFpsOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoFpsOptions" /> class.
     /// </summary>
-    public VideoFpsOptions(VideoFpsLimitMode limitMode, (int Num, int Den) targetFps)
+    public VideoFpsOptions(VideoFpsLimitMode limitMode, int targetFps)
     {
         LimitMode = limitMode;
         TargetFps = targetFps;
@@ -41,19 +41,13 @@ public sealed class VideoFpsOptions
 
     /// <summary>
     /// Gets or initializes the target frames per second (FPS) value.
-    /// For example, to specify 59.94 FPS, use (60000, 1001), or for 25 FPS, use (25, 1).
     /// </summary>
-    public (int Num, int Den) TargetFps
+    public int TargetFps
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value.Num, nameof(TargetFps) + nameof(TargetFps.Num));
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value.Den, nameof(TargetFps) + nameof(TargetFps.Den));
-
-            if (!BigInteger.GreatestCommonDivisor(value.Num, value.Den).IsOne)
-                throw new ArgumentException("The fraction must be in its simplest form.", nameof(TargetFps));
-
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value, nameof(TargetFps));
             field = value;
         }
     }

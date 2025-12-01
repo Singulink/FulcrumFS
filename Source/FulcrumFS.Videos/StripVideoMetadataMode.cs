@@ -16,7 +16,13 @@ public enum StripVideoMetadataMode
     ThumbnailOnly,
 
     /// <summary>
-    /// Strip all metadata from the video.
+    /// Stripping all metadata from the video is preferred (e.g., to reduce file size), but not required - that is, it will be not cause remuxing or
+    /// re-encoding, but if it does happen, then all metadata will be stripped.
     /// </summary>
-    All,
+    Preferred,
+
+    /// <summary>
+    /// Stripping all metadata from the video is required (e.g., for privacy reasons).
+    /// </summary>
+    Required,
 }

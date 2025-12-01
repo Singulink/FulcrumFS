@@ -63,7 +63,7 @@ public sealed class AudioStreamProcessingOptions
     public static AudioStreamProcessingOptions StandardizedAAC { get; } = new AudioStreamProcessingOptions()
     {
         ResultCodecs = [AudioCodec.AAC],
-        ReencodeBehavior = ReencodeBehavior.Always,
+        ReencodeBehavior = VideoReencodeBehavior.Always,
         StripMetadata = false,
         Quality = AudioQuality.Medium,
         MaxChannels = AudioChannels.Stereo,
@@ -77,7 +77,7 @@ public sealed class AudioStreamProcessingOptions
     public static AudioStreamProcessingOptions Preserve { get; } = new AudioStreamProcessingOptions()
     {
         ResultCodecs = AudioCodec.AllSourceCodecs,
-        ReencodeBehavior = ReencodeBehavior.IfNeeded,
+        ReencodeBehavior = VideoReencodeBehavior.AvoidReencoding,
         StripMetadata = false,
         Quality = AudioQuality.Medium,
         MaxChannels = AudioChannels.Preserve,
@@ -131,7 +131,7 @@ public sealed class AudioStreamProcessingOptions
     /// <summary>
     /// Gets or initializes the behavior for re-encoding the audio stream.
     /// </summary>
-    public ReencodeBehavior ReencodeBehavior
+    public VideoReencodeBehavior ReencodeBehavior
     {
         get
         {

@@ -17,7 +17,6 @@ public sealed class VideoProcessor : FileProcessor
     private bool _isPreserveUnrecognizedStreamsInitialized;
     private bool _isStripMetadataInitialized;
     private bool _isProgressCallbackInitialized;
-    private bool _isThrowWhenReencodeOptionalInitialized;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoProcessor"/> class - this constructor is the copy constructor.
@@ -52,7 +51,6 @@ public sealed class VideoProcessor : FileProcessor
         AudioSourceValidation = AudioStreamValidationOptions.None,
         VideoSourceValidation = VideoStreamValidationOptions.None,
         ProgressCallback = null,
-        ThrowWhenReencodeOptional = false,
     };
 
     /// <summary>
@@ -72,7 +70,6 @@ public sealed class VideoProcessor : FileProcessor
         AudioSourceValidation = AudioStreamValidationOptions.None,
         VideoSourceValidation = VideoStreamValidationOptions.None,
         ProgressCallback = null,
-        ThrowWhenReencodeOptional = false,
     };
 
     /// <summary>
@@ -272,25 +269,6 @@ public sealed class VideoProcessor : FileProcessor
     }
 
     /// <summary>
-    /// Gets or initializes a value indicating whether an <see cref="VideoReencodeOptionalException" /> should be thrown when re-encoding all streams in a
-    /// video is skippable (if we were using IfNeeded modes). Note: this includes the following causes of re-encoding, but not any others: video resize
-    /// options, max bits per channel, max chroma subsampling, FPS limit, HDR to SDR conversion, max audio channels, and max audio sample rate.
-    /// </summary>
-    /// <remarks>
-    /// Setting this property to <see langword="true" /> can help avoid storing duplicate videos in a repository. For example, if you attempt to generate a
-    /// low-res version from an existing repository video that is already equal to or smaller than the desired low-res size, <see
-    /// cref="VideoReencodeOptionalException" /> will be thrown. You can catch this exception and use the reference to the existing video, rather than storing
-    /// a new identical low-res version.
-    /// </remarks>
-#pragma warning disable SA1623 // Property summary documentation should match accessors
-    public bool ThrowWhenReencodeOptional
-    {
-        get => PropertyHelpers.GetHelper(_baseConfig, static (x) => x.ThrowWhenReencodeOptional, ref field, ref _isThrowWhenReencodeOptionalInitialized);
-        init => PropertyHelpers.InitHelper(ref field, value, ref _isThrowWhenReencodeOptionalInitialized);
-    }
-#pragma warning restore SA1623 // Property summary documentation should match accessors
-
-    /// <summary>
     /// Configures the directory containing ffmpeg binaries to use for processing.
     /// On Windows: should contain ffmpeg.exe and ffprobe.exe.
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.
@@ -366,7 +344,6 @@ public sealed class VideoProcessor : FileProcessor
         _ = AudioSourceValidation;
         _ = VideoSourceValidation;
         _ = ProgressCallback;
-        _ = ThrowWhenReencodeOptional;
     }
 
     /// <inheritdoc/>
@@ -606,11 +583,11 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Check fps:
-                var targetFps = VideoStreamOptions.FpsOptions?.TargetFps;
+                int? targetFps = VideoStreamOptions.FpsOptions?.TargetFps;
                 if (targetFps is not null && (
                     videoStream.FpsNum <= 0 ||
                     videoStream.FpsDen <= 0 ||
-                    (long)videoStream.FpsNum * targetFps.Value.Den > (long)videoStream.FpsDen * targetFps.Value.Num))
+                    (long)videoStream.FpsNum > (long)videoStream.FpsDen * targetFps.Value))
                 {
                     anyWouldReencodeForReencodeOptionalPurposes = true;
                     continue;
@@ -683,16 +660,13 @@ public sealed class VideoProcessor : FileProcessor
         if (anyInvalidCodecs)
             throw new FileProcessException("One or more streams use a codec that is not supported by this processor.");
 
-        if (!anyWouldReencodeForReencodeOptionalPurposes && ThrowWhenReencodeOptional)
-            throw new VideoReencodeOptionalException();
-
         // Determine if we need to make any changes to the file at all - this involves checking: resizing, re-encoding, removing metadata, etc. - note: some
         // are already checked above with anyWouldReencodeForReencodeOptionalPurposes.
         // Also check if we need to remux ignoring "if smaller" (and similar potentially unnecessary) re-encodings.
         bool remuxRequired =
             anyWouldReencodeForReencodeOptionalPurposes ||
             !ResultFormats.Contains(sourceFormat) ||
-            StripMetadata == StripVideoMetadataMode.All ||
+            StripMetadata == StripVideoMetadataMode.Required ||
             ForceProgressiveDownload;
         bool remuxGuaranteedRequired = remuxRequired;
         if (!remuxRequired)
@@ -721,7 +695,7 @@ public sealed class VideoProcessor : FileProcessor
                         break;
                     }
 
-                    if (VideoStreamOptions.ReencodeBehavior != ReencodeBehavior.IfNeeded)
+                    if (VideoStreamOptions.ReencodeBehavior != VideoReencodeBehavior.AvoidReencoding)
                     {
                         remuxRequired = true;
                     }
@@ -736,7 +710,7 @@ public sealed class VideoProcessor : FileProcessor
                         break;
                     }
 
-                    if (AudioStreamOptions.ReencodeBehavior != ReencodeBehavior.IfNeeded)
+                    if (AudioStreamOptions.ReencodeBehavior != VideoReencodeBehavior.AvoidReencoding)
                     {
                         remuxRequired = true;
                     }
@@ -778,7 +752,7 @@ public sealed class VideoProcessor : FileProcessor
 
         perInputStreamOverrides.Add(
             new FFmpegUtils.PerStreamMapMetadataOverride(
-                fileIndex: StripMetadata == StripVideoMetadataMode.All ? -1 : 0,
+                fileIndex: StripMetadata is StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred ? -1 : 0,
                 streamKind: 'g',
                 streamIndexWithinKind: -1,
                 outputIndex: -1));
@@ -824,7 +798,7 @@ public sealed class VideoProcessor : FileProcessor
                 // Map the stream:
                 outputVideoStreamIndex++;
                 outputStreamIndex++;
-                bool mapMetadata = StripMetadata != StripVideoMetadataMode.All && !VideoStreamOptions.StripMetadata;
+                bool mapMetadata = StripMetadata is not (StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred) && !VideoStreamOptions.StripMetadata;
                 streamMapping.Add((Kind: 'v', InputIndex: inputVideoStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
                 if (!preserveUnrecognizedStreams)
                 {
@@ -846,7 +820,7 @@ public sealed class VideoProcessor : FileProcessor
                 bool reencode =
                     isRequiredReencode ||
                     videoCodec is { SupportsMP4Muxing: false } ||
-                    VideoStreamOptions.ReencodeBehavior != ReencodeBehavior.IfNeeded;
+                    VideoStreamOptions.ReencodeBehavior != VideoReencodeBehavior.AvoidReencoding;
                 FFmpegUtils.PerStreamFilterOverride? filterOverride = null;
                 if (VideoStreamOptions.ResizeOptions is { } resizeOptions &&
                     ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height)))
@@ -869,8 +843,8 @@ public sealed class VideoProcessor : FileProcessor
                 // Check for fps:
                 if (VideoStreamOptions.FpsOptions is not null)
                 {
-                    int maxFpsNum = VideoStreamOptions.FpsOptions.TargetFps.Num;
-                    int maxFpsDen = VideoStreamOptions.FpsOptions.TargetFps.Den;
+                    int maxFpsNum = VideoStreamOptions.FpsOptions.TargetFps;
+                    int maxFpsDen = 1;
 
                     if (videoStream.FpsNum <= 0 || videoStream.FpsDen <= 0 || (long)videoStream.FpsNum * maxFpsDen > (long)videoStream.FpsDen * maxFpsNum)
                     {
@@ -1018,7 +992,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Keep track if we want to check the size later:
-                if (!isRequiredReencode && VideoStreamOptions.ReencodeBehavior == ReencodeBehavior.IfSmaller)
+                if (!isRequiredReencode && VideoStreamOptions.ReencodeBehavior == VideoReencodeBehavior.SelectSmallest)
                 {
                     var codec = MatchVideoCodecByName(VideoStreamOptions.ResultCodecs, videoStream.CodecName)!;
                     streamsToCheckSize.Add((
@@ -1089,7 +1063,7 @@ public sealed class VideoProcessor : FileProcessor
                 int id = outputAudioStreamIndex;
                 outputAudioStreamIndex++;
                 outputStreamIndex++;
-                bool mapMetadata = StripMetadata != StripVideoMetadataMode.All && !AudioStreamOptions.StripMetadata;
+                bool mapMetadata = StripMetadata is not (StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred) && !AudioStreamOptions.StripMetadata;
                 streamMapping.Add((Kind: 'a', InputIndex: inputAudioStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
                 if (!preserveUnrecognizedStreams)
                 {
@@ -1111,7 +1085,7 @@ public sealed class VideoProcessor : FileProcessor
                 bool reencode =
                     isRequiredReencode ||
                     audioCodec is { SupportsMP4Muxing: false } ||
-                    AudioStreamOptions.ReencodeBehavior != ReencodeBehavior.IfNeeded;
+                    AudioStreamOptions.ReencodeBehavior != VideoReencodeBehavior.AvoidReencoding;
                 int? targetChannels = GetAudioChannelCount(AudioStreamOptions.MaxChannels);
                 int numChannels = audioStream.Channels;
                 if (targetChannels.HasValue && audioStream.Channels > targetChannels.Value)
@@ -1135,7 +1109,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Keep track if we want to check the size later:
-                if (!isRequiredReencode && AudioStreamOptions.ReencodeBehavior == ReencodeBehavior.IfSmaller)
+                if (!isRequiredReencode && AudioStreamOptions.ReencodeBehavior == VideoReencodeBehavior.SelectSmallest)
                 {
                     var codec = MatchAudioCodecByName(AudioStreamOptions.ResultCodecs, audioStream.CodecName, audioStream.ProfileName)!;
                     streamsToCheckSize.Add((
@@ -1213,7 +1187,7 @@ public sealed class VideoProcessor : FileProcessor
 
                 // Map the stream:
                 outputStreamIndex++;
-                bool mapMetadata = StripMetadata != StripVideoMetadataMode.All;
+                bool mapMetadata = StripMetadata is not (StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred);
                 streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
 
                 // Specify whether we want to map the metadata:
@@ -1232,7 +1206,7 @@ public sealed class VideoProcessor : FileProcessor
             outputFile: resultTempFile,
             perInputStreamOverrides: [.. perInputStreamOverrides],
             perOutputStreamOverrides: [.. perOutputStreamOverrides],
-            mapChaptersFrom: StripMetadata == StripVideoMetadataMode.All ? -1 : 0,
+            mapChaptersFrom: StripMetadata is StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred ? -1 : 0,
             forceProgressiveDownloadSupport: ForceProgressiveDownload);
 
         // Run the command
@@ -1437,7 +1411,7 @@ public sealed class VideoProcessor : FileProcessor
                     outputFile: newResultTempFile,
                     perInputStreamOverrides: [.. perInputStreamOverrides],
                     perOutputStreamOverrides: [.. perOutputStreamOverrides],
-                    mapChaptersFrom: StripMetadata == StripVideoMetadataMode.All ? -1 : 0,
+                    mapChaptersFrom: StripMetadata is StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred ? -1 : 0,
                     forceProgressiveDownloadSupport: ForceProgressiveDownload);
 
                 // Run the command
