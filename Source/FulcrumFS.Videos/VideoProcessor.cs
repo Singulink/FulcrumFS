@@ -154,7 +154,7 @@ public sealed class VideoProcessor : FileProcessor
     public VideoStreamProcessingOptions VideoStreamOptions
     {
         get => PropertyHelpers.GetHelper(_baseConfig, static (x) => x.VideoStreamOptions, ref field)!;
-        init => field = new(field, value);
+        init => field = new(field ?? _baseConfig?.VideoStreamOptions, value);
     }
 
     /// <summary>
@@ -164,7 +164,7 @@ public sealed class VideoProcessor : FileProcessor
     public AudioStreamProcessingOptions AudioStreamOptions
     {
         get => PropertyHelpers.GetHelper(_baseConfig, static (x) => x.AudioStreamOptions, ref field)!;
-        init => field = new(field, value);
+        init => field = new(field ?? _baseConfig?.AudioStreamOptions, value);
     }
 
     /// <summary>
@@ -245,7 +245,7 @@ public sealed class VideoProcessor : FileProcessor
     public AudioStreamValidationOptions AudioSourceValidation
     {
         get => PropertyHelpers.GetHelper(_baseConfig, static (x) => x.AudioSourceValidation, ref field)!;
-        init => field = new(field, value);
+        init => field = new(field ?? _baseConfig?.AudioSourceValidation, value);
     }
 
     /// <summary>
@@ -255,7 +255,7 @@ public sealed class VideoProcessor : FileProcessor
     public VideoStreamValidationOptions VideoSourceValidation
     {
         get => PropertyHelpers.GetHelper(_baseConfig, static (x) => x.VideoSourceValidation, ref field)!;
-        init => field = new(field, value);
+        init => field = new(field ?? _baseConfig?.VideoSourceValidation, value);
     }
 
     /// <summary>
