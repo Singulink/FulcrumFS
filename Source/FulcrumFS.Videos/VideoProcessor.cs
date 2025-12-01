@@ -409,74 +409,74 @@ public sealed class VideoProcessor : FileProcessor
                     continue;
                 }
 
-                numVideoStreams++;
+                int idx = numVideoStreams++;
 
                 double? duration = videoStream.Duration ?? sourceInfo.Duration;
                 if (duration is not null)
                 {
                     if (VideoSourceValidation.MaxLength.HasValue && duration > VideoSourceValidation.MaxLength.Value.TotalSeconds)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} is longer than maximum allowed duration.");
+                        throw new FileProcessException($"Video stream {idx} is longer than maximum allowed duration.");
 
                     if (VideoSourceValidation.MinLength.HasValue && duration < VideoSourceValidation.MinLength.Value.TotalSeconds)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} is shorter than minimum allowed duration.");
+                        throw new FileProcessException($"Video stream {idx} is shorter than minimum allowed duration.");
                 }
                 else if (VideoSourceValidation.MaxLength.HasValue || VideoSourceValidation.MinLength.HasValue)
                 {
-                    throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown duration, cannot validate.");
+                    throw new FileProcessException($"Video stream {idx} has unknown duration, cannot validate.");
                 }
 
                 if (VideoSourceValidation.MaxWidth.HasValue)
                 {
                     if (videoStream.Width > VideoSourceValidation.MaxWidth.Value)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} width exceeds maximum allowed.");
+                        throw new FileProcessException($"Video stream {idx} width exceeds maximum allowed.");
 
                     if (videoStream.Width <= 0)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown width, cannot validate.");
+                        throw new FileProcessException($"Video stream {idx} has unknown width, cannot validate.");
                 }
 
                 if (VideoSourceValidation.MaxHeight.HasValue)
                 {
                     if (videoStream.Height > VideoSourceValidation.MaxHeight.Value)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} height exceeds maximum allowed.");
+                        throw new FileProcessException($"Video stream {idx} height exceeds maximum allowed.");
 
                     if (videoStream.Height <= 0)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown height, cannot validate.");
+                        throw new FileProcessException($"Video stream {idx} has unknown height, cannot validate.");
                 }
 
                 if (VideoSourceValidation.MaxPixels.HasValue)
                 {
                     if ((long)videoStream.Width * videoStream.Height > VideoSourceValidation.MaxPixels.Value)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} exceeds maximum allowed pixel count.");
+                        throw new FileProcessException($"Video stream {idx} exceeds maximum allowed pixel count.");
 
                     if (videoStream.Width <= 0 || videoStream.Height <= 0)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown dimensions, cannot validate.");
+                        throw new FileProcessException($"Video stream {idx} has unknown dimensions, cannot validate.");
                 }
 
                 if (VideoSourceValidation.MinWidth.HasValue)
                 {
                     if (videoStream.Width <= 0)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown width, cannot validate.");
+                        throw new FileProcessException($"Video stream {idx} has unknown width, cannot validate.");
 
                     if (videoStream.Width < VideoSourceValidation.MinWidth.Value)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} width is less than minimum required.");
+                        throw new FileProcessException($"Video stream {idx} width is less than minimum required.");
                 }
 
                 if (VideoSourceValidation.MinHeight.HasValue)
                 {
                     if (videoStream.Height <= 0)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown height, cannot validate.");
+                        throw new FileProcessException($"Video stream {idx} has unknown height, cannot validate.");
 
                     if (videoStream.Height < VideoSourceValidation.MinHeight.Value)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} height is less than minimum required.");
+                        throw new FileProcessException($"Video stream {idx} height is less than minimum required.");
                 }
 
                 if (VideoSourceValidation.MinPixels.HasValue)
                 {
                     if (videoStream.Width <= 0 || videoStream.Height <= 0)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown dimensions, cannot validate.");
+                        throw new FileProcessException($"Video stream {idx} has unknown dimensions, cannot validate.");
 
                     if ((long)videoStream.Width * videoStream.Height < VideoSourceValidation.MinPixels.Value)
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} is less than minimum required pixel count.");
+                        throw new FileProcessException($"Video stream {idx} is less than minimum required pixel count.");
                 }
 
                 // Check codec:
@@ -491,7 +491,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     if (videoStream.Width <= 0 || videoStream.Height <= 0)
                     {
-                        throw new FileProcessException($"Video stream {numVideoStreams - 1} has unknown dimensions, cannot determine resizing.");
+                        throw new FileProcessException($"Video stream {idx} has unknown dimensions, cannot determine resizing.");
                     }
 
                     if ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height))
@@ -562,20 +562,20 @@ public sealed class VideoProcessor : FileProcessor
             }
             else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
             {
-                numAudioStreams++;
+                int idx = numAudioStreams++;
 
                 double? duration = audioStream.Duration ?? sourceInfo.Duration;
                 if (duration is not null)
                 {
                     if (AudioSourceValidation.MaxLength.HasValue && duration > AudioSourceValidation.MaxLength.Value.TotalSeconds)
-                        throw new FileProcessException($"Audio stream {numAudioStreams - 1} is longer than maximum allowed duration.");
+                        throw new FileProcessException($"Audio stream {idx} is longer than maximum allowed duration.");
 
                     if (AudioSourceValidation.MinLength.HasValue && duration < AudioSourceValidation.MinLength.Value.TotalSeconds)
-                        throw new FileProcessException($"Audio stream {numAudioStreams - 1} is shorter than minimum allowed duration.");
+                        throw new FileProcessException($"Audio stream {idx} is shorter than minimum allowed duration.");
                 }
                 else if (AudioSourceValidation.MaxLength.HasValue || AudioSourceValidation.MinLength.HasValue)
                 {
-                    throw new FileProcessException($"Audio stream {numAudioStreams - 1} has unknown duration, cannot validate.");
+                    throw new FileProcessException($"Audio stream {idx} has unknown duration, cannot validate.");
                 }
 
                 // Check codec:
