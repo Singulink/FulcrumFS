@@ -359,10 +359,14 @@ internal static class FFmpegUtils
         }
 
         // Emit option to force progressive download support if requested:
+        args.Add("-movflags");
         if (command.ForceProgressiveDownloadSupport)
         {
-            args.Add("-movflags");
-            args.Add("+faststart");
+            args.Add("+faststart+use_metadata_tags");
+        }
+        else
+        {
+            args.Add("+use_metadata_tags");
         }
 
         // Progress reporting:

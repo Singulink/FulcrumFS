@@ -1,40 +1,30 @@
-using System.Numerics;
 using Singulink.Enums;
 
 namespace FulcrumFS.Videos;
 
 /// <summary>
-/// Represents options for limiting the frames per second (FPS) of a video during processing.
+/// Represents options for resampling the frames per second (FPS) of a video during processing.
 /// </summary>
-public sealed class VideoFpsOptions
+public sealed record VideoFpsOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="VideoFpsOptions" /> class.
+    /// Initializes a new instance of the <see cref="VideoFpsOptions" /> class with the specified mode and target FPS.
     /// </summary>
-    public VideoFpsOptions(VideoFpsLimitMode limitMode, int targetFps)
+    public VideoFpsOptions(VideoFpsMode mode, int targetFps)
     {
-        LimitMode = limitMode;
+        Mode = mode;
         TargetFps = targetFps;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="VideoFpsOptions" /> class - this constructor is the copy constructor.
-    /// </summary>
-    public VideoFpsOptions(VideoFpsOptions baseConfig)
-    {
-        LimitMode = baseConfig.LimitMode;
-        TargetFps = baseConfig.TargetFps;
     }
 
     /// <summary>
     /// Gets or initializes the mode for limiting the FPS.
     /// </summary>
-    public VideoFpsLimitMode LimitMode
+    public VideoFpsMode Mode
     {
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(LimitMode));
+            value.ThrowIfNotDefined(nameof(Mode));
             field = value;
         }
     }

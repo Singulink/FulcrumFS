@@ -5,7 +5,12 @@ Progress reporting:
 - Ensure that the permissions / share is correct for our usage on both Windows & Unix
 
 Metadata not successfully preserved (I tested on a video from my phone):
-- A lot of metadata was missing, such as "Play Mode", "Author", "Samsung Model", "Android Version", "Android Capture FPS", "Samsung Android Utc Offset"
-- A lot of metadata was added, such as "Buffer Size", "Max Bitrate", "Average Bitrate", "Media Language Code", "Handler Vendor ID", "Encoder"
-- Some was even changed, such as "Handler Type"
+- A lot of metadata was missing, such as "Play Mode", "Author", "Samsung Model"
+- A lot of metadata was added, such as "Buffer Size", "Max Bitrate", "Average Bitrate", "Media Language Code", "Encoder"
+- Some was even changed, such as "Handler Type", "Android Capture FPS"
+- Some other flags were also changed: "Major Brand", "Major Brand", "Compatible Brands", but these seem more expected.
 - This only covers "metadata" metadata, not other kinds like chapters, etc.
+
+Todo:
+- Check which of the following are stripped or preserved with metadata stripping: rotation info, subtitle stream name.
+- Check whether it's important to strip per-stream metadata for certain, as it seems like they might be able to have privacy-important info in them such as location.

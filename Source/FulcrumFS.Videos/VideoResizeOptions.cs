@@ -1,30 +1,33 @@
+using Singulink.Enums;
+
 namespace FulcrumFS.Videos;
 
 /// <summary>
 /// Represents options for resizing videos.
 /// </summary>
-public sealed class VideoResizeOptions
+public sealed record VideoResizeOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified target size.
-    /// Resizes the video to fit within the specified dimensions while preserving the original aspect ratio, final video may be smaller than target size.
-    /// Does not upscale the video if it is smaller than the specified dimensions (in both dimensions).
+    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified mode and target size.
     /// </summary>
-    public VideoResizeOptions(int width, int height)
+    public VideoResizeOptions(VideoResizeMode mode, int width, int height)
     {
+        Mode = mode;
         Width = width;
         Height = height;
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class - this constructor is the copy constructor.
+    /// Gets or initializes the resize mode to use when resizing videos.
     /// </summary>
-    public VideoResizeOptions(VideoResizeOptions baseConfig)
+    public VideoResizeMode Mode
     {
-        // Note: I haven't used PropertyHelpers here as there are no "base configs", we have another publicly exposed constructor, there are no configurable
-        // sub-classes, it is unlikely we will add more config options, etc.
-        Width = baseConfig.Width;
-        Height = baseConfig.Height;
+        get;
+        init
+        {
+            value.ThrowIfNotDefined(nameof(Mode));
+            field = value;
+        }
     }
 
     /// <summary>

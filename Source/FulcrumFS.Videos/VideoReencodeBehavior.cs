@@ -11,7 +11,7 @@ public enum VideoReencodeBehavior
     Always,
 
     /// <summary>
-    /// Only re-encode the stream to meet criteria such as <see cref="VideoStreamProcessingOptions.ResizeOptions" />, or to make a valid codec for the result
+    /// Only re-encode the stream to meet criteria such as <see cref="VideoProcessorOptions.ResizeOptions" />, or to make a valid codec for the result
     /// container format.
     /// </summary>
     AvoidReencoding,
