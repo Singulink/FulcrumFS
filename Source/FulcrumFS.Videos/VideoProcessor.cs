@@ -1563,7 +1563,7 @@ public sealed class VideoProcessor : FileProcessor
         return !language.AsSpan().ContainsAnyExceptInRange('a', 'z');
     }
 
-    private static readonly SearchValues<char> _invalidTitleCharsAndSurrogages = SearchValues.Create([
+    private static readonly SearchValues<char> _invalidTitleCharsAndSurrogates = SearchValues.Create([
         .. Enumerable.Range(0, 32).Select((x) => (char)x),
         .. Enumerable.Range(0xD800, 0x0800).Select((x) => (char)x)
     ]);
@@ -1578,7 +1578,7 @@ public sealed class VideoProcessor : FileProcessor
         int offset = 0;
         while (offset < sp.Length && length < buffer.Length)
         {
-            int nextInteresting = sp[offset..].IndexOfAny(_invalidTitleCharsAndSurrogages);
+            int nextInteresting = sp[offset..].IndexOfAny(_invalidTitleCharsAndSurrogates);
             if (nextInteresting == -1) nextInteresting = sp.Length - offset;
             if (nextInteresting + length > buffer.Length) nextInteresting = buffer.Length - length;
             sp.Slice(offset, nextInteresting).CopyTo(buffer.Slice(length, nextInteresting));
@@ -1596,7 +1596,7 @@ public sealed class VideoProcessor : FileProcessor
                 else if (sp[offset] >= 0xD800 && sp[offset] <= 0xDFFF)
                 {
                     // Check if paired:
-                    if (sp is [>= (char)0xD800 and <= (char)0xDBFF, >= (char)0xDC00 and <= (char)0xDFFF, ..])
+                    if (sp[offset..] is [>= (char)0xD800 and <= (char)0xDBFF, >= (char)0xDC00 and <= (char)0xDFFF, ..])
                     {
                         // Paired surrogate - keep both if enough space:
                         if (length + 2 > buffer.Length) break;
