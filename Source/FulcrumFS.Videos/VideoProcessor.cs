@@ -501,6 +501,13 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
                 {
+                    if (Options.RemoveAudioStreams)
+                    {
+                        remuxRequired = true;
+                        remuxGuaranteedRequired = true;
+                        continue;
+                    }
+
                     AudioCodec? codec = MatchAudioCodecByName(Options.ResultAudioCodecs, audioStream.CodecName, audioStream.ProfileName);
 
                     if (codec is null)
@@ -583,7 +590,8 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
                 {
-                    if (MatchAudioCodecByName(Options.ResultAudioCodecs, audioStream.CodecName, audioStream.ProfileName) is { SupportsMP4Muxing: true })
+                    if (MatchAudioCodecByName(Options.ResultAudioCodecs, audioStream.CodecName, audioStream.ProfileName) is { SupportsMP4Muxing: true } ||
+                        Options.RemoveAudioStreams)
                     {
                         isCompatibleStream[i] = true;
                         goto reportProgress;
@@ -591,7 +599,15 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else if (stream is FFprobeUtils.SubtitleStreamInfo subtitleStream)
                 {
-                    if (subtitleStream.CodecName == "mov_text")
+                    if (subtitleStream.CodecName == "mov_text" || !Options.TryPreserveUnrecognizedStreams)
+                    {
+                        isCompatibleStream[i] = true;
+                        goto reportProgress;
+                    }
+                }
+                else if (stream is FFprobeUtils.UnrecognisedStreamInfo)
+                {
+                    if (!Options.TryPreserveUnrecognizedStreams)
                     {
                         isCompatibleStream[i] = true;
                         goto reportProgress;
@@ -953,8 +969,19 @@ public sealed class VideoProcessor : FileProcessor
             }
             else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
             {
-                // Map the stream:
+                // If we're removing audio streams, exclude it now:
                 inputAudioStreamIndex++;
+                if (Options.RemoveAudioStreams)
+                {
+                    perInputStreamOverrides.Add(
+                        new FFmpegUtils.PerStreamMapOverride(
+                            fileIndex: 0,
+                            streamKind: 'a',
+                            streamIndexWithinKind: inputAudioStreamIndex,
+                            mapToOutput: false));
+                }
+
+                // Map the stream:
                 int id = outputAudioStreamIndex;
                 outputAudioStreamIndex++;
                 outputStreamIndex++;

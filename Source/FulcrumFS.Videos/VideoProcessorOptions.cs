@@ -354,6 +354,7 @@ public sealed record VideoProcessorOptions
 
     /// <summary>
     /// Gets or initializes a value indicating whether to remove all audio streams from the output video.
+    /// Default is <see langword="false" />.
     /// </summary>
 #pragma warning disable SA1623 // Property summary documentation should match accessors
     public bool RemoveAudioStreams { get; init; }
