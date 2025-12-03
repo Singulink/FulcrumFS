@@ -12,19 +12,20 @@ partial class FileRepo
         string? variantId,
         Stream stream,
         string extension,
+        bool sourceInRepo,
         bool leaveOpen,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         var tempWorkingDir = _tempDirectory.CombineDirectory(GetFileIdAndVariantString(fileId, variantId), PathOptions.None);
-        FileProcessContext context = null;
+        FileProcessingContext context = null;
 
         try
         {
-            context = new FileProcessContext(fileId, variantId, tempWorkingDir, stream, extension, leaveOpen, cancellationToken);
-            await pipeline.ExecuteAsync(context).ConfigureAwait(false);
+            context = new FileProcessingContext(fileId, variantId, tempWorkingDir, stream, extension, leaveOpen, cancellationToken);
+            await pipeline.ExecuteAsync(context, sourceInRepo).ConfigureAwait(false);
 
             var resultFile = await context.GetSourceAsFileAsync().ConfigureAwait(false);
             var dataFile = GetDataFile(fileId, context.Extension, variantId);

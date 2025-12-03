@@ -5,40 +5,11 @@ namespace FulcrumFS;
 /// </content>
 partial class FileRepo
 {
-    /// <inheritdoc cref="AddVariantAsync(FileId, string, string?, FileProcessor, CancellationToken)"/>
+    /// <inheritdoc cref="AddVariantAsync(FileId, string, string?, FileProcessingPipeline, CancellationToken)"/>
     public Task<IAbsoluteFilePath> AddVariantAsync(
         FileId fileId,
         string variantId,
-        FileProcessor processor,
-        CancellationToken cancellationToken = default)
-    {
-        return AddVariantAsync(fileId, variantId, null, processor.SingleProcessorPipeline, cancellationToken);
-    }
-
-    /// <summary>
-    /// Adds a new file variant to an existing file in the repository, processing it through the specified file pipeline.
-    /// </summary>
-    /// <param name="fileId">The ID of the main file to which the variant will be added.</param>
-    /// <param name="variantId">The ID of the variant to be added. Must only contain ASCII letters, digits, hyphens and underscores.</param>
-    /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
-    /// <param name="processor">The file processor to use for the variant.</param>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <exception cref="RepoFileVariantAlreadyExistsException">The variant already exists or is currently being processed by another operation.</exception>
-    public Task<IAbsoluteFilePath> AddVariantAsync(
-        FileId fileId,
-        string variantId,
-        string? sourceVariantId,
-        FileProcessor processor,
-        CancellationToken cancellationToken = default)
-    {
-        return AddVariantAsync(fileId, variantId, sourceVariantId, processor.SingleProcessorPipeline, cancellationToken);
-    }
-
-    /// <inheritdoc cref="AddVariantAsync(FileId, string, string?, FileProcessPipeline, CancellationToken)"/>
-    public Task<IAbsoluteFilePath> AddVariantAsync(
-        FileId fileId,
-        string variantId,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
         return AddVariantAsync(fileId, variantId, null, pipeline, cancellationToken);
@@ -52,12 +23,12 @@ partial class FileRepo
     /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
     /// <param name="pipeline">The processing pipeline to use for the variant.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <exception cref="RepoFileVariantAlreadyExistsException">The variant already exists or is currently being processed by another operation.</exception>
+    /// <exception cref="InvalidOperationException">The variant already exists or is currently being processed by another operation.</exception>
     public async Task<IAbsoluteFilePath> AddVariantAsync(
         FileId fileId,
         string variantId,
         string? sourceVariantId,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
         var addResult = await TryAddVariantAsync(fileId, variantId, sourceVariantId, pipeline, cancellationToken).ConfigureAwait(false);
@@ -65,46 +36,17 @@ partial class FileRepo
         if (addResult is null)
         {
             string message = $"File ID '{fileId}' variant '{variantId}' already exists or is currently being processed by another operation.";
-            throw new RepoFileVariantAlreadyExistsException(message);
+            throw new InvalidOperationException(message);
         }
 
         return addResult;
     }
 
-    /// <inheritdoc cref="GetOrAddVariantAsync(FileId, string, string?, FileProcessor, CancellationToken)"/>
+    /// <inheritdoc cref="GetOrAddVariantAsync(FileId, string, string?, FileProcessingPipeline, CancellationToken)"/>
     public Task<IAbsoluteFilePath> GetOrAddVariantAsync(
         FileId fileId,
         string variantId,
-        FileProcessor processor,
-        CancellationToken cancellationToken = default)
-    {
-        return GetOrAddVariantAsync(fileId, variantId, null, processor.SingleProcessorPipeline, cancellationToken);
-    }
-
-    /// <summary>
-    /// Adds a new file variant to an existing file in the repository if it does not already exist, processing it through the specified file processor. If a
-    /// variant with the same ID already exists, it returns the existing variant without reprocessing.
-    /// </summary>
-    /// <param name="fileId">The ID of the main file to which the variant will be added.</param>
-    /// <param name="variantId">The ID of the variant to be added. Must only contain ASCII letters, digits, hyphens and underscores.</param>
-    /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
-    /// <param name="processor">The file processor to use for the variant.</param>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    public Task<IAbsoluteFilePath> GetOrAddVariantAsync(
-        FileId fileId,
-        string variantId,
-        string? sourceVariantId,
-        FileProcessor processor,
-        CancellationToken cancellationToken = default)
-    {
-        return GetOrAddVariantAsync(fileId, variantId, sourceVariantId, processor.SingleProcessorPipeline, cancellationToken);
-    }
-
-    /// <inheritdoc cref="GetOrAddVariantAsync(FileId, string, string?, FileProcessPipeline, CancellationToken)"/>
-    public Task<IAbsoluteFilePath> GetOrAddVariantAsync(
-        FileId fileId,
-        string variantId,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
         return GetOrAddVariantAsync(fileId, variantId, null, pipeline, cancellationToken);
@@ -123,7 +65,7 @@ partial class FileRepo
         FileId fileId,
         string variantId,
         string? sourceVariantId,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
         variantId = VariantId.Normalize(variantId);
@@ -134,19 +76,6 @@ partial class FileRepo
         if (variantFile is not null)
             return variantFile;
 
-        var sourceFile = FindDataFile(fileId, sourceVariantId);
-
-        if (sourceFile is null)
-        {
-            if (sourceVariantId is null)
-                throw new RepoFileNotFoundException($"File ID '{fileId}' was not found.");
-
-            throw new RepoFileNotFoundException($"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
-        }
-
-        var sourceFileStream = sourceFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-
-        await using (sourceFileStream.ConfigureAwait(false))
         using (await _fileSync.LockAsync((fileId, variantId), cancellationToken).ConfigureAwait(false))
         {
             variantFile = FindDataFile(fileId, variantId);
@@ -154,45 +83,32 @@ partial class FileRepo
             if (variantFile is not null)
                 return variantFile;
 
-            return await AddCommonAsyncCore(fileId, variantId, sourceFileStream, sourceFile.Extension, leaveOpen: false, pipeline, cancellationToken)
-                .ConfigureAwait(false);
+            var sourceFile = FindDataFile(fileId, sourceVariantId);
+
+            if (sourceFile is null)
+            {
+                if (sourceVariantId is null)
+                    throw new RepoFileNotFoundException($"File ID '{fileId}' was not found.");
+
+                throw new RepoFileNotFoundException($"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
+            }
+
+            var sourceFileStream = sourceFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
+            await using (sourceFileStream.ConfigureAwait(false))
+            {
+                return await AddCommonAsyncCore(
+                    fileId, variantId, sourceFileStream, sourceFile.Extension, sourceInRepo: true, leaveOpen: false, pipeline, cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
     }
 
-    /// <inheritdoc cref="TryAddVariantAsync(FileId, string, string?, FileProcessor, CancellationToken)"/>
+    /// <inheritdoc cref="TryAddVariantAsync(FileId, string, string?, FileProcessingPipeline, CancellationToken)"/>
     public Task<IAbsoluteFilePath?> TryAddVariantAsync(
         FileId fileId,
         string variantId,
-        FileProcessor processor,
-        CancellationToken cancellationToken = default)
-    {
-        return TryAddVariantAsync(fileId, variantId, null, processor.SingleProcessorPipeline, cancellationToken);
-    }
-
-    /// <summary>
-    /// Tries to add a new file variant to an existing file in the repository, processing it through the specified file pipeline. Returns <see langword="null"/>
-    /// if the variant already exists or is currently being processed by another operation.
-    /// </summary>
-    /// <param name="fileId">The ID of the main file to which the variant will be added.</param>
-    /// <param name="variantId">The ID of the variant to be added. Must only contain ASCII letters, digits, hyphens and underscores.</param>
-    /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
-    /// <param name="processor">The file processor to use for the variant.</param>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    public Task<IAbsoluteFilePath?> TryAddVariantAsync(
-        FileId fileId,
-        string variantId,
-        string? sourceVariantId,
-        FileProcessor processor,
-        CancellationToken cancellationToken = default)
-    {
-        return TryAddVariantAsync(fileId, variantId, sourceVariantId, processor.SingleProcessorPipeline, cancellationToken);
-    }
-
-    /// <inheritdoc cref="TryAddVariantAsync(FileId, string, string?, FileProcessPipeline, CancellationToken)"/>
-    public Task<IAbsoluteFilePath?> TryAddVariantAsync(
-        FileId fileId,
-        string variantId,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
         return TryAddVariantAsync(fileId, variantId, null, pipeline, cancellationToken);
@@ -211,7 +127,7 @@ partial class FileRepo
         FileId fileId,
         string variantId,
         string? sourceVariantId,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
         variantId = VariantId.Normalize(variantId);
@@ -246,7 +162,8 @@ partial class FileRepo
                     if (FindDataFile(fileId, variantId) is not null)
                         return null;
 
-                    return await AddCommonAsyncCore(fileId, variantId, sourceFileStream, sourceFile.Extension, leaveOpen: false, pipeline, cancellationToken)
+                    return await AddCommonAsyncCore(
+                        fileId, variantId, sourceFileStream, sourceFile.Extension, sourceInRepo: true, leaveOpen: false, pipeline, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }

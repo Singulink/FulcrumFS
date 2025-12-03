@@ -31,19 +31,6 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     }
 
     /// <summary>
-    /// Adds a new file to the repository with the specified file stream, processing it through the specified file processor.
-    /// </summary>
-    /// <param name="stream">The source file stream.</param>
-    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
-    /// <param name="processor">The file processor to use.</param>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <returns>The file ID and extension of the resulting file.</returns>
-    public async Task<AddFileResult> AddAsync(FileStream stream, bool leaveOpen, FileProcessor processor, CancellationToken cancellationToken = default)
-    {
-        return await AddAsync(stream, leaveOpen, processor.SingleProcessorPipeline, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
     /// Adds a new file to the repository with the specified file stream, processing it through the specified file pipeline.
     /// </summary>
     /// <param name="stream">The source file stream.</param>
@@ -51,29 +38,10 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <param name="pipeline">The processing pipeline to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The file ID and extension of the resulting file.</returns>
-    public Task<AddFileResult> AddAsync(FileStream stream, bool leaveOpen, FileProcessPipeline pipeline, CancellationToken cancellationToken = default)
+    public Task<AddFileResult> AddAsync(FileStream stream, bool leaveOpen, FileProcessingPipeline pipeline, CancellationToken cancellationToken = default)
     {
         string extension = FilePath.ParseAbsolute(stream.Name, PathOptions.None).Extension;
         return AddAsync(stream, extension, leaveOpen, pipeline, cancellationToken);
-    }
-
-    /// <summary>
-    /// Adds a new file to the repository with the specified stream and extension, processing it through the specified file processor.
-    /// </summary>
-    /// <param name="stream">The source stream.</param>
-    /// <param name="extension">The source file extension.</param>
-    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
-    /// <param name="processor">The file processor to use.</param>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <returns>The file ID and extension of the resulting file.</returns>
-    public async Task<AddFileResult> AddAsync(
-        Stream stream,
-        string extension,
-        bool leaveOpen,
-        FileProcessor processor,
-        CancellationToken cancellationToken = default)
-    {
-        return await AddAsync(stream, extension, leaveOpen, processor.SingleProcessorPipeline, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -89,7 +57,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         Stream stream,
         string extension,
         bool leaveOpen,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         CancellationToken cancellationToken = default)
     {
         using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
@@ -109,9 +77,9 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <summary>
     /// Deletes an existing or tentatively added file from the repository by its file ID.
     /// </summary>
-    public async Task DeleteAsync(FileId fileId, CancellationToken cacnellationToken = default)
+    public async Task DeleteAsync(FileId fileId, CancellationToken cancellationToken = default)
     {
-        using var syncLock = await _sync.LockAsync(cacnellationToken).ConfigureAwait(false);
+        using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
 
         if (_added.Contains(fileId))
         {

@@ -3,7 +3,7 @@ namespace FulcrumFS.Images;
 /// <summary>
 /// Options for validating a source image during processing.
 /// </summary>
-public sealed class ImageSourceValidationOptions
+public sealed record ImageSourceValidationOptions
 {
     /// <summary>
     /// Gets or initializes the maximum width of the source image in pixels.

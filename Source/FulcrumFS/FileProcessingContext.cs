@@ -1,9 +1,12 @@
+using System.Diagnostics;
+using System.IO;
+
 namespace FulcrumFS;
 
 /// <summary>
 /// Represents the context for processing a file, providing access to the source file or stream and methods to create new work files or directories.
 /// </summary>
-public sealed class FileProcessContext : IAsyncDisposable
+public sealed class FileProcessingContext : IAsyncDisposable
 {
     private readonly IAbsoluteDirectoryPath _workRootDirectory;
 
@@ -29,16 +32,23 @@ public sealed class FileProcessContext : IAsyncDisposable
     public string Extension { get; private set; }
 
     /// <summary>
+    /// Gets the cancellation token that can be used to observe cancellation requests.
+    /// </summary>
+    public CancellationToken CancellationToken { get; }
+
+    /// <summary>
     /// Gets a value indicating whether the pipeline is at the last process step.
     /// </summary>
     public bool IsLastProcessStep { get; private set; }
 
     /// <summary>
-    /// Gets the cancellation token that can be used to observe cancellation requests.
+    /// Gets a value indicating whether the source has had any changes made to it during processing.
     /// </summary>
-    public CancellationToken CancellationToken { get; }
+    public bool HasChanges { get; private set; }
 
-    internal FileProcessContext(
+    internal bool IsSourceInMemoryOrFile => _source is IAbsoluteFilePath or MemoryStream or FileStream;
+
+    internal FileProcessingContext(
         FileId fileId,
         string? variantId,
         IAbsoluteDirectoryPath workRootDirectory,
@@ -54,7 +64,7 @@ public sealed class FileProcessContext : IAsyncDisposable
         CancellationToken = cancellationToken;
     }
 
-    internal FileProcessContext(
+    internal FileProcessingContext(
         FileId fileId,
         string? variantId,
         IAbsoluteDirectoryPath workRootDirectory,
@@ -105,35 +115,35 @@ public sealed class FileProcessContext : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
 
-        if (_source is IAbsoluteFilePath file)
-            return file;
+        if (_source is IAbsoluteFilePath sourceFile)
+            return sourceFile;
 
-        var stream = (Stream)_source;
+        var sourceStream = (Stream)_source;
 
-        if (stream is FileStream fileStream)
+        if (sourceStream is FileStream fileStream)
         {
             // If the source is already a file stream, we can return the file path it is associated with directly.
-            file = FilePath.ParseAbsolute(fileStream.Name, PathOptions.None);
+            sourceFile = FilePath.ParseAbsolute(fileStream.Name, PathOptions.None);
         }
         else
         {
-            file = GetNewWorkFile(Extension);
-            file.ParentDirectory.Create();
-            fileStream = file.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.Delete);
+            sourceFile = GetNewWorkFile(Extension);
+            sourceFile.ParentDirectory.Create();
+            fileStream = sourceFile.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.Delete);
 
             await using (fileStream.ConfigureAwait(false))
             {
-                await stream.CopyToAsync(fileStream, CancellationToken).ConfigureAwait(false);
+                await sourceStream.CopyToAsync(fileStream, CancellationToken).ConfigureAwait(false);
             }
         }
 
         if (!_leaveOpen)
-            await stream.DisposeAsync().ConfigureAwait(false);
+            await sourceStream.DisposeAsync().ConfigureAwait(false);
 
         _leaveOpen = false;
 
-        _source = file;
-        return file;
+        _source = sourceFile;
+        return sourceFile;
     }
 
     /// <summary>
@@ -148,23 +158,23 @@ public sealed class FileProcessContext : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
 
-        if (_source is not Stream stream)
+        if (_source is not Stream sourceStream)
         {
-            var file = (IAbsoluteFilePath)_source;
-            _source = stream = file.OpenAsyncStream(FileMode.Open, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete);
+            var sourceFile = (IAbsoluteFilePath)_source;
+            _source = sourceStream = sourceFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             _leaveOpen = false;
         }
 
-        if (stream.CanSeek && (!preferInMemory || stream is MemoryStream || stream.Length > maxInMemoryCopySize))
-            return stream;
+        if (sourceStream.CanSeek && (sourceStream is MemoryStream || !preferInMemory || sourceStream.Length > maxInMemoryCopySize))
+            return sourceStream;
 
         var fallbackFile = GetNewWorkFile(Extension);
-        var streamCopy = await stream
+        var streamCopy = await sourceStream
             .CopyToSeekableAsync(maxInMemoryCopySize, fallbackFile, CancellationToken)
             .ConfigureAwait(false);
 
         if (!_leaveOpen)
-            await stream.DisposeAsync().ConfigureAwait(false);
+            await sourceStream.DisposeAsync().ConfigureAwait(false);
 
         _source = streamCopy;
         _leaveOpen = false;
@@ -182,12 +192,13 @@ public sealed class FileProcessContext : IAsyncDisposable
         _source = null;
     }
 
-    internal async Task SetResultAsync(FileProcessResult result, bool isLastStep)
+    internal async Task SetResultAsync(FileProcessingResult result, bool oneStepLeft)
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
 
         Extension = result.Extension;
-        IsLastProcessStep = isLastStep;
+        IsLastProcessStep = oneStepLeft;
+        HasChanges |= result.HasChanges;
 
         if (_source == result.Result)
             return;
@@ -196,6 +207,31 @@ public sealed class FileProcessContext : IAsyncDisposable
             await disposable.DisposeAsync().ConfigureAwait(false);
 
         _source = result.Result;
+        _leaveOpen = false;
+    }
+
+    internal async Task BufferSourceToWorkFileAsync()
+    {
+        ObjectDisposedException.ThrowIf(_source is null, this);
+
+        var workFile = GetNewWorkFile(Extension);
+        workFile.ParentDirectory.Create();
+
+        if (_source is IAbsoluteFilePath sourceFile)
+        {
+            await sourceFile.CopyToAsync(workFile, CancellationToken).ConfigureAwait(false);
+            _source = workFile;
+            return;
+        }
+
+        var sourceStream = (Stream)_source;
+        var workFileStream = workFile.OpenAsyncStream(FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Delete);
+        await sourceStream.CopyToAsync(workFileStream, CancellationToken).ConfigureAwait(false);
+
+        if (!_leaveOpen)
+            await sourceStream.DisposeAsync().ConfigureAwait(false);
+
+        _source = workFileStream;
         _leaveOpen = false;
     }
 

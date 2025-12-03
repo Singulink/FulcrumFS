@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
 
     <PackageId>Singulink.FulcrumFS.Core</PackageId>
-    <Version>0.16</Version>
+    <Version>0.17</Version>
     <Description>Transactional file processing pipeline and storage engine with two-phase commit and file variant management.</Description>
     <PackageTags></PackageTags>
   </PropertyGroup>

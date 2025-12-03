@@ -43,7 +43,7 @@ partial class FileRepo
         Stream stream,
         string extension,
         bool leaveOpen,
-        FileProcessPipeline pipeline,
+        FileProcessingPipeline pipeline,
         Action<FileId> onFileIdCreated,
         CancellationToken cancellationToken = default)
     {
@@ -84,7 +84,9 @@ partial class FileRepo
 
         try
         {
-            var result = await AddCommonAsyncCore(fileId, null, stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
+            var result = await AddCommonAsyncCore(
+                fileId, variantId: null, stream, extension, sourceInRepo: false, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
+
             return new(fileId, result);
         }
         finally
