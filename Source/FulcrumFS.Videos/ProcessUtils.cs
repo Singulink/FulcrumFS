@@ -150,6 +150,29 @@ internal static class ProcessUtils
         }
     }
 
+    public static async ValueTask<(string Output, string Error, int ReturnCode)> RunProcessToStringAsync(
+        IAbsoluteFilePath fileName,
+        IEnumerable<string> arguments,
+        bool isShortLived = false,
+        CancellationToken cancellationToken = default,
+        bool runAsynchronously = true)
+    {
+        using StringWriter standardOutputWriter = new();
+        using StringWriter standardErrorWriter = new();
+
+        int returnCode = await RunProcessAsyncImpl(
+            fileName,
+            arguments,
+            standardOutputWriter,
+            standardErrorWriter,
+            isShortLived,
+            redirectOutputContinually: false,
+            runAsynchronously,
+            cancellationToken).ConfigureAwait(false);
+
+        return (standardOutputWriter.ToString(), standardErrorWriter.ToString(), returnCode);
+    }
+
     public static async ValueTask<string> RunProcessToStringWithErrorHandlingAsync(
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,

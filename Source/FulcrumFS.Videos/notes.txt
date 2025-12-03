@@ -12,5 +12,4 @@ Metadata not successfully preserved (I tested on a video from my phone):
 - This only covers "metadata" metadata, not other kinds like chapters, etc.
 
 Todo:
-- Check which of the following are stripped or preserved with metadata stripping: rotation info, subtitle stream name.
-- Check whether it's important to strip per-stream metadata for certain, as it seems like they might be able to have privacy-important info in them such as location.
+- New throw handler scheme.

@@ -69,6 +69,13 @@ internal static class FFprobeUtils
         public int SampleRate { get; } = sampleRate;
     }
 
+    public sealed class SubtitleStreamInfo(string codecName, string? language, string? titleOrHandlerName) : StreamInfo
+    {
+        public string CodecName { get; } = codecName;
+        public string? Language { get; } = language;
+        public string? TitleOrHandlerName { get; } = titleOrHandlerName;
+    }
+
     public sealed class UnrecognisedStreamInfo(string codecType, char streamShorthand, bool isAttachedPic, bool isTimedThumbnail) : StreamInfo
     {
         public string CodecType { get; } = codecType;
@@ -138,11 +145,19 @@ internal static class FFprobeUtils
             int bitsPerSample = ReadInt32Property(stream, "bits_per_sample") ?? -1;
             int channels = ReadInt32Property(stream, "channels") ?? -1;
             int sampleRate = ReadInt32Property(stream, "sample_rate") ?? -1;
+
             int attachedPicValue = 0, timedThumbnailValue = 0;
             if (stream.TryGetProperty("disposition", out var dispositionsProp) && dispositionsProp.ValueKind == JsonValueKind.Object)
             {
                 attachedPicValue = ReadInt32Property(dispositionsProp, "attached_pic") ?? 0;
                 timedThumbnailValue = ReadInt32Property(dispositionsProp, "timed_thumbnail") ?? 0;
+            }
+
+            string? language = null, titleOrHandlerName = null;
+            if (stream.TryGetProperty("tags", out var tagsProp) && tagsProp.ValueKind == JsonValueKind.Object)
+            {
+                language = ReadStringProperty(tagsProp, "language");
+                titleOrHandlerName = ReadStringProperty(tagsProp, "title") ?? ReadStringProperty(tagsProp, "handler_name") ?? ReadStringProperty(tagsProp, "HANDLER_NAME");
             }
 
             switch (codecType)
@@ -185,10 +200,13 @@ internal static class FFprobeUtils
                     builder.Add(new AudioStreamInfo(codecName!, profile, duration, channels, sampleRate));
                     break;
 
+                case "subtitle":
+                    builder.Add(new SubtitleStreamInfo(codecName!, language, titleOrHandlerName));
+                    break;
+
                 default:
                     char codecChar = codecType switch
                     {
-                        "subtitle" => 's',
                         "data" => 'd',
                         "attachment" => 't',
                         _ => '\0',

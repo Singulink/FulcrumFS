@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
 using System.Numerics;
 using Singulink.IO;
 using Singulink.Threading;
@@ -392,6 +394,61 @@ public sealed class VideoProcessor : FileProcessor
         if (anyInvalidCodecs)
             throw new FileProcessException("One or more streams use a codec that is not supported by this processor.");
 
+        // Validate input by doing a decode-only ffmpeg run to ensure no decoding errors.
+        // Note: when active, we set aside the first 20% of progress for this.
+        // Note: we compare duration to 0.0, as that's the value meaning "unknown".
+        double maxDuration = ((IEnumerable<double>)[
+            0.0,
+            sourceInfo.Duration ?? 0.0,
+            .. sourceInfo.Streams
+                .OfType<FFprobeUtils.VideoStreamInfo>()
+                .Where((x) => !x.IsAttachedPic && !x.IsTimedThumbnail)
+                .Select((x) => x.Duration ?? 0.0),
+            .. sourceInfo.Streams
+                .OfType<FFprobeUtils.AudioStreamInfo>()
+                .Select((x) => x.Duration ?? 0.0),
+        ]).Max();
+        var progressTempFile = (Options.ProgressCallback != null && Options.ForceValidateAllStreams && maxDuration != 0.0)
+            ? context.GetNewWorkFile(".txt")
+            : null;
+        double progressUsed = 0.0;
+        double lastDone = 0.0;
+        if (Options.ForceValidateAllStreams)
+        {
+            // Run the validation pass:
+            const double ValidateProgressFraction = 0.20;
+            progressUsed = ValidateProgressFraction;
+            Action<double> validateProgressCallback = progressTempFile is not null ? (durationDone) =>
+            {
+                // Avoid going backwards or repeating the same progress:
+                if (durationDone <= lastDone || durationDone < 0.0 || durationDone > maxDuration) return;
+
+                // Clamp / adjust to [0.0, 0.20] range:
+                double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ValidateProgressFraction), 0.0, ValidateProgressFraction);
+                lastDone = durationDone;
+                Options.ProgressCallback!((context.FileId, context.VariantId), clampedProgress);
+            } : null;
+            await FFmpegUtils.RunRawFFmpegCommandAsync(
+                ["-i", sourceFileWithCorrectExtension.PathExport, "-ignore_unknown", "-xerror", "-hide_banner", "-f", "null", "-"],
+                validateProgressCallback,
+                progressTempFile,
+                ensureAllProgressRead: true,
+                cancellationToken: context.CancellationToken)
+            .ConfigureAwait(false);
+
+            // Check if duration is longer than max video or audio duration (if specified):
+            double? maxVideoLength = Options.VideoSourceValidation.MaxLength?.TotalSeconds;
+            double? maxAudioLength = Options.AudioSourceValidation.MaxLength?.TotalSeconds;
+            if ((maxVideoLength.HasValue && lastDone > maxVideoLength.Value && numVideoStreams > 0) ||
+                (maxAudioLength.HasValue && lastDone > maxAudioLength.Value && numAudioStreams > 0))
+            {
+                throw new FileProcessException("Measured video duration exceeds maximum allowed length.");
+            }
+
+            // Update maxDuration with the measured duration:
+            maxDuration = lastDone;
+        }
+
         // Determine if we need to make any changes to the file at all - this involves checking: resizing, re-encoding, removing metadata, etc. - note: some
         // are already checked above with anyWouldReencodeForReencodeOptionalPurposes.
         // Also check if we need to remux ignoring "if smaller" (and similar potentially unnecessary) re-encodings.
@@ -401,6 +458,7 @@ public sealed class VideoProcessor : FileProcessor
             Options.StripMetadata == StripVideoMetadataMode.Required ||
             Options.ForceProgressiveDownload;
         bool remuxGuaranteedRequired = remuxRequired;
+        bool guaranteedFullyCompatibleWithMP4Container = true;
         if (!remuxRequired)
         {
             foreach (var stream in sourceInfo.Streams)
@@ -408,11 +466,14 @@ public sealed class VideoProcessor : FileProcessor
                 if (stream is FFprobeUtils.VideoStreamInfo videoStream)
                 {
                     bool isThumbnail = videoStream.IsAttachedPic || videoStream.IsTimedThumbnail;
-                    if (Options.StripMetadata != StripVideoMetadataMode.None && isThumbnail)
+                    if (Options.StripMetadata is not (StripVideoMetadataMode.None or StripVideoMetadataMode.Preferred) && isThumbnail)
                     {
                         remuxRequired = true;
                         remuxGuaranteedRequired = true;
-                        break;
+                    }
+                    else if (isThumbnail && videoStream.CodecName is not ("mjpeg" or "png")) // Common thumbnail codecs which do happen to be mp4 compatible.
+                    {
+                        guaranteedFullyCompatibleWithMP4Container = false;
                     }
 
                     if (isThumbnail)
@@ -420,11 +481,17 @@ public sealed class VideoProcessor : FileProcessor
                         continue;
                     }
 
-                    if (MatchVideoCodecByName(Options.ResultVideoCodecs, videoStream.CodecName) is null)
+                    VideoCodec? codec = MatchVideoCodecByName(Options.ResultVideoCodecs, videoStream.CodecName);
+
+                    if (codec is null)
                     {
                         remuxRequired = true;
                         remuxGuaranteedRequired = true;
-                        break;
+                    }
+
+                    if (codec?.SupportsMP4Muxing != true)
+                    {
+                        guaranteedFullyCompatibleWithMP4Container = false;
                     }
 
                     if (Options.VideoReencodeBehavior != VideoReencodeBehavior.AvoidReencoding)
@@ -434,11 +501,17 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
                 {
-                    if (MatchAudioCodecByName(Options.ResultAudioCodecs, audioStream.CodecName, audioStream.ProfileName) is null)
+                    AudioCodec? codec = MatchAudioCodecByName(Options.ResultAudioCodecs, audioStream.CodecName, audioStream.ProfileName);
+
+                    if (codec is null)
                     {
                         remuxRequired = true;
                         remuxGuaranteedRequired = true;
-                        break;
+                    }
+
+                    if (codec?.SupportsMP4Muxing != true)
+                    {
+                        guaranteedFullyCompatibleWithMP4Container = false;
                     }
 
                     if (Options.AudioReencodeBehavior != VideoReencodeBehavior.AvoidReencoding)
@@ -446,14 +519,31 @@ public sealed class VideoProcessor : FileProcessor
                         remuxRequired = true;
                     }
                 }
-                else if (stream is FFprobeUtils.UnrecognisedStreamInfo unrecognizedStream)
+                else if (stream is FFprobeUtils.SubtitleStreamInfo subtitleStream)
                 {
-                    bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnail;
-                    if (isThumbnail ? (Options.StripMetadata != StripVideoMetadataMode.None) : (Options.PreserveUnrecognizedStreams == false))
+                    if (!Options.TryPreserveUnrecognizedStreams)
                     {
                         remuxRequired = true;
                         remuxGuaranteedRequired = true;
-                        break;
+                    }
+                    else if (subtitleStream.CodecName != "mov_text") // The only subtitle codec compatible with mp4 container.
+                    {
+                        guaranteedFullyCompatibleWithMP4Container = false;
+                    }
+                }
+                else if (stream is FFprobeUtils.UnrecognisedStreamInfo unrecognizedStream)
+                {
+                    bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnail;
+                    if (isThumbnail
+                        ? (Options.StripMetadata is not (StripVideoMetadataMode.None or StripVideoMetadataMode.Preferred))
+                        : !Options.TryPreserveUnrecognizedStreams)
+                    {
+                        remuxRequired = true;
+                        remuxGuaranteedRequired = true;
+                    }
+                    else
+                    {
+                        guaranteedFullyCompatibleWithMP4Container = false;
                     }
                 }
             }
@@ -462,9 +552,85 @@ public sealed class VideoProcessor : FileProcessor
         // If remuxing is not required, we can just return the original file:
         if (!remuxRequired) return FileProcessResult.File(sourceFileWithCorrectExtension);
 
+        // We want to figure out which streams cannot be copied to the output container directly first - including unrecognised streams.
+        // We do this by attempting to copy the streams to the output container one at a time and check for errors - any streams that cause errors, we mark as
+        // requiring re-encoding or being uncopyable.
+        // We reserve 10% of the processing percent for this process.
+        // Note: we always run this step, since while ffmpeg reads mov and mp4 the same, mp4 does not support every single codec that mov does, unless we
+        // detected earlier that every stream we saw is compatible with the mp4 container.
+        bool[] isCompatibleStream = new bool[sourceInfo.Streams.Length];
+        if (guaranteedFullyCompatibleWithMP4Container)
+        {
+            isCompatibleStream.AsSpan().Fill(true);
+        }
+        else
+        {
+            const double StreamCompatibilityCheckProgressFraction = 0.10;
+            var tempMP4File = context.GetNewWorkFile(".mp4");
+            for (int i = 0; i < sourceInfo.Streams.Length; i++)
+            {
+                var stream = sourceInfo.Streams[i];
+
+                // Check if we already know this stream is compatible - if it is, we can skip the test and jump to reporting progress:
+                if (stream is FFprobeUtils.VideoStreamInfo videoStream)
+                {
+                    if (videoStream.CodecName is "mjpeg" or "png" ||
+                        MatchVideoCodecByName(Options.ResultVideoCodecs, videoStream.CodecName) is { SupportsMP4Muxing: true })
+                    {
+                        isCompatibleStream[i] = true;
+                        goto reportProgress;
+                    }
+                }
+                else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
+                {
+                    if (MatchAudioCodecByName(Options.ResultAudioCodecs, audioStream.CodecName, audioStream.ProfileName) is { SupportsMP4Muxing: true })
+                    {
+                        isCompatibleStream[i] = true;
+                        goto reportProgress;
+                    }
+                }
+                else if (stream is FFprobeUtils.SubtitleStreamInfo subtitleStream)
+                {
+                    if (subtitleStream.CodecName == "mov_text")
+                    {
+                        isCompatibleStream[i] = true;
+                        goto reportProgress;
+                    }
+                }
+
+                // Set up command to test copying this stream:
+                IEnumerable<string> testCommand =
+                [
+                    "-i", sourceFileWithCorrectExtension.PathExport,
+                    "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
+                    "-c", "copy",
+                    "-ignore_unknown", "-xerror", "-hide_banner", "-y",
+                    "-f", "mp4",
+                    tempMP4File.PathExport,
+                ];
+
+                // Run the test command:
+                var (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
+                    FFmpegExePath,
+                    testCommand,
+                    cancellationToken: context.CancellationToken)
+                .ConfigureAwait(false);
+                isCompatibleStream[i] = returnCode == 0;
+
+                // Report progress:
+                reportProgress:
+                Options.ProgressCallback?.Invoke(
+                    (context.FileId, context.VariantId),
+                    progressUsed + (StreamCompatibilityCheckProgressFraction * ((double)(i + 1) / (sourceInfo.Streams.Length + 2))));
+            }
+
+            tempMP4File.Delete();
+            progressUsed += StreamCompatibilityCheckProgressFraction;
+        }
+
         // Set up the main command:
 
-        bool preserveUnrecognizedStreams = Options.PreserveUnrecognizedStreams ?? (sourceFormat == Options.ResultFormats[0]);
+        bool preserveUnrecognizedStreams = Options.TryPreserveUnrecognizedStreams;
         List<FFmpegUtils.PerInputStreamOverride> perInputStreamOverrides = [];
         List<FFmpegUtils.PerOutputStreamOverride> perOutputStreamOverrides = [];
         int outputVideoStreamIndex = 0;
@@ -551,7 +717,8 @@ public sealed class VideoProcessor : FileProcessor
                 bool reencode =
                     isRequiredReencode ||
                     videoCodec is { SupportsMP4Muxing: false } ||
-                    Options.VideoReencodeBehavior != VideoReencodeBehavior.AvoidReencoding;
+                    Options.VideoReencodeBehavior != VideoReencodeBehavior.AvoidReencoding ||
+                    !isCompatibleStream[inputStreamIndex];
                 FFmpegUtils.PerStreamFilterOverride? filterOverride = null;
                 if (Options.ResizeOptions is { } resizeOptions &&
                     ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height)))
@@ -813,7 +980,8 @@ public sealed class VideoProcessor : FileProcessor
                 bool reencode =
                     isRequiredReencode ||
                     audioCodec is { SupportsMP4Muxing: false } ||
-                    Options.AudioReencodeBehavior != VideoReencodeBehavior.AvoidReencoding;
+                    Options.AudioReencodeBehavior != VideoReencodeBehavior.AvoidReencoding ||
+                    !isCompatibleStream[inputStreamIndex];
                 int? targetChannels = GetAudioChannelCount(Options.MaxChannels);
                 int numChannels = audioStream.Channels;
                 if (targetChannels.HasValue && audioStream.Channels > targetChannels.Value)
@@ -877,6 +1045,48 @@ public sealed class VideoProcessor : FileProcessor
                     Debug.Fail("The requested audio codec did not have a supported encoder available in the configured FFmpeg build (unexpected).");
                 }
             }
+            else if (stream is FFprobeUtils.SubtitleStreamInfo subtitleStream)
+            {
+                // If we're not preserving unrecognized streams, skip it (we already marked as excluded by default):
+                if (!preserveUnrecognizedStreams)
+                {
+                    continue;
+                }
+
+                // Map the stream:
+                int id = outputStreamIndex;
+                outputStreamIndex++;
+                bool mapMetadata = Options.StripMetadata is not (StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred);
+                streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
+
+                // Specify whether we want to map the metadata:
+                perInputStreamOverrides.Add(
+                    new FFmpegUtils.PerStreamMapMetadataOverride(
+                        fileIndex: mapMetadata ? 0 : -1,
+                        streamKind: '\0',
+                        streamIndexWithinKind: inputStreamIndex,
+                        outputIndex: id));
+
+                // Specify our codec:
+                perOutputStreamOverrides.Add(
+                    new FFmpegUtils.PerStreamCodecOverride(
+                        streamKind: '\0',
+                        streamIndexWithinKind: id,
+                        codec: isCompatibleStream[inputStreamIndex] ? "copy" : "mov_text"));
+
+                // If we're not copying metadata, we want to manually add the metadata we want to preserve back in after normalizing it:
+                if (!mapMetadata)
+                {
+                    perOutputStreamOverrides.Add(
+                        new FFmpegUtils.PerStreamMetadataOverride(
+                            streamKind: '\0',
+                            streamIndexWithinKind: id)
+                        {
+                            TitleOrHandlerName = NormalizeTitleOrHandlerName(subtitleStream.TitleOrHandlerName),
+                            Language = IsValidLanguage(subtitleStream.Language) ? subtitleStream.Language : null,
+                        });
+                }
+            }
             else if (stream is FFprobeUtils.UnrecognisedStreamInfo unrecognizedStream)
             {
                 // Handle thumbnail streams:
@@ -889,9 +1099,9 @@ public sealed class VideoProcessor : FileProcessor
                             fileIndex: 0,
                             streamKind: '\0',
                             streamIndexWithinKind: inputStreamIndex,
-                            mapToOutput: Options.StripMetadata == StripVideoMetadataMode.None));
+                            mapToOutput: Options.StripMetadata == StripVideoMetadataMode.None && isCompatibleStream[inputStreamIndex]));
 
-                    if (Options.StripMetadata == StripVideoMetadataMode.None)
+                    if (Options.StripMetadata == StripVideoMetadataMode.None && isCompatibleStream[inputStreamIndex])
                     {
                         outputStreamIndex++;
                         streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: true));
@@ -902,6 +1112,11 @@ public sealed class VideoProcessor : FileProcessor
                                 streamKind: '\0',
                                 streamIndexWithinKind: inputStreamIndex,
                                 outputIndex: id));
+
+                        perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(
+                            streamKind: '\0',
+                            streamIndexWithinKind: inputStreamIndex,
+                            codec: "copy"));
                     }
 
                     continue;
@@ -913,10 +1128,24 @@ public sealed class VideoProcessor : FileProcessor
                     continue;
                 }
 
+                // If the unrecognized stream is not compatible with the MP4 container, we cannot preserve it:
+                if (!isCompatibleStream[inputStreamIndex])
+                {
+                    perInputStreamOverrides.Add(
+                        new FFmpegUtils.PerStreamMapOverride(
+                            fileIndex: 0,
+                            streamKind: '\0',
+                            streamIndexWithinKind: inputStreamIndex,
+                            mapToOutput: false));
+
+                    continue;
+                }
+
                 // Map the stream:
                 outputStreamIndex++;
                 bool mapMetadata = Options.StripMetadata is not (StripVideoMetadataMode.Required or StripVideoMetadataMode.Preferred);
                 streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
+                perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: inputStreamIndex, codec: "copy"));
 
                 // Specify whether we want to map the metadata:
                 perInputStreamOverrides.Add(
@@ -940,28 +1169,16 @@ public sealed class VideoProcessor : FileProcessor
         // Run the command
         // Note: The last 5% of progress is reserved for the "checking if smaller" pass & since the progress reported is the highest timestamp completed of any
         // stream, so we want to leave some headroom.
-        // Note: we compare duration to 0.0, as that's the value meaning "unknown".
-        double maxDuration = ((IEnumerable<double>)[
-            0.0,
-            sourceInfo.Duration ?? 0.0,
-            .. sourceInfo.Streams
-                .OfType<FFprobeUtils.VideoStreamInfo>()
-                .Where((x) => !x.IsAttachedPic && !x.IsTimedThumbnail)
-                .Select((x) => x.Duration ?? 0.0),
-            .. sourceInfo.Streams
-                .OfType<FFprobeUtils.AudioStreamInfo>()
-                .Select((x) => x.Duration ?? 0.0),
-        ]).Max();
-        var progressTempFile = (Options.ProgressCallback != null && maxDuration != 0.0) ? context.GetNewWorkFile(".mp4") : null;
-        double lastDone = 0.0;
+        if (Options.ProgressCallback != null && maxDuration != 0.0) progressTempFile ??= context.GetNewWorkFile(".txt");
+        lastDone = 0.0;
         const double ReservedProgress = 0.05;
         Action<double>? localProgressCallback = progressTempFile != null ? (durationDone) =>
         {
             // Avoid going backwards or repeating the same progress:
             if (durationDone <= lastDone || durationDone < 0.0 || durationDone > maxDuration) return;
 
-            // Clamp to [0.0, 0.95] range:
-            double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgress), 0.0, 1.0 - ReservedProgress);
+            // Clamp / adjust to [progressUsed, 0.95] range:
+            double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed), progressUsed, 1.0 - ReservedProgress);
             lastDone = durationDone;
             Options.ProgressCallback!((context.FileId, context.VariantId), clampedProgress);
         } : null;
@@ -1311,4 +1528,66 @@ public sealed class VideoProcessor : FileProcessor
             "yuv440p12le" => (12, true, false, false, 440),
             _ => null,
         };
+
+    private static bool IsValidLanguage(string? language)
+    {
+        // Currently we just check for potentially valid 3-letter lowercase code, rather than checking against the precise ISO 639-2/T list:
+        if (language is not { Length: 3 }) return false;
+        return !language.AsSpan().ContainsAnyExceptInRange('a', 'z');
+    }
+
+    private static readonly SearchValues<char> _invalidTitleCharsAndSurrogages = SearchValues.Create([
+        .. Enumerable.Range(0, 32).Select((x) => (char)x),
+        .. Enumerable.Range(0xD800, 0x0800).Select((x) => (char)x)
+    ]);
+
+    private static string? NormalizeTitleOrHandlerName(string? value)
+    {
+        // Remove any null or control characters, limit length to 24 characters, trim whitespace, and remove any unpaired surrogates:
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        Span<char> buffer = stackalloc char[24];
+        var sp = value.AsSpan().Trim();
+        int length = 0;
+        int offset = 0;
+        while (offset < sp.Length && length < buffer.Length)
+        {
+            int nextInteresting = sp[offset..].IndexOfAny(_invalidTitleCharsAndSurrogages);
+            if (nextInteresting == -1) nextInteresting = sp.Length - offset;
+            if (nextInteresting + length > buffer.Length) nextInteresting = buffer.Length - length;
+            sp.Slice(offset, nextInteresting).CopyTo(buffer.Slice(length, nextInteresting));
+            length += nextInteresting;
+            offset += nextInteresting;
+
+            // Handle the interesting characters specially:
+            if (nextInteresting == 0)
+            {
+                if (sp[offset] < 0x20)
+                {
+                    // Control character - skip it:
+                    offset++;
+                }
+                else if (sp[offset] >= 0xD800 && sp[offset] <= 0xDFFF)
+                {
+                    // Check if paired:
+                    if (sp is [>= (char)0xD800 and <= (char)0xDBFF, >= (char)0xDC00 and <= (char)0xDFFF, ..])
+                    {
+                        // Paired surrogate - keep both if enough space:
+                        if (length + 2 > buffer.Length) break;
+                        sp.Slice(offset, 2).CopyTo(buffer.Slice(length, 2));
+                        length += 2;
+                        offset += 2;
+                    }
+                    else
+                    {
+                        // Unpaired surrogate - skip it:
+                        offset++;
+                    }
+                }
+            }
+        }
+
+        // Return the result (and re-use the original string if possible), or null if nothing valid:
+        if (buffer[..length].SequenceEqual(value)) return value;
+        else return length > 0 ? buffer[..length].ToString() : null;
+    }
 }

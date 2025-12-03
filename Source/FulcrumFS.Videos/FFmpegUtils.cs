@@ -47,7 +47,7 @@ internal static class FFmpegUtils
         protected abstract string CommandName { get; }
         protected abstract string CommandArgument { get; }
 
-        public void PrepareArguments(List<string> args)
+        public virtual void PrepareArguments(List<string> args)
         {
             Validate();
 
@@ -225,6 +225,39 @@ internal static class FFmpegUtils
         protected override string CommandArgument => ColorSpace;
     }
 
+    // For now we only support setting metadata by overall index to a stream, as we only need that currently.
+    public sealed class PerStreamMetadataOverride(char streamKind, int streamIndexWithinKind)
+        : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
+    {
+        public string? Language { get; set; }
+        public string? TitleOrHandlerName { get; set; }
+        protected override string CommandName => string.Empty;
+        protected override string CommandArgument => string.Empty;
+
+        public override void PrepareArguments(List<string> args)
+        {
+            if (StreamKind != '\0' || StreamIndexWithinKind < 0)
+            {
+                throw new InvalidOperationException("PerStreamMetadataOverride currently only supports setting metadata by overall index to a stream.");
+            }
+
+            if (Language is not null)
+            {
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"-metadata:s:{StreamIndexWithinKind}"));
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"language={Language}"));
+            }
+
+            if (TitleOrHandlerName is not null)
+            {
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"-metadata:s:{StreamIndexWithinKind}"));
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"title={TitleOrHandlerName}"));
+
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"-metadata:s:{StreamIndexWithinKind}"));
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"handler_name={TitleOrHandlerName}"));
+            }
+        }
+    }
+
     // For streamIndexWithinKind, if set to -1, applies to all streams of that kind in the file.
     // Additionally, if streamKind is set to '\0', applies to all streams in the file.
     // Note: if you have streamKind set to '\0' while streamIndexWithinKind is not -1, then it means the index in the file overall.
@@ -398,6 +431,30 @@ internal static class FFmpegUtils
         CancellationToken cancellationToken = default)
     {
         // Validate progress callback and progress temp file path args:
+        // Note: RunRawFFmpegCommandAsync also checks this, but we do it here also to fail fast before running CreateArguments.
+        if (progressCallback is null != progressFilePath is null)
+        {
+            throw new ArgumentException("If a progress callback or progress file path is provided, both must be provided and non-null.");
+        }
+
+        // Run actual ffmpeg command:
+        await RunRawFFmpegCommandAsync(
+            CreateArguments(command, progressFilePath?.PathExport),
+            progressCallback,
+            progressFilePath,
+            ensureAllProgressRead: false,
+            cancellationToken: cancellationToken)
+        .ConfigureAwait(false);
+    }
+
+    public static async Task RunRawFFmpegCommandAsync(
+        IEnumerable<string> args,
+        Action<double>? progressCallback,
+        IAbsoluteFilePath? progressFilePath,
+        bool ensureAllProgressRead,
+        CancellationToken cancellationToken = default)
+    {
+        // Validate progress callback and progress temp file path args:
         if (progressCallback is null != progressFilePath is null)
         {
             throw new ArgumentException("If a progress callback or progress file path is provided, both must be provided and non-null.");
@@ -406,7 +463,6 @@ internal static class FFmpegUtils
         // Set up progress callback reading if needed:
         using var progressCallbackCts = new CancellationTokenSource();
         var progressCallbackCt = progressCallbackCts.Token;
-        var args = CreateArguments(command, progressFilePath?.PathExport);
         progressFilePath?.Delete();
         FileStream? fs = progressFilePath?.OpenAsyncStream(FileMode.CreateNew, FileAccess.Read, FileShare.ReadWrite);
         try
@@ -417,47 +473,78 @@ internal static class FFmpegUtils
                 byte[] buffer = new byte[32];
                 int bytesRead;
                 bool justRead = false;
-                while (!progressCallbackCt.IsCancellationRequested)
+                for (int i = 0; i < (ensureAllProgressRead ? 2 : 1); i++) // This loop is for ensuring we read all progress (even post-exit) if requested.
                 {
-                    while ((bytesRead = await fs.ReadAsync(buffer, progressCallbackCt).ConfigureAwait(false)) > 0)
+                    do
                     {
-                        justRead = true;
-                        int beginIdx = 0;
-                        while (true)
+                        while ((bytesRead = await fs.ReadAsync(buffer, ensureAllProgressRead ? default : progressCallbackCt).ConfigureAwait(false)) > 0)
                         {
-                            int eolIdx = buffer.AsSpan()[beginIdx..bytesRead].IndexOf((byte)'\n');
-                            if (eolIdx >= 0)
+                            justRead = true;
+                            int beginIdx = 0;
+                            while (true)
                             {
-                                lineBuffer.AddRange(buffer.AsSpan().Slice(beginIdx, eolIdx));
-                                beginIdx = beginIdx + eolIdx + 1;
-
-                                // Check if line begins with out_time_us=, and send the seconds to the progress callback if so.
-                                ReadOnlySpan<byte> lineSpan = CollectionsMarshal.AsSpan(lineBuffer);
-                                if (lineSpan is [.., (byte)'\r']) lineSpan = lineSpan[..^1];
-                                if (lineSpan.StartsWith("out_time_us="u8))
+                                int eolIdx = buffer.AsSpan()[beginIdx..bytesRead].IndexOf((byte)'\n');
+                                if (eolIdx >= 0)
                                 {
-                                    ReadOnlySpan<byte> timeSpan = lineSpan["out_time_us="u8.Length..];
-                                    if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
-                                    {
-                                        double progress = outTimeUs / 1_000_000.0;
-                                        progressCallback?.Invoke(progress);
-                                    }
-                                }
+                                    lineBuffer.AddRange(buffer.AsSpan().Slice(beginIdx, eolIdx));
+                                    beginIdx = beginIdx + eolIdx + 1;
 
-                                lineBuffer.Clear();
+                                    // Check if line begins with out_time_us=, and send the seconds to the progress callback if so.
+                                    ReadOnlySpan<byte> lineSpan = CollectionsMarshal.AsSpan(lineBuffer);
+                                    if (lineSpan is [.., (byte)'\r']) lineSpan = lineSpan[..^1];
+                                    if (lineSpan.StartsWith("out_time_us="u8))
+                                    {
+                                        ReadOnlySpan<byte> timeSpan = lineSpan["out_time_us="u8.Length..];
+                                        if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
+                                        {
+                                            double progress = outTimeUs / 1_000_000.0;
+                                            progressCallback?.Invoke(progress);
+                                        }
+                                    }
+
+                                    lineBuffer.Clear();
+                                }
+                                else
+                                {
+                                    lineBuffer.AddRange(buffer.AsSpan()[beginIdx..bytesRead]);
+                                    break;
+                                }
                             }
-                            else
+                        }
+
+                        if (i != 0)
+                        {
+                            // If we're in the second iteration (ensuring all progress read), we don't want to wait as there won't be any more.
+                            break;
+                        }
+                        else if (justRead)
+                        {
+                            // If we just read something, yield to allow more data to be written, but don't delay.
+                            await Task.Yield();
+                        }
+                        else if (ensureAllProgressRead)
+                        {
+                            // If we're wanting to ensure all progress is read, we need to ensure we don't get a OperationCanceledException, as that would stop
+                            // the outer loop from being able to run its second iteration.
+                            try
                             {
-                                lineBuffer.AddRange(buffer.AsSpan()[beginIdx..bytesRead]);
+                                await Task.Delay(5, progressCallbackCt).ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                // Break out of the loop, as we're ready to do the i = 1 loop to finish reading the file & exit.
                                 break;
                             }
                         }
+                        else
+                        {
+                            // If we didn't read anything twice in a row, wait a bit before trying again.
+                            await Task.Delay(5, progressCallbackCt).ConfigureAwait(false);
+                        }
                     }
-
-                    if (justRead) await Task.Yield();
-                    else await Task.Delay(5, progressCallbackCt).ConfigureAwait(false);
+                    while (!progressCallbackCt.IsCancellationRequested);
                 }
-            }, progressCallbackCt) : null;
+            }, ensureAllProgressRead ? default : progressCallbackCt) : null;
 
             // Run ffmpeg:
             try
