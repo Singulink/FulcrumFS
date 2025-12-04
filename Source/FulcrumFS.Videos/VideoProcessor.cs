@@ -419,16 +419,15 @@ public sealed class VideoProcessor : FileProcessor
         {
             // Run the validation pass:
             const double ValidateProgressFraction = 0.20;
-            progressUsed = ValidateProgressFraction;
             Action<double> validateProgressCallback = progressTempFile is not null ? (durationDone) =>
             {
                 // Avoid going backwards or repeating the same progress:
                 if (durationDone <= lastDone || durationDone < 0.0 || durationDone > maxDuration) return;
 
                 // Clamp / adjust to [0.0, 0.20] range:
-                double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ValidateProgressFraction), 0.0, ValidateProgressFraction);
+                double clampedProgress = double.Clamp(durationDone / maxDuration * ValidateProgressFraction, 0.0, ValidateProgressFraction);
                 lastDone = durationDone;
-                Options.ProgressCallback!((context.FileId, context.VariantId), clampedProgress);
+                Options.ProgressCallback!((context.FileId, context.VariantId), progressUsed + clampedProgress);
             } : null;
             await FFmpegUtils.RunRawFFmpegCommandAsync(
                 ["-i", sourceFileWithCorrectExtension.PathExport, "-ignore_unknown", "-xerror", "-hide_banner", "-f", "null", "-"],
@@ -437,6 +436,7 @@ public sealed class VideoProcessor : FileProcessor
                 ensureAllProgressRead: true,
                 cancellationToken: context.CancellationToken)
             .ConfigureAwait(false);
+            progressUsed += ValidateProgressFraction;
 
             // Check if duration is longer than max video or audio duration (if specified):
             double? maxVideoLength = Options.VideoSourceValidation.MaxLength?.TotalSeconds;
@@ -540,7 +540,7 @@ public sealed class VideoProcessor : FileProcessor
                         guaranteedFullyCompatibleWithMP4Container = false;
                     }
                 }
-                else if (stream is FFprobeUtils.UnrecognisedStreamInfo unrecognizedStream)
+                else if (stream is FFprobeUtils.UnrecognizedStreamInfo unrecognizedStream)
                 {
                     bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnail;
                     if (isThumbnail
@@ -607,7 +607,7 @@ public sealed class VideoProcessor : FileProcessor
                         goto reportProgress;
                     }
                 }
-                else if (stream is FFprobeUtils.UnrecognisedStreamInfo)
+                else if (stream is FFprobeUtils.UnrecognizedStreamInfo)
                 {
                     if (!Options.TryPreserveUnrecognizedStreams)
                     {
@@ -1119,7 +1119,7 @@ public sealed class VideoProcessor : FileProcessor
                 // Final part of mapping the stream:
                 streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata, MetadataOverrides: metadataOverrides));
             }
-            else if (stream is FFprobeUtils.UnrecognisedStreamInfo unrecognizedStream)
+            else if (stream is FFprobeUtils.UnrecognizedStreamInfo unrecognizedStream)
             {
                 // Handle thumbnail streams:
                 bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnail;
@@ -1210,7 +1210,7 @@ public sealed class VideoProcessor : FileProcessor
             if (durationDone <= lastDone || durationDone < 0.0 || durationDone > maxDuration) return;
 
             // Clamp / adjust to [progressUsed, 0.95] range:
-            double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed), progressUsed, 1.0 - ReservedProgress);
+            double clampedProgress = double.Clamp(progressUsed + (durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed)), progressUsed, 1.0 - ReservedProgress);
             lastDone = durationDone;
             Options.ProgressCallback!((context.FileId, context.VariantId), clampedProgress);
         } : null;

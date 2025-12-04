@@ -76,7 +76,7 @@ internal static class FFprobeUtils
         public string? TitleOrHandlerName { get; } = titleOrHandlerName;
     }
 
-    public sealed class UnrecognisedStreamInfo(string codecType, char streamShorthand, bool isAttachedPic, bool isTimedThumbnail) : StreamInfo
+    public sealed class UnrecognizedStreamInfo(string codecType, char streamShorthand, bool isAttachedPic, bool isTimedThumbnail) : StreamInfo
     {
         public string CodecType { get; } = codecType;
         public char StreamShorthand { get; } = streamShorthand;
@@ -211,7 +211,7 @@ internal static class FFprobeUtils
                         "attachment" => 't',
                         _ => '\0',
                     };
-                    builder.Add(new UnrecognisedStreamInfo(codecType!, codecChar, attachedPicValue != 0, timedThumbnailValue != 0));
+                    builder.Add(new UnrecognizedStreamInfo(codecType!, codecChar, attachedPicValue != 0, timedThumbnailValue != 0));
                     break;
             }
         }
