@@ -20,7 +20,8 @@ public sealed class EquatableArray<T>(ImmutableArray<T> array) : IReadOnlyList<T
     private T[] _array = array == default ? [] : ImmutableCollectionsMarshal.AsArray(array)!;
 
     // Helper to store our (approximate) creation index for de-duplicating wisely:
-    private static int _staticCreateIndex = 0;
+    // Note: this is not thread-safe, but that's okay - it's just an approximation to help with de-duplication preferring older instances.
+    private static int _staticCreateIndex;
     private int _createIndex = _staticCreateIndex++;
 
     /// <summary>

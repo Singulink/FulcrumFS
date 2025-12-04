@@ -672,8 +672,8 @@ public sealed class VideoProcessor : FileProcessor
                 streamIndexWithinKind: -1,
                 outputIndex: -1));
 
-        List<(int InputIndex, int OutputIndex, string SourceValidFileExtension, bool SupportsMP4Container, char Kind)> streamsToCheckSize = [];
-        List<(char Kind, int InputIndex, int OutputIndex, bool MapMetadata)> streamMapping = [];
+        List<(int InputIndex, int OutputIndex, string SourceValidFileExtension, bool RequiresReencodeForMP4, char Kind)> streamsToCheckSize = [];
+        List<(char Kind, int InputIndex, int OutputIndex, bool MapMetadata, FFmpegUtils.PerStreamMetadataOverride? MetadataOverrides)> streamMapping = [];
         foreach (var stream in sourceInfo.Streams)
         {
             inputStreamIndex++;
@@ -697,7 +697,7 @@ public sealed class VideoProcessor : FileProcessor
                     {
                         outputVideoStreamIndex++;
                         outputStreamIndex++;
-                        streamMapping.Add((Kind: 'v', InputIndex: inputVideoStreamIndex, OutputIndex: id, MapMetadata: true));
+                        streamMapping.Add((Kind: 'v', InputIndex: inputVideoStreamIndex, OutputIndex: id, MapMetadata: true, MetadataOverrides: null));
 
                         perInputStreamOverrides.Add(
                             new FFmpegUtils.PerStreamMapMetadataOverride(
@@ -714,7 +714,7 @@ public sealed class VideoProcessor : FileProcessor
                 outputVideoStreamIndex++;
                 outputStreamIndex++;
                 bool mapMetadata = Options.MetadataStrippingMode is not (VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred);
-                streamMapping.Add((Kind: 'v', InputIndex: inputVideoStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
+                streamMapping.Add((Kind: 'v', InputIndex: inputVideoStreamIndex, OutputIndex: id, MapMetadata: mapMetadata, MetadataOverrides: null));
                 if (!preserveUnrecognizedStreams)
                 {
                     perInputStreamOverrides.Add(
@@ -912,7 +912,7 @@ public sealed class VideoProcessor : FileProcessor
                         InputIndex: inputVideoStreamIndex,
                         OutputIndex: id,
                         SourceValidFileExtension: codec.WritableFileExtension,
-                        SupportsMP4Container: codec.SupportsMP4Muxing,
+                        RequiresReencodeForMP4: !isCompatibleStream[inputStreamIndex] || !codec.SupportsMP4Muxing,
                         Kind: 'v'));
                 }
 
@@ -988,7 +988,7 @@ public sealed class VideoProcessor : FileProcessor
                 outputAudioStreamIndex++;
                 outputStreamIndex++;
                 bool mapMetadata = Options.MetadataStrippingMode is not (VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred);
-                streamMapping.Add((Kind: 'a', InputIndex: inputAudioStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
+                streamMapping.Add((Kind: 'a', InputIndex: inputAudioStreamIndex, OutputIndex: id, MapMetadata: mapMetadata, MetadataOverrides: null));
                 if (!preserveUnrecognizedStreams)
                 {
                     perInputStreamOverrides.Add(
@@ -1041,7 +1041,7 @@ public sealed class VideoProcessor : FileProcessor
                         InputIndex: inputAudioStreamIndex,
                         OutputIndex: id,
                         SourceValidFileExtension: codec.WritableFileExtension,
-                        SupportsMP4Container: codec.SupportsMP4Muxing,
+                        RequiresReencodeForMP4: !isCompatibleStream[inputStreamIndex] || !codec.SupportsMP4Muxing,
                         Kind: 'a'));
                 }
 
@@ -1086,7 +1086,6 @@ public sealed class VideoProcessor : FileProcessor
                 int id = outputStreamIndex;
                 outputStreamIndex++;
                 bool mapMetadata = Options.MetadataStrippingMode is not (VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred);
-                streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
 
                 // Specify whether we want to map the metadata:
                 perInputStreamOverrides.Add(
@@ -1104,17 +1103,21 @@ public sealed class VideoProcessor : FileProcessor
                         codec: isCompatibleStream[inputStreamIndex] ? "copy" : "mov_text"));
 
                 // If we're not copying metadata, we want to manually add the metadata we want to preserve back in after normalizing it:
+                FFmpegUtils.PerStreamMetadataOverride? metadataOverrides = null;
                 if (!mapMetadata)
                 {
-                    perOutputStreamOverrides.Add(
-                        new FFmpegUtils.PerStreamMetadataOverride(
-                            streamKind: '\0',
-                            streamIndexWithinKind: id)
-                        {
-                            TitleOrHandlerName = NormalizeTitleOrHandlerName(subtitleStream.TitleOrHandlerName),
-                            Language = IsValidLanguage(subtitleStream.Language) ? subtitleStream.Language : null,
-                        });
+                    metadataOverrides = new FFmpegUtils.PerStreamMetadataOverride(
+                        streamKind: '\0',
+                        streamIndexWithinKind: id)
+                    {
+                        TitleOrHandlerName = NormalizeTitleOrHandlerName(subtitleStream.TitleOrHandlerName),
+                        Language = IsValidLanguage(subtitleStream.Language) ? subtitleStream.Language : null,
+                    };
+                    perOutputStreamOverrides.Add(metadataOverrides);
                 }
+
+                // Final part of mapping the stream:
+                streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata, MetadataOverrides: metadataOverrides));
             }
             else if (stream is FFprobeUtils.UnrecognisedStreamInfo unrecognizedStream)
             {
@@ -1133,7 +1136,7 @@ public sealed class VideoProcessor : FileProcessor
                     if (Options.MetadataStrippingMode == VideoMetadataStrippingMode.None && isCompatibleStream[inputStreamIndex])
                     {
                         outputStreamIndex++;
-                        streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: true));
+                        streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: true, MetadataOverrides: null));
 
                         perInputStreamOverrides.Add(
                             new FFmpegUtils.PerStreamMapMetadataOverride(
@@ -1173,7 +1176,7 @@ public sealed class VideoProcessor : FileProcessor
                 // Map the stream:
                 outputStreamIndex++;
                 bool mapMetadata = Options.MetadataStrippingMode is not (VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred);
-                streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata));
+                streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata, MetadataOverrides: null));
                 perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: inputStreamIndex, codec: "copy"));
 
                 // Specify whether we want to map the metadata:
@@ -1222,7 +1225,7 @@ public sealed class VideoProcessor : FileProcessor
             var fromOriginalTempFileMp4 = context.GetNewWorkFile(".mp4");
             for (int i = 0; i < streamsToCheckSize.Count; i++)
             {
-                (int InputIndex, int OutputIndex, string SourceValidFileExtension, bool SupportsMP4Container, char Kind) streamToCheck = streamsToCheckSize[i];
+                var streamToCheck = streamsToCheckSize[i];
 
                 // We approximate the size of the stream by using the copy codec for the 1 stream on the original file vs output file, and seeing how big that
                 // output is:
@@ -1305,7 +1308,7 @@ public sealed class VideoProcessor : FileProcessor
                 // Add to applicable lists:
                 if (originalApproxSize < reencodedApproxSize)
                 {
-                    wasSmaller.Add((i, !streamToCheck.SupportsMP4Container));
+                    wasSmaller.Add((i, streamToCheck.RequiresReencodeForMP4));
                 }
 
                 // We use half of our headroom for this first pass, so update progress:
@@ -1337,16 +1340,35 @@ public sealed class VideoProcessor : FileProcessor
                 int wasSmallerIdx = 0;
                 var nextWasSmaller = (Value: streamsToCheckSize[wasSmaller[0].Index], wasSmaller[0].NeedsReencode);
                 perInputStreamOverrides.Add(
-                    new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: '\0', streamIndexWithinKind: -1, mapToOutput: false));
+                    new FFmpegUtils.PerStreamMapOverride(
+                        fileIndex: 0,
+                        streamKind: '\0',
+                        streamIndexWithinKind: -1,
+                        mapToOutput: false));
                 perInputStreamOverrides.Add(
-                    new FFmpegUtils.PerStreamMapOverride(fileIndex: 1, streamKind: '\0', streamIndexWithinKind: -1, mapToOutput: false));
-                foreach (var (kind, inputIndex, outputIndex, mapMetadata) in streamMapping)
+                    new FFmpegUtils.PerStreamMapOverride(
+                        fileIndex: 1,
+                        streamKind: '\0',
+                        streamIndexWithinKind: -1,
+                        mapToOutput: false));
+                perOutputStreamOverrides.Add(
+                    new FFmpegUtils.PerStreamCodecOverride(
+                        streamKind: '\0',
+                        streamIndexWithinKind: -1,
+                        codec: "copy"));
+                perInputStreamOverrides.Add(
+                    new FFmpegUtils.PerStreamMapMetadataOverride(
+                        fileIndex: Options.MetadataStrippingMode is VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred ? -1 : 0,
+                        streamKind: 'g',
+                        streamIndexWithinKind: -1,
+                        outputIndex: -1));
+                foreach (var (kind, inputIndex, outputIndex, mapMetadata, metadataOverrides) in streamMapping)
                 {
                     // Determine if we are using the original or re-encoded stream:
                     bool useOriginal = false;
                     if (nextWasSmaller.Value.InputIndex == inputIndex && nextWasSmaller.Value.Kind == kind)
                     {
-                        useOriginal = true;
+                        useOriginal = !nextWasSmaller.NeedsReencode;
                         wasSmallerIdx++;
                         if (wasSmallerIdx < wasSmaller.Count)
                         {
@@ -1378,6 +1400,14 @@ public sealed class VideoProcessor : FileProcessor
                             streamKind: kind,
                             streamIndexWithinKind: inputIndex,
                             outputIndex: outputIndex));
+
+                    // If we have metadata overrides, apply them now:
+                    if (metadataOverrides != null)
+                    {
+                        // Note: the index is the same here, since we're applying to the output stream index, and selecting the same set of streams;
+                        // if this were not the case, we would need to re-create the metadata overrides.
+                        perOutputStreamOverrides.Add(metadataOverrides);
+                    }
                 }
 
                 FFmpegUtils.FFmpegCommand mixCommand = new(

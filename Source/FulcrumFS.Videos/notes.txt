@@ -1,4 +1,4 @@
-TODO: need to validate that adding [field: AllowNull] is enough to satisfy Signulink's RuntimeNullable lib - one alternative could be to instead mark as nullable but add [DisallowNull] and [NotNull]; or to also add [MaybeNull] to the field
+TODO: need to validate that adding [field: AllowNull] is enough to satisfy Singulink's RuntimeNullable lib - one alternative could be to instead mark as nullable but add [DisallowNull] and [NotNull]; or to also add [MaybeNull] to the field
 
 Progress reporting:
 - Ensure we test that ffmpeg doesn't delete my temp file & re-create it on Windows when printing output into it, but rather is able to just append into it immediately
