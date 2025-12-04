@@ -8,7 +8,6 @@ namespace FulcrumFS.Videos;
 
 /// <summary>
 /// Represents options for configuring <see cref="VideoProcessor" />'s video file processing.
-/// <see langword="record" />.
 /// </summary>
 public sealed record VideoProcessingOptions
 {
