@@ -6,9 +6,9 @@ namespace FulcrumFS.Videos;
 public enum VideoCompressionLevel
 {
     /// <summary>
-    /// Worst compression level, resulting in the largest file size but fastest encoding.
+    /// Lowest compression level, resulting in the largest file size but fastest encoding.
     /// </summary>
-    Worst,
+    Lowest,
 
     /// <summary>
     /// Low compression level, resulting in a larger file size but faster encoding.
@@ -26,7 +26,7 @@ public enum VideoCompressionLevel
     High,
 
     /// <summary>
-    /// Best compression level, resulting in the smallest file size but slowest encoding.
+    /// Highest compression level, resulting in the smallest file size but slowest encoding.
     /// </summary>
-    Best,
+    Highest,
 }

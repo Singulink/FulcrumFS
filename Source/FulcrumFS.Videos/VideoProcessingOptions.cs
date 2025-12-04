@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
+using System.Collections.Immutable;
+using FulcrumFS.Internals;
 using Singulink.Enums;
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
@@ -7,37 +7,31 @@ using Singulink.Enums;
 namespace FulcrumFS.Videos;
 
 /// <summary>
-/// Represents options for configuring <see cref="VideoProcessor" /> - note: instances are compared by reference equality, despite being a
+/// Represents options for configuring <see cref="VideoProcessor" />'s video file processing.
 /// <see langword="record" />.
 /// </summary>
-public sealed record VideoProcessorOptions
+public sealed record VideoProcessingOptions
 {
-    /// <inheritdoc cref="IEquatable{T}.Equals" />
-    public bool Equals([NotNullWhen(true)] VideoProcessorOptions? other) => (object)this == other;
-
-    /// <inheritdoc />
-    public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
-
     // Private constructor for our pre-defined configs.
-    private VideoProcessorOptions()
+    private VideoProcessingOptions()
     {
     }
 
     /// <summary>
-    /// Gets a predefined instance of <see cref="VideoProcessorOptions"/> that always re-encodes to standardized H.264 video stream/s (60fps max, 8 bits per
+    /// Gets a predefined instance of <see cref="VideoProcessingOptions"/> that always re-encodes to standardized H.264 video stream/s (60fps max, 8 bits per
     /// channel, 4:2:0 chroma subsampling, and SDR) and standardized AAC audio stream/s (48kHz max, stereo max) in an MP4 container, while attempting to
     /// preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.
     /// </summary>
-    public static VideoProcessorOptions StandardizedH264AACMP4 { get; } = new VideoProcessorOptions()
+    public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
         ResultVideoCodecs = [VideoCodec.H264],
         ResultAudioCodecs = [AudioCodec.AAC],
         ResultFormats = [MediaContainerFormat.MP4],
         ForceProgressiveDownload = true,
         TryPreserveUnrecognizedStreams = false,
-        StripMetadata = StripVideoMetadataMode.ThumbnailOnly,
-        VideoReencodeBehavior = VideoReencodeBehavior.Always,
-        AudioReencodeBehavior = VideoReencodeBehavior.Always,
+        MetadataStrippingMode = VideoMetadataStrippingMode.ThumbnailOnly,
+        VideoReencodeMode = StreamReencodeMode.Always,
+        AudioReencodeMode = StreamReencodeMode.Always,
         MaximumBitsPerChannel = BitsPerChannel.Bits8,
         MaximumChromaSubsampling = ChromaSubsampling.Subsampling420,
         FpsOptions = new(VideoFpsMode.LimitByIntegerDivision, 60),
@@ -47,18 +41,18 @@ public sealed record VideoProcessorOptions
     };
 
     /// <summary>
-    /// Gets a predefined instance of <see cref="VideoProcessorOptions"/> that always preserves the original streams and file when possible.
+    /// Gets a predefined instance of <see cref="VideoProcessingOptions"/> that always preserves the original streams and file when possible.
     /// </summary>
-    public static VideoProcessorOptions Preserve { get; } = new VideoProcessorOptions()
+    public static VideoProcessingOptions Preserve { get; } = new VideoProcessingOptions()
     {
         ResultVideoCodecs = VideoCodec.AllSourceCodecs,
         ResultAudioCodecs = AudioCodec.AllSourceCodecs,
         ResultFormats = MediaContainerFormat.AllSourceFormats,
         ForceProgressiveDownload = false,
         TryPreserveUnrecognizedStreams = true,
-        StripMetadata = StripVideoMetadataMode.ThumbnailOnly,
-        VideoReencodeBehavior = VideoReencodeBehavior.AvoidReencoding,
-        AudioReencodeBehavior = VideoReencodeBehavior.AvoidReencoding,
+        MetadataStrippingMode = VideoMetadataStrippingMode.ThumbnailOnly,
+        VideoReencodeMode = StreamReencodeMode.AvoidReencoding,
+        AudioReencodeMode = StreamReencodeMode.AvoidReencoding,
         MaximumBitsPerChannel = BitsPerChannel.Preserve,
         MaximumChromaSubsampling = ChromaSubsampling.Preserve,
         FpsOptions = null,
@@ -76,18 +70,18 @@ public sealed record VideoProcessorOptions
         get;
         init
         {
-            IReadOnlyList<VideoCodec> result = [.. value];
+            ImmutableArray<VideoCodec> result = [.. value];
 
-            if (result.Count is 0)
+            if (result.Length is 0)
                 throw new ArgumentException("Codecs cannot be empty.", nameof(value));
 
             if (result.Any((x) => x is null))
                 throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
 
-            if (result.Distinct().Count() != result.Count)
+            if (result.Distinct().Count() != result.Length)
                 throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
 
-            field = result;
+            field = new EquatableArray<VideoCodec>(result);
         }
     } = VideoCodec.AllSourceCodecs;
 
@@ -100,25 +94,25 @@ public sealed record VideoProcessorOptions
         get;
         init
         {
-            IReadOnlyList<AudioCodec> result = [.. value];
+            ImmutableArray<AudioCodec> result = [.. value];
 
-            if (result.Count is 0)
+            if (result.Length is 0)
                 throw new ArgumentException("Codecs cannot be empty.", nameof(value));
 
             if (result.Any((x) => x is null))
                 throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
 
-            if (result.Distinct().Count() != result.Count)
+            if (result.Distinct().Count() != result.Length)
                 throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
 
-            field = result;
+            field = new EquatableArray<AudioCodec>(result);
         }
     } = AudioCodec.AllSourceCodecs;
 
     /// <summary>
     /// Gets or initializes the allowable result video codecs.
     /// Any streams of the video not matching one of these codecs will be re-encoded to use one of them.
-    /// Video streams already using one of these codecs may be copied without re-encoding, depending on <see cref="VideoReencodeBehavior" />.
+    /// Video streams already using one of these codecs may be copied without re-encoding, depending on <see cref="VideoReencodeMode" />.
     /// When video streams are re-encoded, they are re-encoded to the first codec in this list.
     /// Providing an empty list is not allowed.
     /// </summary>
@@ -127,9 +121,7 @@ public sealed record VideoProcessorOptions
         get;
         init
         {
-            IReadOnlyList<VideoCodec> result;
-
-            result = [.. value];
+            ImmutableArray<VideoCodec> result = [.. value];
 
             if (!result.Any())
                 throw new ArgumentException("Codecs cannot be empty.", nameof(value));
@@ -137,20 +129,20 @@ public sealed record VideoProcessorOptions
             if (result.Any((x) => x is null))
                 throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
 
-            if (result.Distinct().Count() != result.Count)
+            if (result.Distinct().Count() != result.Length)
                 throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
 
             if (!result[0].SupportsEncoding)
                 throw new ArgumentException("The first codec in the list must support encoding.", nameof(value));
 
-            field = result;
+            field = new EquatableArray<VideoCodec>(result);
         }
     }
 
     /// <summary>
     /// Gets or initializes the allowable result audio codecs.
     /// Any streams of the audio not matching one of these codecs will be re-encoded to use one of them.
-    /// Audio streams already using one of these codecs may be copied without re-encoding, depending on <see cref="AudioReencodeBehavior" />.
+    /// Audio streams already using one of these codecs may be copied without re-encoding, depending on <see cref="AudioReencodeMode" />.
     /// When audio streams are re-encoded, they are re-encoded to the first codec in this list.
     /// Providing an empty list is not allowed.
     /// </summary>
@@ -159,9 +151,7 @@ public sealed record VideoProcessorOptions
         get;
         init
         {
-            IReadOnlyList<AudioCodec> result;
-
-            result = [.. value];
+            ImmutableArray<AudioCodec> result = [.. value];
 
             if (!result.Any())
                 throw new ArgumentException("Codecs cannot be empty.", nameof(value));
@@ -169,13 +159,13 @@ public sealed record VideoProcessorOptions
             if (result.Any((x) => x is null))
                 throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
 
-            if (result.Distinct().Count() != result.Count)
+            if (result.Distinct().Count() != result.Length)
                 throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
 
             if (!result[0].SupportsEncoding)
                 throw new ArgumentException("The first codec in the list must support encoding.", nameof(value));
 
-            field = result;
+            field = new EquatableArray<AudioCodec>(result);
         }
     }
 
@@ -188,18 +178,18 @@ public sealed record VideoProcessorOptions
         get;
         init
         {
-            IReadOnlyList<MediaContainerFormat> result = [.. value];
+            ImmutableArray<MediaContainerFormat> result = [.. value];
 
-            if (result.Count is 0)
+            if (result.Length is 0)
                 throw new ArgumentException("Formats cannot be empty.", nameof(value));
 
             if (result.Any((x) => x is null))
                 throw new ArgumentException("Formats cannot contain null values.", nameof(value));
 
-            if (result.Distinct().Count() != result.Count)
+            if (result.Distinct().Count() != result.Length)
                 throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
 
-            field = result;
+            field = new EquatableArray<MediaContainerFormat>(result);
         }
     } = MediaContainerFormat.AllSourceFormats;
 
@@ -214,21 +204,21 @@ public sealed record VideoProcessorOptions
         get;
         init
         {
-            IReadOnlyList<MediaContainerFormat> result = [.. value];
+            ImmutableArray<MediaContainerFormat> result = [.. value];
 
-            if (result.Count is 0)
+            if (result.Length is 0)
                 throw new ArgumentException("Formats cannot be empty.", nameof(value));
 
             if (result.Any((x) => x is null))
                 throw new ArgumentException("Formats cannot contain null values.", nameof(value));
 
-            if (result.Distinct().Count() != result.Count)
+            if (result.Distinct().Count() != result.Length)
                 throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
 
             if (!result[0].SupportsWriting)
                 throw new ArgumentException("The first format in the list must support writing.", nameof(value));
 
-            field = result;
+            field = new EquatableArray<MediaContainerFormat>(result);
         }
     }
 
@@ -266,7 +256,7 @@ public sealed record VideoProcessorOptions
     /// Note: some metadata might appear as unrecognized streams (e.g., as a data stream), which is controlled by
     /// <see cref="TryPreserveUnrecognizedStreams" />.
     /// </summary>
-    public StripVideoMetadataMode StripMetadata
+    public VideoMetadataStrippingMode MetadataStrippingMode
     {
         get;
         init
@@ -369,7 +359,7 @@ public sealed record VideoProcessorOptions
     /// <summary>
     /// Gets or initializes the behavior for re-encoding video streams.
     /// </summary>
-    public VideoReencodeBehavior VideoReencodeBehavior
+    public StreamReencodeMode VideoReencodeMode
     {
         get;
         init
@@ -382,7 +372,7 @@ public sealed record VideoProcessorOptions
     /// <summary>
     /// Gets or initializes the behavior for re-encoding audio streams.
     /// </summary>
-    public VideoReencodeBehavior AudioReencodeBehavior
+    public StreamReencodeMode AudioReencodeMode
     {
         get;
         init
@@ -453,7 +443,7 @@ public sealed record VideoProcessorOptions
     /// Note: does not affect quality, only affects file size and encoding speed trade-off.
     /// Default is <see cref="VideoCompressionLevel.Medium" />.
     /// </summary>
-    public VideoCompressionLevel VideoCompressionPreference
+    public VideoCompressionLevel VideoCompressionLevel
     {
         get;
         init

@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
 
     <PackageId>Singulink.FulcrumFS.Videos</PackageId>
-    <Version>0.16</Version>
+    <Version>0.17</Version>
     <Description>
       FulcrumFS extension that adds customizable video processing capabilities, including validation, thumbnail generation, resizing, format conversion,
       metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.

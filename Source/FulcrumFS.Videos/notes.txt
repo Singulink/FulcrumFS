@@ -9,7 +9,4 @@ Metadata not successfully preserved (I tested on a video from my phone):
 - A lot of metadata was added, such as "Buffer Size", "Max Bitrate", "Average Bitrate", "Media Language Code", "Encoder"
 - Some was even changed, such as "Handler Type", "Android Capture FPS"
 - Some other flags were also changed: "Major Brand", "Major Brand", "Compatible Brands", but these seem more expected.
-- This only covers "metadata" metadata, not other kinds like chapters, etc.
-
-Todo:
-- New throw handler scheme.
+- This only covers "metadata" metadata, not other kinds like chapters, etc.]

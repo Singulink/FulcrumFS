@@ -8,7 +8,7 @@ public enum VideoQuality
     /// <summary>
     /// Lowest quality, resulting in the smallest file size - quality will be noticeably degraded, but may be acceptable for some uses.
     /// </summary>
-    Worst,
+    Lowest,
 
     /// <summary>
     /// Low quality, resulting in a smaller file size - quality may be noticeably degraded, but could still be fine for some kinds of videos.
@@ -28,5 +28,5 @@ public enum VideoQuality
     /// <summary>
     /// Best quality, resulting in the best possible quality - quality should be close to visually lossless for all common kinds of videos.
     /// </summary>
-    Best,
+    Highest,
 }
