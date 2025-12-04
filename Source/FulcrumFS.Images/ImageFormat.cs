@@ -1,8 +1,7 @@
 using System.Collections.Immutable;
 using FulcrumFS.Utilities;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats;
-using SixLabors.ImageSharp.Metadata;
+using LibFormats = SixLabors.ImageSharp.Formats;
+using LibMetadata = SixLabors.ImageSharp.Metadata;
 
 namespace FulcrumFS.Images;
 
@@ -14,12 +13,12 @@ public abstract partial class ImageFormat
     /// <summary>
     /// Gets the JPEG image format.
     /// </summary>
-    public static ImageFormat Jpeg { get; } = new JpegImpl();
+    public static ImageFormat Jpeg { get; } = new JpegFormat();
 
     /// <summary>
     /// Gets the PNG image format.
     /// </summary>
-    public static ImageFormat Png { get; } = new PngImpl();
+    public static ImageFormat Png { get; } = new PngFormat();
 
     internal static ImmutableArray<ImageFormat> AllFormats { get; } = [Jpeg, Png];
 
@@ -48,16 +47,24 @@ public abstract partial class ImageFormat
     /// </summary>
     public abstract bool SupportsQuality { get; }
 
-    internal IImageFormat LibFormat { get; }
+    /// <summary>
+    /// Gets a value indicating whether this image format supports multiple frames (e.g., animated images).
+    /// </summary>
+    public abstract bool SupportsMultipleFrames { get; }
 
-    private ImageFormat(IImageFormat libFormat)
+    internal LibFormats.IImageFormat LibFormat { get; }
+
+    private ImageFormat(LibFormats.IImageFormat libFormat)
     {
         LibFormat = libFormat;
     }
 
-    internal virtual int GetQuality(ImageMetadata metadata) => 100;
+    /// <inheritdoc/>
+    public override string ToString() => Name;
 
-    internal virtual bool HasExtraStrippableMetadata(ImageMetadata metadata) => false;
+    internal virtual int GetJpegEquivalentQuality(LibMetadata.ImageMetadata metadata) => 100;
 
-    internal abstract IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripImageMetadataMode stripMetadataMode);
+    internal virtual bool HasExtraStrippableMetadata(LibMetadata.ImageMetadata metadata) => false;
+
+    internal abstract LibFormats.IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, ImageMetadataStrippingMode stripMetadataMode);
 }

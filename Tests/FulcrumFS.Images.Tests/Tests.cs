@@ -24,35 +24,35 @@ public sealed class Tests
     {
         ResetRepository();
 
-        var processor = new ImageProcessor {
+        var pipeline = new ImageProcessor(new() {
             Formats = [new(ImageFormat.Jpeg)],
             SourceValidation = new() {
                 MaxPixels = 500 * 500,
             },
-        };
+        }).ToPipeline();
 
         await using var stream = _imageFile.OpenAsyncStream();
 
-        var ex = await Should.ThrowAsync<FileProcessException>(async () => {
-            await using var tx = await _repo.BeginTransactionAsync();
-            await tx.AddAsync(stream, true, processor);
+        var ex = await Should.ThrowAsync<FileProcessingException>(async () => {
+            await using var txn = await _repo.BeginTransactionAsync();
+            await txn.AddAsync(stream, true, pipeline);
         });
 
         ex.Message.ShouldBe("The image is too large.");
 
-        processor = new ImageProcessor {
+        pipeline = new ImageProcessor(new() {
             Formats = [new(ImageFormat.Jpeg)],
             SourceValidation = new() {
                 MaxWidth = 500,
                 MaxHeight = 500,
             },
-        };
+        }).ToPipeline();
 
         stream.Position = 0;
 
-        ex = await Should.ThrowAsync<FileProcessException>(async () => {
+        ex = await Should.ThrowAsync<FileProcessingException>(async () => {
             await using var tx = await _repo.BeginTransactionAsync();
-            await tx.AddAsync(stream, true, processor);
+            await tx.AddAsync(stream, true, pipeline);
         });
 
         ex.Message.ShouldBe("The image is too large. Maximum size is 500x500.");
@@ -67,16 +67,16 @@ public sealed class Tests
 
         FileId fileId;
 
-        await using (var repoTxn = await _repo.BeginTransactionAsync())
+        await using (var txn = await _repo.BeginTransactionAsync())
         {
-            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor());
+            var added = await txn.AddAsync(stream, leaveOpen: false, new ImageProcessor(ImageProcessingOptions.Preserve).ToPipeline());
             fileId = added.FileId;
 
-            await _repo.AddVariantAsync(added.FileId, "thumbnail", new ImageProcessor {
-                ResizeOptions = new(ImageResizeMode.FitDown, 100, 100),
-            });
+            await _repo.AddVariantAsync(added.FileId, "thumbnail", new ImageProcessor(ImageProcessingOptions.Preserve with {
+                Resize = new(ImageResizeMode.FitDown, 100, 100),
+            }).ToPipeline());
 
-            await repoTxn.CommitAsync();
+            await txn.CommitAsync();
         }
 
         var imagePath = await _repo.GetAsync(fileId);
@@ -85,10 +85,10 @@ public sealed class Tests
         var thumbnailPath = await _repo.GetVariantAsync(fileId, "thumbnail");
         imagePath.Exists.ShouldBeTrue();
 
-        await using (var tx = await _repo.BeginTransactionAsync())
+        await using (var txn = await _repo.BeginTransactionAsync())
         {
-            await tx.DeleteAsync(fileId);
-            await tx.CommitAsync();
+            await txn.DeleteAsync(fileId);
+            await txn.CommitAsync();
         }
 
         imagePath.Exists.ShouldBeFalse();
@@ -105,34 +105,35 @@ public sealed class Tests
 
         FileId fileId;
 
-        await using (var repoTxn = await _repo.BeginTransactionAsync())
+        await using (var txn = await _repo.BeginTransactionAsync())
         {
             await using (var stream = _imageFile.OpenAsyncStream())
             {
-                var added = await repoTxn.AddAsync(stream, true, GetProcessor(100));
+                var added = await txn.AddAsync(stream, true, GetPipeline(ImageQuality.Highest));
                 fileId = added.FileId;
             }
 
-            await _repo.AddVariantAsync(fileId, "75", GetProcessor(75));
-            await _repo.AddVariantAsync(fileId, "50", GetProcessor(50));
-            await _repo.AddVariantAsync(fileId, "25", GetProcessor(25));
+            await _repo.AddVariantAsync(fileId, "high", GetPipeline(ImageQuality.High));
+            await _repo.AddVariantAsync(fileId, "medium", GetPipeline(ImageQuality.Medium));
+            await _repo.AddVariantAsync(fileId, "low", GetPipeline(ImageQuality.Low));
 
-            await repoTxn.CommitAsync();
+            await txn.CommitAsync();
         }
 
-        var i100 = await _repo.GetAsync(fileId);
-        var i75 = await _repo.GetVariantAsync(fileId, "75");
-        var i50 = await _repo.GetVariantAsync(fileId, "50");
-        var i25 = await _repo.GetVariantAsync(fileId, "25");
+        var highest = await _repo.GetAsync(fileId);
+        var high = await _repo.GetVariantAsync(fileId, "high");
+        var medium = await _repo.GetVariantAsync(fileId, "medium");
+        var low = await _repo.GetVariantAsync(fileId, "low");
 
-        i100.Length.ShouldBeGreaterThan(i75.Length);
-        i75.Length.ShouldBeGreaterThan(i50.Length);
-        i50.Length.ShouldBeGreaterThan(i25.Length);
+        highest.Length.ShouldBeGreaterThan(high.Length);
+        high.Length.ShouldBeGreaterThan(medium.Length);
+        medium.Length.ShouldBeGreaterThan(low.Length);
 
-        static FileProcessor GetProcessor(int quality) => new ImageProcessor {
-            ResizeOptions = new(ImageResizeMode.FitDown, 300, 300),
+        static FileProcessingPipeline GetPipeline(ImageQuality quality) => new ImageProcessor(new() {
+            Formats = [new(ImageFormat.Jpeg)],
+            Resize = new(ImageResizeMode.FitDown, 300, 300),
             Quality = quality,
-        };
+        }).ToPipeline();
     }
 
     [TestMethod]
@@ -144,31 +145,31 @@ public sealed class Tests
 
         FileId fileId;
 
-        await using (var repoTxn = await _repo.BeginTransactionAsync())
+        await using (var txn = await _repo.BeginTransactionAsync())
         {
-            var added = await repoTxn.AddAsync(stream, leaveOpen: false, new ImageProcessor());
+            var added = await txn.AddAsync(stream, leaveOpen: false, new ImageProcessor(ImageProcessingOptions.Preserve).ToPipeline());
             fileId = added.FileId;
 
-            await _repo.AddVariantAsync(fileId, "max", new ImageProcessor {
-                ResizeOptions = new(ImageResizeMode.FitDown, 2000, 2000),
-            });
+            await _repo.AddVariantAsync(fileId, "max", new ImageProcessor(ImageProcessingOptions.Preserve with {
+                Resize = new(ImageResizeMode.FitDown, 2000, 2000),
+            }).ToPipeline());
 
-            await _repo.AddVariantAsync(fileId, "crop", new ImageProcessor {
-                ResizeOptions = new(ImageResizeMode.CropDown, 2000, 2000),
-            });
+            await _repo.AddVariantAsync(fileId, "crop", new ImageProcessor(ImageProcessingOptions.Preserve with {
+                Resize = new(ImageResizeMode.CropDown, 2000, 2000),
+            }).ToPipeline());
 
-            await _repo.AddVariantAsync(fileId, "pad1", new ImageProcessor {
-                ResizeOptions = new(ImageResizeMode.PadDown, 800, 800),
+            await _repo.AddVariantAsync(fileId, "pad1", new ImageProcessor(ImageProcessingOptions.Preserve with {
+                Resize = new(ImageResizeMode.PadDown, 800, 800),
                 BackgroundColor = ImageBackgroundColor.FromRgb(0, 255, 0, true),
-            });
+            }).ToPipeline());
 
-            await _repo.AddVariantAsync(fileId, "pad2", new ImageProcessor {
-                ResizeOptions = new(ImageResizeMode.PadDown, 2000, 2000) {
+            await _repo.AddVariantAsync(fileId, "pad2", new ImageProcessor(ImageProcessingOptions.Preserve with {
+                Resize = new(ImageResizeMode.PadDown, 2000, 2000) {
                     PadColor = ImageBackgroundColor.FromRgb(255, 0, 0, true),
                 },
-            });
+            }).ToPipeline());
 
-            await repoTxn.CommitAsync();
+            await txn.CommitAsync();
         }
 
         using (var image = Image.Load((await _repo.GetAsync(fileId)).PathExport))
@@ -200,6 +201,64 @@ public sealed class Tests
             pad2.Width.ShouldBe(1024);
             pad2.Height.ShouldBe(1024);
         }
+    }
+
+    [TestMethod]
+    public async Task ThrowWhenSourceUnchanged()
+    {
+        ResetRepository();
+
+        var pipeline = new ImageProcessor(new() {
+            Formats = [new(ImageFormat.Jpeg)],
+            Resize = new(ImageResizeMode.FitDown, 2000, 2000),
+            ReencodeMode = ImageReencodeMode.AvoidReencoding,
+        }).ToPipeline(throwWhenSourceUnchanged: true);
+
+        await using var stream = _imageFile.OpenAsyncStream();
+
+        var ex = await Should.ThrowAsync<FileSourceUnchangedException>(async () => {
+            await using var txn = await _repo.BeginTransactionAsync();
+            await txn.AddAsync(stream, true, pipeline);
+        });
+
+        ex.Message.ShouldBe("File processing did not result in any changes to the source file.");
+    }
+
+    [TestMethod]
+    public async Task UnsupportedExtension()
+    {
+        ResetRepository();
+
+        var pipeline = new ImageProcessor(new() {
+            Formats = [new(ImageFormat.Png)],
+        }).ToPipeline();
+
+        await using var stream = _imageFile.OpenAsyncStream();
+
+        var ex = await Should.ThrowAsync<FileProcessingException>(async () => {
+            await using var txn = await _repo.BeginTransactionAsync();
+            await txn.AddAsync(stream, true, pipeline);
+        });
+
+        ex.Message.ShouldBe("Extension '.jpg' is not allowed. Allowed extensions: .png, .apng");
+    }
+
+    [TestMethod]
+    public async Task UnsupportedFormat()
+    {
+        ResetRepository();
+        var pipeline = new ImageProcessor(new() {
+            Formats = [new(ImageFormat.Png)],
+        }).ToPipeline();
+
+        await using var stream = _imageFile.OpenAsyncStream();
+
+        var ex = await Should.ThrowAsync<FileProcessingException>(async () => {
+            await using var txn = await _repo.BeginTransactionAsync();
+            await txn.AddAsync(stream, ".png", true, pipeline);
+        });
+
+        ex.Message.ShouldBe("Image format 'JPEG' is not allowed. Allowed formats: PNG");
     }
 
     private static void ResetRepository()

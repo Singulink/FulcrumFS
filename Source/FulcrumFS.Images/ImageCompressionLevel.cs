@@ -6,23 +6,29 @@ namespace FulcrumFS.Images;
 public enum ImageCompressionLevel
 {
     /// <summary>
-    /// Low compression level, only recommended for fast processing of images that are not expected to be stored for long periods of time.
+    /// Lowest compression level, should only be used for temporary images when encoding speed is the highest priority and file size is not a concern.
+    /// </summary>
+    Lowest,
+
+    /// <summary>
+    /// Low compression level, only recommended when fast encoding is a priority and images are not expected to be stored for long periods of time.
     /// </summary>
     Low,
 
     /// <summary>
-    /// Medium compression level, recommended for use cases where increased image size is acceptable to achieve faster processing times.
+    /// Medium compression level, recommended when a small increase in image size is acceptable to achieve faster encoding times.
     /// </summary>
     Medium,
 
     /// <summary>
-    /// High compression level, recommended for most use-cases, including long-term storage of images where size is an important factor but processing time
+    /// High compression level, recommended for most use-cases, including long-term storage of images where size is an important factor but encoding time
     /// should not be expended to compress images beyond the point of diminishing returns.
     /// </summary>
     High,
 
     /// <summary>
-    /// Maximum compression level, recommended only for long-term storage of images where file size is a critical factor and processing time is not a concern.
+    /// Highest compression level, should only be used for long-term storage of images when file size is a critical factor and processing time is not a
+    /// concern.
     /// </summary>
-    Best,
+    Highest,
 }

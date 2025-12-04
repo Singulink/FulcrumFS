@@ -3,7 +3,7 @@ namespace FulcrumFS;
 #pragma warning disable RCS1194 // Implement exception constructors
 
 /// <summary>
-/// The exception that is thrown when a file in the repository is not found.
+/// The exception that is thrown when a file in a repository is not found.
 /// </summary>
 public class RepoFileNotFoundException : FileNotFoundException
 {

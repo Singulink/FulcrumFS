@@ -11,9 +11,9 @@ namespace FulcrumFS.Images;
 /// </content>
 public abstract partial class ImageFormat
 {
-    private class PngImpl : ImageFormat
+    private class PngFormat : ImageFormat
     {
-        public PngImpl() : base(PngFormat.Instance) { }
+        public PngFormat() : base(SixLabors.ImageSharp.Formats.Png.PngFormat.Instance) { }
 
         public override string Name => "PNG";
 
@@ -23,21 +23,26 @@ public abstract partial class ImageFormat
 
         public override bool SupportsQuality => false;
 
+        public override bool SupportsMultipleFrames => true;
+
         internal override bool HasExtraStrippableMetadata(ImageMetadata metadata)
         {
             var pngMetadata = metadata.GetPngMetadata();
             return pngMetadata.TextData.Count > 0;
         }
 
-        internal override IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, StripImageMetadataMode stripMetadataMode)
+        internal override IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, ImageMetadataStrippingMode stripMetadataMode)
         {
             return new PngEncoder {
-                ChunkFilter = stripMetadataMode is StripImageMetadataMode.All ? PngChunkFilter.ExcludeTextChunks : PngChunkFilter.None,
+                ChunkFilter = stripMetadataMode >= ImageMetadataStrippingMode.Preferred ?
+                    PngChunkFilter.ExcludeTextChunks | PngChunkFilter.ExcludePhysicalChunk : PngChunkFilter.None,
+
                 CompressionLevel = compressionLevel switch {
+                    ImageCompressionLevel.Lowest => PngCompressionLevel.Level1,
                     ImageCompressionLevel.Low => PngCompressionLevel.Level3,
                     ImageCompressionLevel.Medium => PngCompressionLevel.Level5,
                     ImageCompressionLevel.High => PngCompressionLevel.Level7,
-                    ImageCompressionLevel.Best => PngCompressionLevel.Level9,
+                    ImageCompressionLevel.Highest => PngCompressionLevel.Level9,
                     _ => throw new UnreachableException("Unexpected compression level."),
                 },
             };

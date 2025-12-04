@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Microsoft.IO;
-using Singulink.Enums;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Metadata;
@@ -18,144 +17,33 @@ namespace FulcrumFS.Images;
 public sealed class ImageProcessor : FileProcessor
 {
     /// <inheritdoc/>
-    public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Formats.SelectMany(format => format.SourceFormat.Extensions)];
+    public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.Formats.SelectMany(format => format.SourceFormat.Extensions)];
 
     /// <summary>
-    /// Gets or initializes the collection of per-format image processing options. The default value contains an entry for every supported image format and maps
-    /// each source format to itself (no format conversion).
+    /// Gets the options used by this image processor.
     /// </summary>
-    /// <remarks>
-    /// Each entry in the collection specifies how to handle a specific image format during processing. Individual entries can optionally override the image
-    /// processor's <see cref="Quality"/>, <see cref="CompressionLevel"/>, and <see cref="ReencodeBehavior"/> settings for their specific source format. The
-    /// collection must not be empty and cannot contain duplicate source formats. Only source formats included in the collection are supported by the image
-    /// processor.
-    /// </remarks>
-    public IReadOnlyList<ImageFormatProcessingOptions> Formats
+    public ImageProcessingOptions Options { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageProcessor"/> class using the specified options.
+    /// </summary>
+    public ImageProcessor(ImageProcessingOptions options)
     {
-        get;
-        init {
-            IReadOnlyList<ImageFormatProcessingOptions> values = [.. value];
-
-            if (values.Count is 0)
-                throw new ArgumentException("Formats cannot be empty.", nameof(value));
-
-            if (values.Any(f => f is null))
-                throw new ArgumentException("Formats cannot contain null values.", nameof(value));
-
-            if (values.Select(f => f.SourceFormat).Distinct().Count() != value.Count)
-                throw new ArgumentException("Formats cannot contain duplicate source formats.", nameof(value));
-
-            field = values;
-        }
-    } = [.. ImageFormat.AllFormats.Select(f => new ImageFormatProcessingOptions(f))];
-
-    /// <summary>
-    /// Gets or initializes the options for validating the source image before processing.
-    /// </summary>
-    public ImageSourceValidationOptions? SourceValidation { get; init; }
-
-    /// <summary>
-    /// Gets or initializes the maximum number of frames to process in a multi-frame image (e.g., animated GIFs). Default is <see cref="int.MaxValue"/>, meaning
-    /// all frames will be processed.
-    /// </summary>
-    public int MaxFrames
-    {
-        get;
-        init {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1, nameof(MaxFrames));
-            field = value;
-        }
-    } = int.MaxValue;
-
-#pragma warning disable SA1623 // Property summary documentation should match accessors
-
-    /// <summary>
-    /// Gets or initializes a value indicating whether the image should be rotated to normal orientation based on its EXIF data. If set to <see
-    /// langword="true"/> and a rotation was performed, the EXIF orientation metadata is adjusted accordingly. Default is <see langword="false"/>.
-    /// </summary>
-    public bool OrientToNormal { get; init; }
-
-#pragma warning restore SA1623
-
-    /// <summary>
-    /// Gets or initializes the metadata stripping mode. Default is <see cref="StripImageMetadataMode.ThumbnailOnly"/>.
-    /// </summary>
-    public StripImageMetadataMode StripMetadataMode
-    {
-        get;
-        init {
-            value.ThrowIfNotDefined(nameof(value));
-            field = value;
-        }
-    } = StripImageMetadataMode.ThumbnailOnly;
-
-    /// <summary>
-    /// Gets or initializes the options for resizing the image. A value of <see langword="null"/> indicates that the image will not be resized. Default is <see
-    /// langword="null"/>.
-    /// </summary>
-    public ImageResizeOptions? ResizeOptions { get; init; }
-
-    /// <summary>
-    /// Gets or initializes the background color to use for the image. Default is white <c>(RGB: 255, 255, 255)</c> with <see
-    /// cref="ImageBackgroundColor.SkipIfTransparencySupported"/> set to <see langword="true"/>.
-    /// </summary>
-    public ImageBackgroundColor BackgroundColor { get; init; } = new ImageBackgroundColor(255, 255, 255, true);
-
-    /// <summary>
-    /// Gets or initializes the compression level to use for resulting images. This setting only affects the computational effort of compression (and thus the
-    /// resulting file size), not the visual quality. The setting has no effect on formats that do not support compression. Can be overridden per-format by
-    /// setting <see cref="ImageFormatProcessingOptions.CompressionLevelOverride"/> in the <see cref="Formats"/> collection. The default setting is <see
-    /// cref="ImageCompressionLevel.High"/>.
-    /// </summary>
-    public ImageCompressionLevel CompressionLevel
-    {
-        get;
-        init {
-            value.ThrowIfNotDefined(nameof(value));
-            field = value;
-        }
-    } = ImageCompressionLevel.High;
-
-    /// <summary>
-    /// Gets or initializes the quality to use for resulting images. Valid values are <c>1</c> to <c>100</c> (inclusive). This setting has no effect on lossless
-    /// formats. When source image quality can be determined, the result quality is capped to the source quality to avoid unnecessarily increasing file size.
-    /// Can be overridden per-format by setting <see cref="ImageFormatProcessingOptions.QualityOverride"/> in the <see cref="Formats"/> collection. The default
-    /// setting is <c>82</c>.
-    /// </summary>
-    public int Quality
-    {
-        get;
-        init {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1, nameof(value));
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 100, nameof(value));
-            field = value;
-        }
-    } = 82;
-
-    /// <summary>
-    /// Gets or initializes the behavior for re-encoding images. Default setting is <see cref="ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged"/>.
-    /// </summary>
-    public ImageReencodeBehavior ReencodeBehavior
-    {
-        get;
-        init {
-            value.ThrowIfNotDefined(nameof(value));
-            field = value;
-        }
-    } = ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged;
+        Options = options;
+    }
 
     /// <inheritdoc/>
-    protected override async Task<FileProcessResult> ProcessAsync(FileProcessContext context)
+    protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
     {
-        const int MaxInMemoryCopySize = 100 * 1024 * 1024; // 100 MB
+        const int MaxInMemoryCopySize = 20 * 1024 * 1024; // 20 MB
         var stream = await context.GetSourceAsSeekableStreamAsync(preferInMemory: true, MaxInMemoryCopySize).ConfigureAwait(false);
 
         var sourceFormat = Image.DetectFormat(stream);
 
-        if (Formats.FirstOrDefault(fo => fo.SourceFormat.LibFormat == sourceFormat) is not { } formatOptions)
+        if (Options.Formats.FirstOrDefault(fo => fo.SourceFormat.LibFormat == sourceFormat) is not { } formatMapping)
         {
-            string allowedFormats = string.Join(", ", Formats.Select(f => f.SourceFormat.Name));
-            throw new FileProcessException($"The image format '{sourceFormat.Name}' is not allowed. Allowed formats: {allowedFormats}.");
+            string allowedFormats = string.Join(", ", Options.Formats.Select(f => f.SourceFormat.Name));
+            throw new FileProcessingException($"Image format '{sourceFormat.Name}' is not allowed. Allowed formats: {allowedFormats}");
         }
 
         stream.Position = 0;
@@ -163,51 +51,57 @@ public sealed class ImageProcessor : FileProcessor
 
         (ushort orientation, bool swapDimensions) = GetOrientationInfo(info.Metadata);
 
-        if (SourceValidation is not null)
-            Validate(info, SourceValidation, swapDimensions);
+        if (Options.SourceValidation is not null)
+            Validate(info, Options.SourceValidation, swapDimensions);
+
+        stream.Position = 0;
 
         // Load 1 extra frame so we can check if we had to remove any frames later.
 
-        stream.Position = 0;
-        uint maxLoadFrames = (uint)(MaxFrames < int.MaxValue ? MaxFrames + 1 : MaxFrames);
+        uint maxLoadFrames;
+
+        if (!formatMapping.ResultFormat.SupportsMultipleFrames)
+            maxLoadFrames = 2;
+        else
+            maxLoadFrames = (uint)(Options.MaxFrames < int.MaxValue ? Options.MaxFrames + 1 : Options.MaxFrames);
+
         using var image = Image.Load(new DecoderOptions { MaxFrames = maxLoadFrames }, stream);
+        bool hasRequiredChange = false;
 
-        bool changedData = false;
-        bool changedMetadata = false;
+        // Max frames
 
-        // MaxFrames
-
-        if (MaxFrames < int.MaxValue && image.Frames.Count > MaxFrames)
+        if (Options.MaxFrames < int.MaxValue && image.Frames.Count > Options.MaxFrames)
         {
             image.Frames.RemoveFrame(image.Frames.Count - 1);
-            changedData = true;
+            hasRequiredChange = true;
         }
 
-        // OrientToNormal
+        // Reorientation
 
-        if (OrientToNormal && orientation is not 1)
+        if (Options.ReorientMode is not ImageReorientMode.None && orientation is not 1)
         {
             image.Mutate(x => x.AutoOrient());
             image.Metadata.ExifProfile!.SetValue(ExifTag.Orientation, orientation = 1);
 
             swapDimensions = false;
-            changedData = true;
+            hasRequiredChange = Options.ReorientMode is ImageReorientMode.RequireNormal;
         }
 
-        // StripMetadata
+        // Metadata stripping
 
-        switch (StripMetadataMode)
+        switch (Options.MetadataStrippingMode)
         {
-            case StripImageMetadataMode.All:
-                StripStandardMetadata(image.Metadata, orientation, ref changedMetadata);
-
-                if (!changedMetadata)
-                    changedMetadata = formatOptions.SourceFormat.HasExtraStrippableMetadata(image.Metadata);
-
+            case ImageMetadataStrippingMode.None:
                 break;
+            case ImageMetadataStrippingMode.ThumbnailOnly:
+                StripThumbnailMetadata(image.Metadata);
+                break;
+            default:
+                bool changed = StripAllMetadata(image.Metadata, orientation);
 
-            case StripImageMetadataMode.ThumbnailOnly:
-                StripThumbnailMetadata(image.Metadata, ref changedMetadata);
+                if (Options.MetadataStrippingMode is ImageMetadataStrippingMode.Required)
+                    hasRequiredChange |= changed || formatMapping.SourceFormat.HasExtraStrippableMetadata(image.Metadata);
+
                 break;
         }
 
@@ -216,45 +110,43 @@ public sealed class ImageProcessor : FileProcessor
         // Transparency support
 
         bool sourceSupportsTransparency = image.PixelType.AlphaRepresentation is not PixelAlphaRepresentation.None;
-        bool resultSupportsTransparency = sourceSupportsTransparency && formatOptions.ResultFormat.SupportsTransparency;
+        bool resultSupportsTransparency = sourceSupportsTransparency && formatMapping.ResultFormat.SupportsTransparency;
 
         // Resize
 
-        if (ResizeOptions is not null)
-            Resize(image, ResizeOptions, BackgroundColor, swapDimensions, resultSupportsTransparency, ref changedData);
+        if (Options.Resize is not null)
+            hasRequiredChange |= Resize(image, Options.Resize, Options.BackgroundColor, swapDimensions, resultSupportsTransparency);
 
         context.CancellationToken.ThrowIfCancellationRequested();
 
-        // BackgroundColor
+        // Background color
 
-        if (sourceSupportsTransparency && !BackgroundColor.SkipIfTransparencySupported)
+        if (sourceSupportsTransparency && !Options.BackgroundColor.SkipIfTransparencySupported)
         {
-            image.Mutate(x => x.BackgroundColor(BackgroundColor.ToLibColor()));
-            changedData = true;
+            image.Mutate(x => x.BackgroundColor(Options.BackgroundColor.ToLibColor()));
+            hasRequiredChange = true;
         }
 
         context.CancellationToken.ThrowIfCancellationRequested();
 
-        // Encode/Reencode
+        // Re-encode
 
-        if (formatOptions.SourceFormat != formatOptions.ResultFormat)
-            changedData = true;
+        if (formatMapping.SourceFormat != formatMapping.ResultFormat)
+            hasRequiredChange = true;
 
-        string resultExtension = formatOptions.ResultFormat.Extensions.First();
+        string resultExtension = formatMapping.ResultFormat.Extensions.First();
 
-        int sourceQuality = formatOptions.SourceFormat.GetQuality(info.Metadata);
-        int resultQuality = Math.Min(sourceQuality, formatOptions.QualityOverride ?? Quality);
-        bool reducedQuality = sourceQuality > resultQuality;
-        bool resultCompressible = formatOptions.ResultFormat.SupportsCompression;
+        int sourceQuality = formatMapping.SourceFormat.GetJpegEquivalentQuality(info.Metadata);
+        int resultQuality = Math.Min(sourceQuality, Options.Quality.ToJpegEquivalentQuality());
 
-        bool changedAnything = changedData || changedMetadata || reducedQuality;
-
-        (bool reencode, bool discardIfLarger) = (formatOptions.ReencodeOverride ?? ReencodeBehavior) switch {
-            ImageReencodeBehavior.DiscardLargerUnlessMetadataChanged => (changedAnything || resultCompressible, !changedData && !changedMetadata),
-            ImageReencodeBehavior.DiscardLargerEvenIfMetadataChanged => (changedAnything || resultCompressible, !changedData),
-            ImageReencodeBehavior.SkipUnlessMetadataOrQualityChanged => (changedAnything, !changedData && !changedMetadata),
+        (bool reencode, bool discardIfLarger) = Options.ReencodeMode switch {
+            ImageReencodeMode.Always => (true, false),
+            ImageReencodeMode.SelectSmallest => (true, !hasRequiredChange),
+            ImageReencodeMode.AvoidReencoding => (hasRequiredChange, !hasRequiredChange),
             _ => throw new UnreachableException("Unexpected re-encode behavior."),
         };
+
+        bool hasChanges = false;
 
         if (reencode)
         {
@@ -264,8 +156,8 @@ public sealed class ImageProcessor : FileProcessor
 
             try
             {
-                var resultCompressionLevel = formatOptions.CompressionLevelOverride ?? CompressionLevel;
-                var resultEncoder = formatOptions.ResultFormat.GetEncoder(resultCompressionLevel, resultQuality, StripMetadataMode);
+                var resultCompressionLevel = Options.CompressionLevel;
+                var resultEncoder = formatMapping.ResultFormat.GetEncoder(resultCompressionLevel, resultQuality, Options.MetadataStrippingMode);
                 image.Save(outputStream, resultEncoder);
             }
             catch (Exception)
@@ -275,13 +167,18 @@ public sealed class ImageProcessor : FileProcessor
             }
 
             if (discardIfLarger && outputStream.Length > stream.Length)
+            {
                 outputStream.Dispose();
+            }
             else
+            {
                 stream = outputStream;
+                hasChanges = true;
+            }
         }
 
         stream.Position = 0;
-        return FileProcessResult.Stream(stream, resultExtension);
+        return FileProcessingResult.Stream(stream, resultExtension, hasChanges);
     }
 
     private static (ushort Orientation, bool SwapDimensions) GetOrientationInfo(ImageMetadata metadata)
@@ -303,20 +200,22 @@ public sealed class ImageProcessor : FileProcessor
         int pixels = info.Width * info.Height;
 
         if (width > validation.MaxWidth || height > validation.MaxHeight)
-            throw new FileProcessException($"The image is too large. Maximum size is {validation.MaxWidth}x{validation.MaxHeight}.");
+            throw new FileProcessingException($"The image is too large. Maximum size is {validation.MaxWidth}x{validation.MaxHeight}.");
 
         if (pixels > validation.MaxPixels)
-            throw new FileProcessException("The image is too large.");
+            throw new FileProcessingException("The image is too large.");
 
         if (width < validation.MinWidth || height < validation.MinHeight)
-            throw new FileProcessException($"The image is too small. Minimum size is {validation.MinWidth}x{validation.MinHeight}.");
+            throw new FileProcessingException($"The image is too small. Minimum size is {validation.MinWidth}x{validation.MinHeight}.");
 
         if (pixels < validation.MinPixels)
-            throw new FileProcessException("The image is too small.");
+            throw new FileProcessingException("The image is too small.");
     }
 
-    private static void StripStandardMetadata(ImageMetadata metadata, ushort orientation, ref bool changedMetadata)
+    private static bool StripAllMetadata(ImageMetadata metadata, ushort orientation)
     {
+        bool changed = false;
+
         if (metadata.XmpProfile is not null ||
             metadata.IccProfile is not null ||
             metadata.CicpProfile is not null ||
@@ -327,7 +226,7 @@ public sealed class ImageProcessor : FileProcessor
             metadata.CicpProfile = null;
             metadata.IptcProfile = null;
 
-            changedMetadata = true;
+            changed = true;
         }
 
         if (metadata.ExifProfile is not null)
@@ -336,7 +235,7 @@ public sealed class ImageProcessor : FileProcessor
             {
                 // Orientation is normal so can be stripped as well since it's the default.
                 metadata.ExifProfile = null;
-                changedMetadata = true;
+                changed = true;
             }
             else if (metadata.ExifProfile.Values.Count > 1)
             {
@@ -344,38 +243,31 @@ public sealed class ImageProcessor : FileProcessor
                 metadata.ExifProfile = new ExifProfile();
                 metadata.ExifProfile.SetValue(ExifTag.Orientation, orientation);
 
-                changedMetadata = true;
+                changed = true;
             }
         }
+
+        return changed;
     }
 
-    private static void StripThumbnailMetadata(ImageMetadata metadata, ref bool changedMetadata)
+    private static void StripThumbnailMetadata(ImageMetadata metadata)
     {
         if (metadata.ExifProfile is not null)
         {
-            if (metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormat) ||
-                metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormatLength))
-            {
-                changedMetadata = true;
-            }
+            metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormat);
+            metadata.ExifProfile.RemoveValue(ExifTag.JPEGInterchangeFormatLength);
         }
     }
 
-    private static void Resize(
+    private static bool Resize(
         Image image,
         ImageResizeOptions options,
         ImageBackgroundColor fallbackBgColor,
         bool swapDimensions,
-        bool supportsTransparency,
-        ref bool changedData)
+        bool supportsTransparency)
     {
         if (GetResizeInfo(image, options, swapDimensions) is not { } resizeInfo)
-        {
-            if (options.ThrowWhenSkipped)
-                throw new ImageResizeSkippedException();
-
-            return;
-        }
+            return false;
 
         var padBgColor = options.PadColor ?? fallbackBgColor;
         var padColor = supportsTransparency && padBgColor.SkipIfTransparencySupported ? Color.Transparent : padBgColor.ToLibColor();
@@ -390,9 +282,7 @@ public sealed class ImageProcessor : FileProcessor
         int beforeHeight = image.Height;
 
         image.Mutate(x => x.Resize(resizeOptions));
-
-        if (image.Width != beforeWidth || image.Height != beforeHeight)
-            changedData = true;
+        return image.Width != beforeWidth || image.Height != beforeHeight;
     }
 
     private static (int Width, int Height, ResizeMode Mode)? GetResizeInfo(Image image, ImageResizeOptions options, bool swapDimensions)
