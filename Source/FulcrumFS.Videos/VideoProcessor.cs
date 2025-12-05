@@ -1670,8 +1670,8 @@ public sealed class VideoProcessor : FileProcessor
     }
 
     private static readonly SearchValues<char> _invalidTitleCharsAndSurrogates = SearchValues.Create([
-        .. Enumerable.Range(0, 32).Select((x) => (char)x),
-        .. Enumerable.Range(0xD800, 0x0800).Select((x) => (char)x)
+        .. Enumerable.Range(0, 32).Select((x) => (char)x), // Control characters
+        .. Enumerable.Range(0xD800, 0x0800).Select((x) => (char)x) // Surrogate range
     ]);
 
     private static string? NormalizeTitleOrHandlerName(string? value)
