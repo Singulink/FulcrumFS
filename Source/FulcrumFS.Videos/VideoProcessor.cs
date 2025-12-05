@@ -568,9 +568,11 @@ public sealed class VideoProcessor : FileProcessor
         // Note: we always run this step, since while ffmpeg reads mov and mp4 the same, mp4 does not support every single codec that mov does, unless we
         // detected earlier that every stream we saw is compatible with the mp4 container.
         bool[] isCompatibleStream = new bool[sourceInfo.Streams.Length];
+        bool[] isCompatibleSubtitleStreamAfterReencodingToMovText = new bool[sourceInfo.Streams.Length];
         if (guaranteedFullyCompatibleWithMP4Container)
         {
             isCompatibleStream.AsSpan().Fill(true);
+            isCompatibleSubtitleStreamAfterReencodingToMovText.AsSpan().Fill(true);
         }
         else
         {
@@ -635,6 +637,29 @@ public sealed class VideoProcessor : FileProcessor
                 .ConfigureAwait(false);
                 isCompatibleStream[i] = returnCode == 0;
 
+                // If it was incompatible, and a subtitle stream, check if re-encoding to mov_text would work:
+                if (!isCompatibleStream[i] && stream is FFprobeUtils.SubtitleStreamInfo)
+                {
+                    // Set up command to test copying this stream:
+                    testCommand =
+                    [
+                        "-i", sourceFileWithCorrectExtension.PathExport,
+                        "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
+                        "-c", "mov_text",
+                        "-ignore_unknown", "-xerror", "-hide_banner", "-y",
+                        "-f", "mp4",
+                        tempMP4File.PathExport,
+                    ];
+
+                    // Run the test command:
+                    (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
+                        FFmpegExePath,
+                        testCommand,
+                        cancellationToken: context.CancellationToken)
+                    .ConfigureAwait(false);
+                    isCompatibleSubtitleStreamAfterReencodingToMovText[i] = returnCode == 0;
+                }
+
                 // Report progress:
                 reportProgress:
                 Options.ProgressCallback?.Invoke(
@@ -672,6 +697,16 @@ public sealed class VideoProcessor : FileProcessor
                 streamIndexWithinKind: -1,
                 outputIndex: -1));
 
+        if (Options.RemoveAudioStreams)
+        {
+            perInputStreamOverrides.Add(
+                new FFmpegUtils.PerStreamMapOverride(
+                    fileIndex: 0,
+                    streamKind: 'a',
+                    streamIndexWithinKind: -1,
+                    mapToOutput: false));
+        }
+
         List<(int InputIndex, int OutputIndex, string SourceValidFileExtension, bool RequiresReencodeForMP4, char Kind)> streamsToCheckSize = [];
         List<(char Kind, int InputIndex, int OutputIndex, bool MapMetadata, FFmpegUtils.PerStreamMetadataOverride? MetadataOverrides)> streamMapping = [];
         foreach (var stream in sourceInfo.Streams)
@@ -686,15 +721,18 @@ public sealed class VideoProcessor : FileProcessor
                 bool isThumbnail = videoStream.IsAttachedPic || videoStream.IsTimedThumbnail;
                 if (isThumbnail)
                 {
-                    perInputStreamOverrides.Add(
-                        new FFmpegUtils.PerStreamMapOverride(
-                            fileIndex: 0,
-                            streamKind: 'v',
-                            streamIndexWithinKind: inputVideoStreamIndex,
-                            mapToOutput: Options.MetadataStrippingMode == VideoMetadataStrippingMode.None));
-
                     if (Options.MetadataStrippingMode == VideoMetadataStrippingMode.None)
                     {
+                        if (!preserveUnrecognizedStreams)
+                        {
+                            perInputStreamOverrides.Add(
+                                new FFmpegUtils.PerStreamMapOverride(
+                                    fileIndex: 0,
+                                    streamKind: 'v',
+                                    streamIndexWithinKind: inputVideoStreamIndex,
+                                    mapToOutput: true));
+                        }
+
                         outputVideoStreamIndex++;
                         outputStreamIndex++;
                         streamMapping.Add((Kind: 'v', InputIndex: inputVideoStreamIndex, OutputIndex: id, MapMetadata: true, MetadataOverrides: null));
@@ -705,6 +743,15 @@ public sealed class VideoProcessor : FileProcessor
                                 streamKind: 'v',
                                 streamIndexWithinKind: inputVideoStreamIndex,
                                 outputIndex: id));
+                    }
+                    else
+                    {
+                        perInputStreamOverrides.Add(
+                            new FFmpegUtils.PerStreamMapOverride(
+                                fileIndex: 0,
+                                streamKind: 'v',
+                                streamIndexWithinKind: inputVideoStreamIndex,
+                                mapToOutput: false));
                     }
 
                     continue;
@@ -847,7 +894,14 @@ public sealed class VideoProcessor : FileProcessor
                         _ => 444,
                     };
                     int maxSubsampling = GetChromaSubsampling(Options.MaximumChromaSubsampling) ?? 444;
-                    int videoBitsPerSample = bitsPerSample >= 0 ? bitsPerSample : 12;
+                    int videoBitsPerSample = bitsPerSample switch
+                    {
+                        <= 0 => 12,
+                        <= 8 => 8,
+                        <= 10 => 10,
+                        <= 12 => 12,
+                        _ => 12,
+                    };
                     int maxBitsPerSample = GetBitsPerChannel(Options.MaximumBitsPerChannel) ?? 12;
                     if (Options.ResultVideoCodecs[0] != VideoCodec.HEVC) maxBitsPerSample = int.Min(maxBitsPerSample, 10);
                     finalBitsPerChannel = int.Min(videoBitsPerSample, maxBitsPerSample);
@@ -966,6 +1020,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else
                 {
+                    // Note: we use Debug.Fail here since we should have already validated this earlier, so this is just a safeguard so we catch issues when testing.
                     Debug.Fail("The requested video codec did not have a supported encoder available in the configured FFmpeg build (unexpected).");
                 }
             }
@@ -974,14 +1029,7 @@ public sealed class VideoProcessor : FileProcessor
                 // If we're removing audio streams, exclude it now:
                 inputAudioStreamIndex++;
                 if (Options.RemoveAudioStreams)
-                {
-                    perInputStreamOverrides.Add(
-                        new FFmpegUtils.PerStreamMapOverride(
-                            fileIndex: 0,
-                            streamKind: 'a',
-                            streamIndexWithinKind: inputAudioStreamIndex,
-                            mapToOutput: false));
-                }
+                    continue;
 
                 // Map the stream:
                 int id = outputAudioStreamIndex;
@@ -1071,6 +1119,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else
                 {
+                    // Note: we use Debug.Fail here since we should have already validated this earlier, so this is just a safeguard so we catch issues when testing.
                     Debug.Fail("The requested audio codec did not have a supported encoder available in the configured FFmpeg build (unexpected).");
                 }
             }
@@ -1079,6 +1128,19 @@ public sealed class VideoProcessor : FileProcessor
                 // If we're not preserving unrecognized streams, skip it (we already marked as excluded by default):
                 if (!preserveUnrecognizedStreams)
                 {
+                    continue;
+                }
+
+                // If it's impossible to preserve the subtitle stream in MP4, skip it:
+                if (!isCompatibleStream[inputStreamIndex] && !isCompatibleSubtitleStreamAfterReencodingToMovText[inputStreamIndex])
+                {
+                    perInputStreamOverrides.Add(
+                        new FFmpegUtils.PerStreamMapOverride(
+                            fileIndex: 0,
+                            streamKind: '\0',
+                            streamIndexWithinKind: inputStreamIndex,
+                            mapToOutput: false));
+
                     continue;
                 }
 
@@ -1126,15 +1188,18 @@ public sealed class VideoProcessor : FileProcessor
                 int id = outputStreamIndex;
                 if (isThumbnail)
                 {
-                    perInputStreamOverrides.Add(
-                        new FFmpegUtils.PerStreamMapOverride(
-                            fileIndex: 0,
-                            streamKind: '\0',
-                            streamIndexWithinKind: inputStreamIndex,
-                            mapToOutput: Options.MetadataStrippingMode == VideoMetadataStrippingMode.None && isCompatibleStream[inputStreamIndex]));
-
                     if (Options.MetadataStrippingMode == VideoMetadataStrippingMode.None && isCompatibleStream[inputStreamIndex])
                     {
+                        if (!preserveUnrecognizedStreams)
+                        {
+                            perInputStreamOverrides.Add(
+                                new FFmpegUtils.PerStreamMapOverride(
+                                    fileIndex: 0,
+                                    streamKind: '\0',
+                                    streamIndexWithinKind: inputStreamIndex,
+                                    mapToOutput: false));
+                        }
+
                         outputStreamIndex++;
                         streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: true, MetadataOverrides: null));
 
@@ -1147,8 +1212,17 @@ public sealed class VideoProcessor : FileProcessor
 
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(
                             streamKind: '\0',
-                            streamIndexWithinKind: inputStreamIndex,
+                            streamIndexWithinKind: id,
                             codec: "copy"));
+                    }
+                    else
+                    {
+                        perInputStreamOverrides.Add(
+                            new FFmpegUtils.PerStreamMapOverride(
+                                fileIndex: 0,
+                                streamKind: '\0',
+                                streamIndexWithinKind: inputStreamIndex,
+                                mapToOutput: false));
                     }
 
                     continue;
@@ -1177,7 +1251,7 @@ public sealed class VideoProcessor : FileProcessor
                 outputStreamIndex++;
                 bool mapMetadata = Options.MetadataStrippingMode is not (VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred);
                 streamMapping.Add((Kind: '\0', InputIndex: inputStreamIndex, OutputIndex: id, MapMetadata: mapMetadata, MetadataOverrides: null));
-                perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: inputStreamIndex, codec: "copy"));
+                perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: id, codec: "copy"));
 
                 // Specify whether we want to map the metadata:
                 perInputStreamOverrides.Add(
@@ -1620,27 +1694,31 @@ public sealed class VideoProcessor : FileProcessor
             // Handle the interesting characters specially:
             if (nextInteresting == 0)
             {
-                if (sp[offset] < 0x20)
+                switch (sp[offset])
                 {
-                    // Control character - skip it:
-                    offset++;
-                }
-                else if (sp[offset] >= 0xD800 && sp[offset] <= 0xDFFF)
-                {
-                    // Check if paired:
-                    if (sp[offset..] is [>= (char)0xD800 and <= (char)0xDBFF, >= (char)0xDC00 and <= (char)0xDFFF, ..])
-                    {
-                        // Paired surrogate - keep both if enough space:
-                        if (length + 2 > buffer.Length) break;
-                        sp.Slice(offset, 2).CopyTo(buffer.Slice(length, 2));
-                        length += 2;
-                        offset += 2;
-                    }
-                    else
-                    {
-                        // Unpaired surrogate - skip it:
+                    case < (char)0x20:
+                        // Control character - skip it:
                         offset++;
-                    }
+
+                        break;
+
+                    case >= (char)0xD800 and <= (char)0xDFFF:
+                        // Check if paired:
+                        if (sp[offset..] is [>= (char)0xD800 and <= (char)0xDBFF, >= (char)0xDC00 and <= (char)0xDFFF, ..])
+                        {
+                            // Paired surrogate - keep both if enough space:
+                            if (length + 2 > buffer.Length) break;
+                            sp.Slice(offset, 2).CopyTo(buffer.Slice(length, 2));
+                            length += 2;
+                            offset += 2;
+                        }
+                        else
+                        {
+                            // Unpaired surrogate - skip it:
+                            offset++;
+                        }
+
+                        break;
                 }
             }
         }
