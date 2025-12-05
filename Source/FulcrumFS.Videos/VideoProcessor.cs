@@ -448,12 +448,14 @@ public sealed class VideoProcessor : FileProcessor
             const double ValidateProgressFraction = 0.20;
             Action<double> validateProgressCallback = progressTempFile is not null ? (durationDone) =>
             {
-                // Avoid going backwards or repeating the same progress:
-                if (durationDone <= lastDone || durationDone < 0.0 || durationDone > maxDuration) return;
+                // Avoid going backwards or repeating the same progress - but ensure we can still hit 100% of this section:
+                if (durationDone <= lastDone) return;
+                if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
+                else lastDone = durationDone;
+                if (durationDone < 0.0 || durationDone > maxDuration) return;
 
                 // Clamp / adjust to [0.0, 0.20] range:
                 double clampedProgress = double.Clamp(durationDone / maxDuration * ValidateProgressFraction, 0.0, ValidateProgressFraction);
-                lastDone = durationDone;
                 Options.ProgressCallback!((context.FileId, context.VariantId), progressUsed + clampedProgress);
             } : null;
             await FFmpegUtils.RunRawFFmpegCommandAsync(
@@ -1309,7 +1311,10 @@ public sealed class VideoProcessor : FileProcessor
         Action<double>? localProgressCallback = progressTempFile != null ? (durationDone) =>
         {
             // Avoid going backwards or repeating the same progress:
-            if (durationDone <= lastDone || durationDone < 0.0 || durationDone > maxDuration) return;
+            if (durationDone <= lastDone) return;
+            if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
+            else lastDone = durationDone;
+            if (durationDone < 0.0 || durationDone > maxDuration) return;
 
             // Clamp / adjust to [progressUsed, 0.95] range:
             double clampedProgress = double.Clamp(progressUsed + (durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed)), progressUsed, 1.0 - ReservedProgress);
@@ -1528,7 +1533,10 @@ public sealed class VideoProcessor : FileProcessor
                 Action<double>? localProgressCallbackInner = progressTempFile != null ? (durationDone) =>
                 {
                     // Avoid going backwards or repeating the same progress:
-                    if (durationDone <= lastDone || durationDone < 0.0 || durationDone > maxDuration) return;
+                    if (durationDone <= lastDone) return;
+                    if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
+                    else lastDone = durationDone;
+                    if (durationDone < 0.0 || durationDone > maxDuration) return;
 
                     // Clamp to [0.0, 0.98] range of our remaining reserved portion:
                     double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgressInner), 0.0, 1.0 - ReservedProgressInner);
