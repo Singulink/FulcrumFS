@@ -63,6 +63,33 @@ public sealed class VideoProcessor : FileProcessor
         {
             throw new NotSupportedException("The required media container muxer for 'mp4' is not supported by the configured ffmpeg installation.");
         }
+
+        // Check if we have the required filters:
+
+        if (!FFprobeUtils.Configuration.SupportsZscaleFilter)
+        {
+            throw new NotSupportedException("The required 'zscale' video filter is not supported by the configured ffmpeg installation.");
+        }
+
+        if (!FFprobeUtils.Configuration.SupportsScaleFilter)
+        {
+            throw new NotSupportedException("The required 'scale' video filter is not supported by the configured ffmpeg installation.");
+        }
+
+        if (!FFprobeUtils.Configuration.SupportsFpsFilter)
+        {
+            throw new NotSupportedException("The required 'fps' video filter is not supported by the configured ffmpeg installation.");
+        }
+
+        if (!FFprobeUtils.Configuration.SupportsTonemapFilter)
+        {
+            throw new NotSupportedException("The required 'tonemap' video filter is not supported by the configured ffmpeg installation.");
+        }
+
+        if (!FFprobeUtils.Configuration.SupportsFormatFilter)
+        {
+            throw new NotSupportedException("The required 'format' video filter is not supported by the configured ffmpeg installation.");
+        }
     }
 
     /// <summary>
@@ -646,6 +673,7 @@ public sealed class VideoProcessor : FileProcessor
                         "-i", sourceFileWithCorrectExtension.PathExport,
                         "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
                         "-c", "mov_text",
+                        "-t", "1", // Only need a short segment to test (1 second)
                         "-ignore_unknown", "-xerror", "-hide_banner", "-y",
                         "-f", "mp4",
                         tempMP4File.PathExport,

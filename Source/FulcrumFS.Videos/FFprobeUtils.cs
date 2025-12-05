@@ -261,12 +261,19 @@ internal static class FFprobeUtils
         public bool SupportsAviDemuxing { get; set; }
         public bool SupportsMpegTSGroupDemuxing { get; set; }
         public bool SupportsMpegDemuxing { get; set; }
+
+        // Filter support
+        public bool SupportsZscaleFilter { get; set; }
+        public bool SupportsScaleFilter { get; set; }
+        public bool SupportsFpsFilter { get; set; }
+        public bool SupportsTonemapFilter { get; set; }
+        public bool SupportsFormatFilter { get; set; }
     }
 
     private static ConfigurationInfo _configInfo;
     private static volatile bool _configInfoInitialized;
 
-    private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(string command, CancellationToken cancellationToken = default)
+    private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(string command, bool noStartingLine, CancellationToken cancellationToken = default)
     {
         // Get the raw configuration output from ffprobe.
         string result = ProcessUtils.RunProcessToStringWithErrorHandlingAsync(
@@ -276,46 +283,67 @@ internal static class FFprobeUtils
             cancellationToken: cancellationToken,
             runAsynchronously: false).GetAwaiter().GetResult();
 
-        // Skip to the line formatted as '<space*>-----<space*>' with some number of dashes.
-        // We will use the number of dashes to determine the length of the configuration info section, and the number of preceding spaces.
+        // Handle skipping the starting line if needed.
         using var lineReader = new StringReader(result);
         string line;
-        int removeStart = -1;
-        int configLength = -1;
-        while ((line = lineReader.ReadLine()) != null)
+        if (!noStartingLine)
         {
-            var sp = line.AsSpan().Trim(' ');
-            if (sp.Length > 0 && !sp.ContainsAnyExcept('-'))
+            // Skip to the line formatted as '<space*>-----<space*>' with some number of dashes.
+            // We will use the number of dashes to determine the length of the configuration info section, and the number of preceding spaces.
+            int removeStart = -1;
+            int configLength = -1;
+            while ((line = lineReader.ReadLine()) != null)
             {
-                removeStart = line.AsSpan().IndexOf('-');
-                configLength = sp.Length;
+                var sp = line.AsSpan().Trim(' ');
+                if (sp.Length > 0 && !sp.ContainsAnyExcept('-'))
+                {
+                    removeStart = line.AsSpan().IndexOf('-');
+                    configLength = sp.Length;
+                }
+            }
+
+            // Handle the case where we could not find the configuration info.
+            if (removeStart < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Could not find ffprobe configuration info section for command '{command}' - output was missing or in an unexpected format.")
+                    {
+                        Data =
+                        {
+                            ["Command"] = command,
+                            ["Output"] = result,
+                        },
+                    };
+            }
+
+            // Now, enumerate through each line in the configuration info section and return them to the caller.
+            while ((line = lineReader.ReadLine()) != null)
+            {
+                var sp = line.AsSpan();
+                if (sp.Length == 0) continue;
+                var info = sp.Slice(removeStart, configLength);
+                var name = sp[(removeStart + configLength)..].TrimStart(' ');
+                int spIdx = name.IndexOf(' ');
+                if (spIdx >= 0) name = name[..spIdx];
+                yield return (info.ToString(), name.ToString());
             }
         }
-
-        // Handle the case where we could not find the configuration info.
-        if (removeStart < 0)
+        else
         {
-            throw new InvalidOperationException(
-                $"Could not find ffprobe configuration info section for command '{command}' - output was missing or in an unexpected format.")
-                {
-                    Data =
-                    {
-                        ["Command"] = command,
-                        ["Output"] = result,
-                    },
-                };
-        }
-
-        // Now, enumerate through each line in the configuration info section and return them to the caller.
-        while ((line = lineReader.ReadLine()) != null)
-        {
-            var sp = line.AsSpan();
-            if (sp.Length == 0) continue;
-            var info = sp.Slice(removeStart, configLength);
-            var name = sp[(removeStart + configLength)..].TrimStart(' ');
-            int spIdx = name.IndexOf(' ');
-            if (spIdx >= 0) name = name[..spIdx];
-            yield return (info.ToString(), name.ToString());
+            // Enumerate through each line in the configuration info section and return them to the caller.
+            while ((line = lineReader.ReadLine()) != null)
+            {
+                var sp = line.AsSpan().TrimStart(' ');
+                if (sp.Length == 0) continue;
+                int idx = sp.IndexOf(' ');
+                if (idx < 0) continue;
+                var info = sp[..idx];
+                var name = sp[idx..].TrimStart(' ');
+                if (name.Length == 0) continue;
+                idx = name.IndexOf(' ');
+                if (idx >= 0) name = name[..idx];
+                yield return (info.ToString(), name.ToString());
+            }
         }
     }
 
@@ -330,7 +358,7 @@ internal static class FFprobeUtils
         static void InitImpl()
         {
             // Initialize encoders
-            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-encoders"))
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-encoders", noStartingLine: false))
             {
                 switch (name)
                 {
@@ -342,7 +370,7 @@ internal static class FFprobeUtils
             }
 
             // Initialize codecs
-            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-codecs"))
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-codecs", noStartingLine: false))
             {
                 switch (name)
                 {
@@ -368,7 +396,7 @@ internal static class FFprobeUtils
             }
 
             // Initialize muxing support
-            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-muxers"))
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-muxers", noStartingLine: false))
             {
                 switch (name)
                 {
@@ -390,6 +418,19 @@ internal static class FFprobeUtils
                         }
 
                         break;
+                }
+            }
+
+            // Initialize filter support
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-filters", noStartingLine: true))
+            {
+                switch (name)
+                {
+                    case "zscale": _configInfo.SupportsZscaleFilter = true; break;
+                    case "scale": _configInfo.SupportsScaleFilter = true; break;
+                    case "fps": _configInfo.SupportsFpsFilter = true; break;
+                    case "tonemap": _configInfo.SupportsTonemapFilter = true; break;
+                    case "format": _configInfo.SupportsFormatFilter = true; break;
                 }
             }
 
