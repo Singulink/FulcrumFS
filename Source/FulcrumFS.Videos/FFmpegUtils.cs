@@ -159,7 +159,13 @@ internal static class FFmpegUtils
         {
             // Remap to HDR first for accurate results - however, this could have a performance penalty if we're also then scaling / sampling it after.
             false => null,
-            _ => $"zscale=t=linear:npl=500,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=mobius:param=0.3:desat=0,zscale=t=bt709:m=bt709:r={NewVideoRange ?? "pc"},format={SDRPixelFormat}",
+            _ =>
+                $"zscale=t=linear:npl=500," +
+                $"format=gbrpf32le," +
+                $"zscale=p=bt709," +
+                $"tonemap=tonemap=mobius:param=0.3:desat=0," +
+                $"zscale=t=bt709:m=bt709:r={NewVideoRange ?? "pc"}," +
+                $"format={SDRPixelFormat}",
         }, NewVideoRange switch
         {
             null => null,
@@ -426,7 +432,7 @@ internal static class FFmpegUtils
 
     public static async Task RunFFmpegCommandAsync(
         FFmpegCommand command,
-        Action<double>? progressCallback,
+        Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
         CancellationToken cancellationToken = default)
     {
@@ -449,7 +455,7 @@ internal static class FFmpegUtils
 
     public static async Task RunRawFFmpegCommandAsync(
         IEnumerable<string> args,
-        Action<double>? progressCallback,
+        Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
         bool ensureAllProgressRead,
         CancellationToken cancellationToken = default)
@@ -498,7 +504,7 @@ internal static class FFmpegUtils
                                         if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
                                         {
                                             double progress = outTimeUs / 1_000_000.0;
-                                            progressCallback?.Invoke(progress);
+                                            if (progressCallback != null) await progressCallback(progress).ConfigureAwait(false);
                                         }
                                     }
 

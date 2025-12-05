@@ -445,39 +445,60 @@ public sealed class VideoProcessor : FileProcessor
         if (Options.ForceValidateAllStreams)
         {
             // Run the validation pass:
+            // Note: we cancel early if we exceed max video/audio lengths (if specified), to avoid unnecessary extra processing on an invalid (and potentially
+            // malicious, since our original detected duration is just from metadata, so our actual duration could be substantially longer if malicious) input.
+            // Note: while we have options to check duration, we currently have not implemented similar options for related things like rediculous FPS, etc.
             const double ValidateProgressFraction = 0.20;
-            Action<double> validateProgressCallback = progressTempFile is not null ? (durationDone) =>
-            {
-                // Avoid going backwards or repeating the same progress - but ensure we can still hit 100% of this section:
-                if (durationDone <= lastDone) return;
-                if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
-                else lastDone = durationDone;
-                if (durationDone < 0.0 || durationDone > maxDuration) return;
-
-                // Clamp / adjust to [0.0, 0.20] range:
-                double clampedProgress = double.Clamp(durationDone / maxDuration * ValidateProgressFraction, 0.0, ValidateProgressFraction);
-                Options.ProgressCallback!((context.FileId, context.VariantId), progressUsed + clampedProgress);
-            } : null;
-            await FFmpegUtils.RunRawFFmpegCommandAsync(
-                ["-i", sourceFileWithCorrectExtension.PathExport, "-ignore_unknown", "-xerror", "-hide_banner", "-f", "null", "-"],
-                validateProgressCallback,
-                progressTempFile,
-                ensureAllProgressRead: true,
-                cancellationToken: context.CancellationToken)
-            .ConfigureAwait(false);
-            progressUsed += ValidateProgressFraction;
-
-            // Check if duration is longer than max video or audio duration (if specified):
             double? maxVideoLength = Options.VideoSourceValidation.MaxLength?.TotalSeconds;
             double? maxAudioLength = Options.AudioSourceValidation.MaxLength?.TotalSeconds;
+            CancellationTokenSource exitEarlyCts = new();
+            CancellationToken exitEarlyCt = exitEarlyCts.Token;
+            Func<double, ValueTask> validateProgressCallback = (progressTempFile is not null || maxVideoLength is not null || maxAudioLength is not null)
+                ? async (durationDone) =>
+                {
+                    // Avoid going backwards or repeating the same progress - but ensure we can still hit 100% of this section:
+                    if (durationDone <= lastDone) return;
+                    if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
+                    else lastDone = durationDone;
+                    if (maxVideoLength.HasValue && lastDone > maxVideoLength.Value && numVideoStreams > 0) exitEarlyCts.Cancel();
+                    if (maxAudioLength.HasValue && lastDone > maxAudioLength.Value && numAudioStreams > 0) exitEarlyCts.Cancel();
+                    if (durationDone < 0.0 || durationDone > maxDuration) return;
+
+                    // Clamp / adjust to [0.0, 0.20] range:
+                    double clampedProgress = double.Clamp(durationDone / maxDuration * ValidateProgressFraction, 0.0, ValidateProgressFraction);
+                    if (Options.ProgressCallback is not null)
+                    {
+                        await Options.ProgressCallback((context.FileId, context.VariantId), progressUsed + clampedProgress).ConfigureAwait(false);
+                    }
+                }
+                : null;
+            if (validateProgressCallback is not null && progressTempFile is null) progressTempFile = context.GetNewWorkFile(".txt");
+            try
+            {
+                await FFmpegUtils.RunRawFFmpegCommandAsync(
+                    ["-i", sourceFileWithCorrectExtension.PathExport, "-ignore_unknown", "-xerror", "-hide_banner", "-f", "null", "-"],
+                    validateProgressCallback,
+                    progressTempFile,
+                    ensureAllProgressRead: true,
+                    cancellationToken: CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, exitEarlyCt).Token)
+                .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Rethrow if cancellation was requested by the caller only:
+                context.CancellationToken.ThrowIfCancellationRequested();
+            }
+
+            // Check if duration is longer than max video or audio duration (if specified):
             if ((maxVideoLength.HasValue && lastDone > maxVideoLength.Value && numVideoStreams > 0) ||
                 (maxAudioLength.HasValue && lastDone > maxAudioLength.Value && numAudioStreams > 0))
             {
                 throw new FileProcessingException("Measured video duration exceeds maximum allowed length.");
             }
 
-            // Update maxDuration with the measured duration:
+            // Update maxDuration with the measured duration, and update progress used:
             maxDuration = lastDone;
+            progressUsed += ValidateProgressFraction;
         }
 
         // Determine if we need to make any changes to the file at all - this involves checking: resizing, re-encoding, removing metadata, etc. - note: some
@@ -1050,7 +1071,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else
                 {
-                    // Note: we use Debug.Fail here since we should have already validated this earlier, so this is just a safeguard so we catch issues when testing.
+                    // Note: we use Debug.Fail here since we should have already validated this earlier, so this just safeguards so we catch issues in testing.
                     Debug.Fail("The requested video codec did not have a supported encoder available in the configured FFmpeg build (unexpected).");
                 }
             }
@@ -1149,7 +1170,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else
                 {
-                    // Note: we use Debug.Fail here since we should have already validated this earlier, so this is just a safeguard so we catch issues when testing.
+                    // Note: we use Debug.Fail here since we should have already validated this earlier, so this just safeguards so we catch issues in testing.
                     Debug.Fail("The requested audio codec did not have a supported encoder available in the configured FFmpeg build (unexpected).");
                 }
             }
@@ -1308,7 +1329,7 @@ public sealed class VideoProcessor : FileProcessor
         if (Options.ProgressCallback != null && maxDuration != 0.0) progressTempFile ??= context.GetNewWorkFile(".txt");
         lastDone = 0.0;
         const double ReservedProgress = 0.05;
-        Action<double>? localProgressCallback = progressTempFile != null ? (durationDone) =>
+        Func<double, ValueTask>? localProgressCallback = (Options.ProgressCallback != null && maxDuration != 0.0) ? async (durationDone) =>
         {
             // Avoid going backwards or repeating the same progress:
             if (durationDone <= lastDone) return;
@@ -1317,11 +1338,19 @@ public sealed class VideoProcessor : FileProcessor
             if (durationDone < 0.0 || durationDone > maxDuration) return;
 
             // Clamp / adjust to [progressUsed, 0.95] range:
-            double clampedProgress = double.Clamp(progressUsed + (durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed)), progressUsed, 1.0 - ReservedProgress);
+            double clampedProgress = double.Clamp(
+                progressUsed + (durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed)),
+                progressUsed,
+                1.0 - ReservedProgress);
             lastDone = durationDone;
-            Options.ProgressCallback!((context.FileId, context.VariantId), clampedProgress);
+            await Options.ProgressCallback!((context.FileId, context.VariantId), clampedProgress).ConfigureAwait(false);
         } : null;
-        await FFmpegUtils.RunFFmpegCommandAsync(command, localProgressCallback, progressTempFile, context.CancellationToken).ConfigureAwait(false);
+        await FFmpegUtils.RunFFmpegCommandAsync(
+            command,
+            localProgressCallback,
+            localProgressCallback != null ? progressTempFile : null,
+            context.CancellationToken)
+        .ConfigureAwait(false);
 
         // For any streams that are in a "if smaller than" mode, we want to do additional passes to see if it ended up smaller:
         if (streamsToCheckSize.Count > 0)
@@ -1423,7 +1452,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     double progressPortion = ReservedProgress * 0.5 / (streamsToCheckSize.Count + 2);
                     double progressValue = 1.0 - ReservedProgress + (progressPortion * (i + 1));
-                    Options.ProgressCallback!((context.FileId, context.VariantId), progressValue);
+                    await Options.ProgressCallback!((context.FileId, context.VariantId), progressValue).ConfigureAwait(false);
                 }
             }
 
@@ -1530,7 +1559,7 @@ public sealed class VideoProcessor : FileProcessor
                 // so we want to leave some headroom.
                 const double ReservedProgressInner = 0.02;
                 lastDone = 0.0;
-                Action<double>? localProgressCallbackInner = progressTempFile != null ? (durationDone) =>
+                Func<double, ValueTask>? localProgressCallbackInner = progressTempFile != null ? async (durationDone) =>
                 {
                     // Avoid going backwards or repeating the same progress:
                     if (durationDone <= lastDone) return;
@@ -1541,10 +1570,17 @@ public sealed class VideoProcessor : FileProcessor
                     // Clamp to [0.0, 0.98] range of our remaining reserved portion:
                     double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgressInner), 0.0, 1.0 - ReservedProgressInner);
                     lastDone = durationDone;
-                    Options.ProgressCallback!((context.FileId, context.VariantId), 1.0 - (ReservedProgress / 2.0) + (clampedProgress * (ReservedProgress / 2.0)));
-                } : null;
-                await FFmpegUtils.RunFFmpegCommandAsync(mixCommand, localProgressCallbackInner, progressTempFile, context.CancellationToken)
+                    await Options.ProgressCallback!(
+                        (context.FileId, context.VariantId),
+                        1.0 - (ReservedProgress / 2.0) + (clampedProgress * (ReservedProgress / 2.0)))
                     .ConfigureAwait(false);
+                } : null;
+                await FFmpegUtils.RunFFmpegCommandAsync(
+                    mixCommand,
+                    localProgressCallbackInner,
+                    localProgressCallback != null ? progressTempFile : null,
+                    context.CancellationToken)
+                .ConfigureAwait(false);
 
                 // Update the result file:
                 resultTempFile.Delete();

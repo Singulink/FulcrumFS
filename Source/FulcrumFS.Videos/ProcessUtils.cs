@@ -116,8 +116,42 @@ internal static class ProcessUtils
                     }
                 }
 
-                if (runAsynchronously) await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-                else process.WaitForExit();
+                try
+                {
+                    if (runAsynchronously)
+                    {
+                        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else if (cancellationToken == CancellationToken.None)
+                    {
+                        process.WaitForExit();
+                    }
+                    else
+                    {
+                        SpinWait sw = default;
+                        while (!process.HasExited)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            sw.SpinOnce();
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    try
+                    {
+                        if (!process.HasExited)
+                        {
+                            process.Kill(entireProcessTree: true);
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore exceptions from killing the process.
+                    }
+
+                    throw;
+                }
             }
             finally
             {

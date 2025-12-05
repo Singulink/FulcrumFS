@@ -157,7 +157,10 @@ internal static class FFprobeUtils
             if (stream.TryGetProperty("tags", out var tagsProp) && tagsProp.ValueKind == JsonValueKind.Object)
             {
                 language = ReadStringProperty(tagsProp, "language");
-                titleOrHandlerName = ReadStringProperty(tagsProp, "title") ?? ReadStringProperty(tagsProp, "handler_name") ?? ReadStringProperty(tagsProp, "HANDLER_NAME");
+                titleOrHandlerName =
+                    ReadStringProperty(tagsProp, "title") ??
+                    ReadStringProperty(tagsProp, "handler_name") ??
+                    ReadStringProperty(tagsProp, "HANDLER_NAME");
             }
 
             switch (codecType)
@@ -273,7 +276,10 @@ internal static class FFprobeUtils
     private static ConfigurationInfo _configInfo;
     private static volatile bool _configInfoInitialized;
 
-    private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(string command, bool noStartingLine, CancellationToken cancellationToken = default)
+    private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(
+        string command,
+        bool noStartingLine,
+        CancellationToken cancellationToken = default)
     {
         // Get the raw configuration output from ffprobe.
         string result = ProcessUtils.RunProcessToStringWithErrorHandlingAsync(

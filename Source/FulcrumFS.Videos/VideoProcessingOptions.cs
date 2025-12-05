@@ -353,7 +353,7 @@ public sealed record VideoProcessingOptions
     /// Gets or initializes the progress callback, which gets invoked with the current approximate progress (between 0.0 and 1.0).
     /// Default is <see langword="null" />.
     /// </summary>
-    public Action<(FileId FileId, string? VariantId), double>? ProgressCallback { get; init; }
+    public Func<(FileId FileId, string? VariantId), double, ValueTask>? ProgressCallback { get; init; }
 
     /// <summary>
     /// Gets or initializes the behavior for re-encoding video streams.
