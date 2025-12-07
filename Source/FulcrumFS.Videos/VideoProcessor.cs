@@ -480,7 +480,7 @@ public sealed class VideoProcessor : FileProcessor
                     // If resizing is enabled, check if we would resize:
                     if (Options.ResizeOptions is { } resizeOptions)
                     {
-                        if ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height))
+                        if ((videoStream.Width > int.Max(resizeOptions.Width, 2)) || (videoStream.Height > int.Max(resizeOptions.Height, 2)))
                         {
                             remuxRequired = true;
                             remuxGuaranteedRequired = true;
@@ -862,7 +862,7 @@ public sealed class VideoProcessor : FileProcessor
 
                 // Check for resizing:
                 if (Options.ResizeOptions is { } resizeOptions &&
-                    ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height)))
+                    ((videoStream.Width > int.Max(resizeOptions.Width, 2)) || (videoStream.Height > int.Max(resizeOptions.Height, 2))))
                 {
                     // Note: we already checked for invalid dimensions earlier, so no need to worry about 0 or -1.
                     reencode = true;
@@ -876,7 +876,7 @@ public sealed class VideoProcessor : FileProcessor
                     var (newWidth, newHeight) = potentialWidth1 < potentialWidth2
                         ? ((int)Math.Round(potentialWidth1 / 2) * 2, (int)Math.Round(potentialHeight1 / 2) * 2)
                         : ((int)Math.Round(potentialWidth2 / 2) * 2, (int)Math.Round(potentialHeight2 / 2) * 2); // Ensure even dimensions
-                    filterOverride.Scale = (newWidth, newHeight);
+                    filterOverride.Scale = (int.Max(newWidth, 2), int.Max(newHeight, 2));
                 }
 
                 // Check for fps:
