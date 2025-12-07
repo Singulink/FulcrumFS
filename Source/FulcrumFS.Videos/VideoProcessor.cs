@@ -288,7 +288,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // If resizing is enabled, check if we could resize:
-                if (Options.ResizeOptions is { } resizeOptions)
+                if (Options.ResizeOptions is { })
                 {
                     if (videoStream.Width <= 0 || videoStream.Height <= 0)
                     {
@@ -368,11 +368,11 @@ public sealed class VideoProcessor : FileProcessor
             // Run the validation pass:
             // Note: we cancel early if we exceed max video/audio lengths (if specified), to avoid unnecessary extra processing on an invalid (and potentially
             // malicious, since our original detected duration is just from metadata, so our actual duration could be substantially longer if malicious) input.
-            // Note: while we have options to check duration, we currently have not implemented similar options for related things like rediculous FPS, etc.
+            // Note: while we have options to check duration, we currently have not implemented similar options for related things like ridiculous FPS, etc.
             const double ValidateProgressFraction = 0.20;
             double? maxVideoLength = Options.VideoSourceValidation.MaxLength?.TotalSeconds;
             double? maxAudioLength = Options.AudioSourceValidation.MaxLength?.TotalSeconds;
-            CancellationTokenSource exitEarlyCts = new();
+            using CancellationTokenSource exitEarlyCts = new();
             CancellationToken exitEarlyCt = exitEarlyCts.Token;
             Func<double, ValueTask> validateProgressCallback = (progressTempFile is not null || maxVideoLength is not null || maxAudioLength is not null)
                 ? async (durationDone) =>
@@ -396,12 +396,13 @@ public sealed class VideoProcessor : FileProcessor
             if (validateProgressCallback is not null && progressTempFile is null) progressTempFile = context.GetNewWorkFile(".txt");
             try
             {
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, exitEarlyCt);
                 await FFmpegUtils.RunRawFFmpegCommandAsync(
                     ["-i", sourceFileWithCorrectExtension.PathExport, "-ignore_unknown", "-xerror", "-hide_banner", "-f", "null", "-"],
                     validateProgressCallback,
                     progressTempFile,
                     ensureAllProgressRead: true,
-                    cancellationToken: CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, exitEarlyCt).Token)
+                    cancellationToken: linkedCts.Token)
                 .ConfigureAwait(false);
             }
             catch (OperationCanceledException ex) when (ex.CancellationToken != context.CancellationToken)
@@ -868,13 +869,13 @@ public sealed class VideoProcessor : FileProcessor
                     isRequiredReencode = true;
                     filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
                     perOutputStreamOverrides.Add(filterOverride);
-                    double potentialWidth1 = resizeOptions.Width;
+                    double potentialWidth1 = resizeOptions.Width & ~1; // Ensure even width
                     double potentialHeight1 = (double)videoStream.Height / videoStream.Width * potentialWidth1;
-                    double potentialHeight2 = resizeOptions.Height;
+                    double potentialHeight2 = resizeOptions.Height & ~1; // Ensure even height
                     double potentialWidth2 = (double)videoStream.Width / videoStream.Height * potentialHeight2;
                     var (newWidth, newHeight) = potentialWidth1 < potentialWidth2
-                        ? ((int)Math.Round(potentialWidth1), (int)Math.Round(potentialHeight1))
-                        : ((int)Math.Round(potentialWidth2), (int)Math.Round(potentialHeight2));
+                        ? ((int)Math.Round(potentialWidth1 / 2) * 2, (int)Math.Round(potentialHeight1 / 2) * 2)
+                        : ((int)Math.Round(potentialWidth2 / 2) * 2, (int)Math.Round(potentialHeight2 / 2) * 2); // Ensure even dimensions
                     filterOverride.Scale = (newWidth, newHeight);
                 }
 
@@ -1036,7 +1037,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     streamsToCheckSize.Add((
                         StreamMappingIndex: streamMapping.Count - 1,
-                        SourceValidFileExtension: videoCodec?.WritableFileExtension ?? tempOutputFile.Extension,
+                        SourceValidFileExtension: videoCodec!.WritableFileExtension,
                         RequiresReencodeForMP4: !isCompatibleStream[inputStreamIndex]));
                 }
 
@@ -1151,7 +1152,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     streamsToCheckSize.Add((
                         StreamMappingIndex: streamMapping.Count - 1,
-                        SourceValidFileExtension: audioCodec?.WritableFileExtension ?? tempOutputFile.Extension,
+                        SourceValidFileExtension: audioCodec!.WritableFileExtension,
                         RequiresReencodeForMP4: !isCompatibleStream[inputStreamIndex]));
                 }
 
