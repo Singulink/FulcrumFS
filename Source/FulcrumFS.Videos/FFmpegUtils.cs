@@ -131,11 +131,11 @@ internal static class FFmpegUtils
     public sealed class PerStreamFPSOverride(char streamKind, int streamIndexWithinKind, long fpsNum, long fpsDen)
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
-        public long FPSNum { get; } = fpsNum;
-        public long FPSDen { get; } = fpsDen;
+        public long FPSNum { get; set; } = fpsNum;
+        public long FPSDen { get; set; } = fpsDen;
         protected override string CommandName => "r";
-        protected override string CommandArgument { get; }
-            = fpsDen == 1 ? fpsNum.ToString(CultureInfo.InvariantCulture) : string.Create(CultureInfo.InvariantCulture, $"{fpsNum}/{fpsDen}");
+        protected override string CommandArgument => field ??=
+            FPSDen == 1 ? FPSNum.ToString(CultureInfo.InvariantCulture) : string.Create(CultureInfo.InvariantCulture, $"{FPSNum}/{FPSDen}");
     }
 
     public sealed class PerStreamPresetOverride(char streamKind, int streamIndexWithinKind, string preset)
@@ -215,7 +215,7 @@ internal static class FFmpegUtils
     {
         public int SampleRate { get; set; } = sampleRate;
         protected override string CommandName => "ar";
-        protected override string CommandArgument { get; } = sampleRate.ToString(CultureInfo.InvariantCulture);
+        protected override string CommandArgument => field ??= SampleRate.ToString(CultureInfo.InvariantCulture);
     }
 
     public sealed class PerStreamColorRangeOverride(char streamKind, int streamIndexWithinKind, string colorRange)

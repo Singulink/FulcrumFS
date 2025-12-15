@@ -1215,12 +1215,20 @@ public sealed class VideoProcessor : FileProcessor
                                     perOutputStreamOverrides.Add(filterOverride);
                                 }
 
+                                if (fpsOverride is null)
+                                {
+                                    fpsOverride = new FFmpegUtils.PerStreamFPSOverride(streamKind: 'v', streamIndexWithinKind: id, 0, 0);
+                                    perOutputStreamOverrides.Add(fpsOverride);
+                                }
+
                                 // Set to maximum fps - in this edge case, we ignore the fps mode and just set to the maximum possible to simplify the logic:
                                 filterOverride.FPS = (maxFpsNum, maxFpsDen);
                                 perOutputStreamOverrides.Add(fpsOverride =
                                     new FFmpegUtils.PerStreamFPSOverride(streamKind: 'v', streamIndexWithinKind: id, fpsNum: maxFpsNum, fpsDen: maxFpsDen));
                                 resultFpsNum = maxFpsNum;
                                 resultFpsDen = maxFpsDen;
+                                fpsOverride.FPSNum = resultFpsNum;
+                                fpsOverride.FPSDen = resultFpsDen;
                             }
 
                             // If FPS numerator or denominator are too large, adjust manually to ensure they get rounded in a way that doesn't exceed the max:
@@ -1233,6 +1241,12 @@ public sealed class VideoProcessor : FileProcessor
                                     perOutputStreamOverrides.Add(filterOverride);
                                 }
 
+                                if (fpsOverride is null)
+                                {
+                                    fpsOverride = new FFmpegUtils.PerStreamFPSOverride(streamKind: 'v', streamIndexWithinKind: id, 0, 0);
+                                    perOutputStreamOverrides.Add(fpsOverride);
+                                }
+
                                 // Round such that both end up <= 1001000, and such that num/den does not increase slightly in the edge case:
                                 const int MaxValue = 1001000;
                                 int divisionFactor = checked((int)long.Max((resultFpsNum + (MaxValue - 1))
@@ -1241,6 +1255,8 @@ public sealed class VideoProcessor : FileProcessor
                                 resultFpsDen = (resultFpsDen + divisionFactor - 1) / divisionFactor;
                                 Debug.Assert(resultFpsNum <= MaxValue && resultFpsDen <= MaxValue, "Failed to reduce max fps num and den to <= 1001000.");
                                 filterOverride.FPS = (resultFpsNum, resultFpsDen);
+                                fpsOverride.FPSNum = resultFpsNum;
+                                fpsOverride.FPSDen = resultFpsDen;
                             }
                         }
                     }
@@ -2095,7 +2111,7 @@ public sealed class VideoProcessor : FileProcessor
             // Note: if the limit changed, here is what would happen: either videos would be being resized down more than necessary, or ffmpeg would fail to
             // apply the resize filter (which will cause an exception to occur), so we consider this to be safe to rely on, as if it changes we will notice &
             // there is no meaningful malicious usage possible still.
-            if ((resultWidth + 128L) * (resultHeight + 128L) * 8 > int.MaxValue)
+            if ((resultWidth + 128L) * (resultHeight + 128L) > int.MaxValue / 8)
             {
                 // If one dimension is equal to the min, we can't reduce further, so throw an error:
                 if (maxW == minDimension || maxH == minDimension)

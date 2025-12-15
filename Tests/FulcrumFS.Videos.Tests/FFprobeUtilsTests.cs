@@ -34,8 +34,8 @@ public class FFprobeUtilsTests
 
     private static string ToPrettyString(FFprobeUtils.VideoFileInfo info)
     {
-        StringWriter sw = new();
-        IndentedTextWriter tw = new(sw, "    ");
+        using StringWriter sw = new();
+        using IndentedTextWriter tw = new(sw, "    ");
 
         tw.WriteLine("Format Name: " + info.FormatName);
         if (info.Duration is not null) tw.WriteLine("Duration: " + info.Duration);
