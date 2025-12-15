@@ -127,16 +127,16 @@ public abstract class AudioCodec
     private sealed class VorbisImpl : AudioCodec
     {
         public override string Name => "vorbis";
-        internal override string WritableFileExtension => ".webm";
-        internal override bool SupportsMP4Muxing => false;
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
         internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVorbisDecoder;
     }
 
     private sealed class OpusImpl : AudioCodec
     {
         public override string Name => "opus";
-        internal override string WritableFileExtension => ".webm";
-        internal override bool SupportsMP4Muxing => false;
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
         internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsOpusDecoder;
     }
 }

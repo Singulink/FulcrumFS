@@ -18,8 +18,8 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// Gets a predefined instance of <see cref="VideoProcessingOptions"/> that always re-encodes to standardized H.264 video stream/s (60fps max, 8 bits per
-    /// channel, 4:2:0 chroma subsampling, and SDR) and standardized AAC audio stream/s (48kHz max, stereo max) in an MP4 container, while attempting to
-    /// preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.
+    /// channel, 4:2:0 chroma subsampling, SDR, square pixels, and progressive frames) and standardized AAC audio stream/s (48kHz max, stereo max) in an MP4
+    /// container, while attempting to preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.
     /// </summary>
     public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
@@ -37,6 +37,8 @@ public sealed record VideoProcessingOptions
         RemapHDRToSDR = true,
         MaxChannels = AudioChannels.Stereo,
         MaxSampleRate = AudioSampleRate.Hz48000,
+        ForceSquarePixels = true,
+        ForceProgressiveFrames = true,
     };
 
     /// <summary>
@@ -58,6 +60,8 @@ public sealed record VideoProcessingOptions
         RemapHDRToSDR = false,
         MaxChannels = AudioChannels.Preserve,
         MaxSampleRate = AudioSampleRate.Preserve,
+        ForceSquarePixels = false,
+        ForceProgressiveFrames = false,
     };
 
     /// <summary>
@@ -500,4 +504,25 @@ public sealed record VideoProcessingOptions
             field = value;
         }
     }
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether to force square pixels in the output video streams.
+    /// Note: when set to <see langword="true" />, if the source video has non-square pixels (i.e., a sample aspect ratio different from 1:1), the video will
+    /// be rescaled to have square pixels.
+    /// Note: when set to <see langword="false" />, scaling the video will preserve the original display aspect ratio by adjusting the pixel dimensions and
+    /// sample aspect ratio accordingly.
+    /// </summary>
+#pragma warning disable SA1623 // Property summary documentation should match accessors
+    public bool ForceSquarePixels { get; init; }
+#pragma warning restore SA1623 // Property summary documentation should match accessors
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether to force progressive frames in the output video streams, as opposed to interlaced frames.
+    /// Note: when set to <see langword="true" />, any interlaced video in the source will be deinterlaced.
+    /// Note: when set to <see langword="false" />, the original video may still be deinterlaced if deemed necessary by the processing pipeline, e.g., for
+    /// scaling.
+    /// </summary>
+#pragma warning disable SA1623 // Property summary documentation should match accessors
+    public bool ForceProgressiveFrames { get; init; }
+#pragma warning restore SA1623 // Property summary documentation should match accessors
 }

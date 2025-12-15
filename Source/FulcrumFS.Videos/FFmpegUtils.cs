@@ -150,10 +150,12 @@ internal static class FFmpegUtils
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
         public (long Num, long Den)? FPS { get; set; }
-        public (int Width, int Height)? Scale { get; set; }
+        public (int Width, int Height)? ResizeTo { get; set; }
         public string? NewVideoRange { get; set; }
         public bool HDRToSDR { get; set; }
-        public string? SDRPixelFormat { get; set; }
+        public string? PixelFormat { get; set; }
+        public bool Deinterlace { get; set; }
+        public int MakePixelsSquareMode { get; set; } // 0 - keep 1:1, 1 - ignore, 2 - currently wider, 3 - currently taller
         protected override string CommandName => "filter";
         protected override string CommandArgument => field ??= string.Join(',', ((string?[])[HDRToSDR switch
         {
@@ -164,22 +166,39 @@ internal static class FFmpegUtils
                 $"format=gbrpf32le," +
                 $"zscale=p=bt709," +
                 $"tonemap=tonemap=mobius:param=0.3:desat=0," +
-                $"zscale=t=bt709:m=bt709:r={NewVideoRange ?? "pc"}," +
-                $"format={SDRPixelFormat}",
+                $"zscale=t=bt709:m=bt709:r={NewVideoRange ?? "pc"}",
+        }, PixelFormat switch
+        {
+            null => null,
+            var pf => $"format={pf}",
         }, NewVideoRange switch
         {
             null => null,
             _ when HDRToSDR => null, // We already handled this above.
             var range => string.Create(CultureInfo.InvariantCulture, $"scale=out_range={range}"),
+        }, Deinterlace switch
+        {
+            false => null,
+            true => "bwdif",
         }, FPS switch
         {
             null => null,
             (long num, 1) => string.Create(CultureInfo.InvariantCulture, $"fps={num}"),
             var (num, den) => string.Create(CultureInfo.InvariantCulture, $"fps={num}/{den}"),
-        }, Scale switch
+        }, MakePixelsSquareMode switch
+        {
+            /* Resizing to square pixels is rare, so we do it as a pre-step to the normal resize & just resize again after if needed. */
+            2 => "scale=w='max(trunc(iw*sar+0.5),1)':h=ih:reset_sar=1:force_original_aspect_ratio=disable",
+            3 => "scale=w=iw:h='max(trunc(ih/sar+0.5),1)':reset_sar=1:force_original_aspect_ratio=disable",
+            _ => null,
+        }, ResizeTo switch
         {
             null => null,
-            var (w, h) => string.Create(CultureInfo.InvariantCulture, $"scale={w}x{h}"),
+            var (w, h) => string.Create(CultureInfo.InvariantCulture, $"scale=w={w}:h={h}:force_original_aspect_ratio=disable"),
+        }, MakePixelsSquareMode switch
+        {
+            not 1 => "setsar=sar=1/1",
+            _ => null,
         }]).Where((x) => x is not null));
     }
 
@@ -194,7 +213,7 @@ internal static class FFmpegUtils
     public sealed class PerStreamSampleRateOverride(char streamKind, int streamIndexWithinKind, int sampleRate)
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
-        public int SampleRate { get; } = sampleRate;
+        public int SampleRate { get; set; } = sampleRate;
         protected override string CommandName => "ar";
         protected override string CommandArgument { get; } = sampleRate.ToString(CultureInfo.InvariantCulture);
     }
@@ -236,7 +255,6 @@ internal static class FFmpegUtils
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
         public string? Language { get; set; }
-        public string? TitleOrHandlerName { get; set; }
         protected override string CommandName => string.Empty;
         protected override string CommandArgument => string.Empty;
 
@@ -251,15 +269,6 @@ internal static class FFmpegUtils
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-metadata:s:{StreamIndexWithinKind}"));
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"language={Language}"));
-            }
-
-            if (TitleOrHandlerName is not null)
-            {
-                args.Add(string.Create(CultureInfo.InvariantCulture, $"-metadata:s:{StreamIndexWithinKind}"));
-                args.Add(string.Create(CultureInfo.InvariantCulture, $"title={TitleOrHandlerName}"));
-
-                args.Add(string.Create(CultureInfo.InvariantCulture, $"-metadata:s:{StreamIndexWithinKind}"));
-                args.Add(string.Create(CultureInfo.InvariantCulture, $"handler_name={TitleOrHandlerName}"));
             }
         }
     }

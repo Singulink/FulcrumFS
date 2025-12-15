@@ -54,8 +54,9 @@ public sealed class VideoProcessor : FileProcessor
             throw new NotSupportedException($"The required video encoder for '{codecName}' is not supported by the configured ffmpeg installation.");
         }
 
-        if (!FFprobeUtils.Configuration.SupportsLibFDKAACEncoder && !FFprobeUtils.Configuration.SupportsAACEncoder)
+        if (!FFprobeUtils.Configuration.SupportsAACEncoder)
         {
+            // Note: we always require the native aac encoder so that we can support > 8 channels in preserve mode.
             throw new NotSupportedException("The required audio encoder for 'aac' is not supported by the configured ffmpeg installation.");
         }
 
@@ -89,6 +90,11 @@ public sealed class VideoProcessor : FileProcessor
         if (!FFprobeUtils.Configuration.SupportsFormatFilter)
         {
             throw new NotSupportedException("The required 'format' video filter is not supported by the configured ffmpeg installation.");
+        }
+
+        if (!FFprobeUtils.Configuration.SupportsBwdifFilter)
+        {
+            throw new NotSupportedException("The required 'bwdif' video filter is not supported by the configured ffmpeg installation.");
         }
     }
 
@@ -205,7 +211,7 @@ public sealed class VideoProcessor : FileProcessor
             if (stream is FFprobeUtils.VideoStreamInfo videoStream)
             {
                 // Skip thumbnails
-                if (videoStream.IsAttachedPic || videoStream.IsTimedThumbnail)
+                if (videoStream.IsAttachedPic || videoStream.IsTimedThumbnails)
                 {
                     continue;
                 }
@@ -287,13 +293,10 @@ public sealed class VideoProcessor : FileProcessor
                     continue;
                 }
 
-                // If resizing is enabled, check if we could resize:
-                if (Options.ResizeOptions is { })
+                // Check if we can resize if needed, which requires known dimensions:
+                if (videoStream.Width <= 0 || videoStream.Height <= 0)
                 {
-                    if (videoStream.Width <= 0 || videoStream.Height <= 0)
-                    {
-                        throw new FileProcessingException($"Video stream {idx} has unknown dimensions, cannot determine resizing.");
-                    }
+                    throw new FileProcessingException($"Video stream {idx} has unknown dimensions, cannot determine resizing.");
                 }
             }
             else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
@@ -352,7 +355,7 @@ public sealed class VideoProcessor : FileProcessor
             sourceInfo.Duration ?? 0.0,
             .. sourceInfo.Streams
                 .OfType<FFprobeUtils.VideoStreamInfo>()
-                .Where((x) => !x.IsAttachedPic && !x.IsTimedThumbnail)
+                .Where((x) => !x.IsAttachedPic && !x.IsTimedThumbnails)
                 .Select((x) => x.Duration ?? 0.0),
             .. sourceInfo.Streams
                 .OfType<FFprobeUtils.AudioStreamInfo>()
@@ -437,7 +440,7 @@ public sealed class VideoProcessor : FileProcessor
             {
                 if (stream is FFprobeUtils.VideoStreamInfo videoStream)
                 {
-                    bool isThumbnail = videoStream.IsAttachedPic || videoStream.IsTimedThumbnail;
+                    bool isThumbnail = videoStream.IsAttachedPic || videoStream.IsTimedThumbnails;
                     if (Options.MetadataStrippingMode is not (VideoMetadataStrippingMode.None or VideoMetadataStrippingMode.Preferred) && isThumbnail)
                     {
                         remuxRequired = true;
@@ -454,11 +457,15 @@ public sealed class VideoProcessor : FileProcessor
                     }
 
                     VideoCodec? codec = MatchVideoCodecByName(Options.ResultVideoCodecs, videoStream.CodecName);
+                    bool reencodingStream = false;
+                    bool mustReencodeStream = false;
 
                     if (codec is null)
                     {
                         remuxRequired = true;
                         remuxGuaranteedRequired = true;
+                        reencodingStream = true;
+                        mustReencodeStream = true;
                     }
 
                     if (codec?.SupportsMP4Muxing != true)
@@ -466,52 +473,56 @@ public sealed class VideoProcessor : FileProcessor
                         guaranteedFullyCompatibleWithMP4Container = false;
                     }
 
-                    if (Options.VideoReencodeMode != StreamReencodeMode.AvoidReencoding)
+                    // Check if we can get the pixel format info:
+                    var pixFormatInfo = GetPixelFormatCharacteristics(videoStream.PixelFormat);
+                    int bitsPerSample = pixFormatInfo?.BitsPerSample ?? videoStream.BitsPerSample;
+
+                    // If we're not trying to avoid re-encoding, mark re-encoding (we handle select smallest logic later):
+                    if (Options.VideoReencodeMode == StreamReencodeMode.Always)
                     {
-                        remuxRequired = true;
+                        reencodingStream = true;
+                        mustReencodeStream = true;
                     }
 
                     // Check if remuxing is already required (the remaining checks are only if remuxing is not yet known to be required):
-                    if (remuxGuaranteedRequired)
+                    if (mustReencodeStream)
                     {
-                        continue;
+                        goto checkResize;
                     }
 
                     // If resizing is enabled, check if we would resize:
                     if (Options.ResizeOptions is { } resizeOptions)
                     {
-                        if ((videoStream.Width > int.Max(resizeOptions.Width, 2)) || (videoStream.Height > int.Max(resizeOptions.Height, 2)))
+                        int minDimension = Options.ResultVideoCodecs[0] == VideoCodec.H264 ? 2 : 16;
+                        if ((videoStream.Width > int.Max(resizeOptions.Width, minDimension)) ||
+                            (videoStream.Height > int.Max(resizeOptions.Height, minDimension)))
                         {
-                            remuxRequired = true;
-                            remuxGuaranteedRequired = true;
-                            continue;
+                            reencodingStream = true;
+                            mustReencodeStream = true;
+                            goto checkResize;
                         }
                     }
-
-                    // Check if we can get the pixel format info:
-                    var pixFormatInfo = GetPixelFormatCharacteristics(videoStream.PixelFormat);
-                    int bitsPerSample = pixFormatInfo?.BitsPerSample ?? videoStream.BitsPerSample;
 
                     // Try to check the bits/channel if necessary:
                     if (Options.MaximumBitsPerChannel != BitsPerChannel.Preserve)
                     {
                         if (bitsPerSample <= 0)
                         {
-                            remuxRequired = true;
-                            remuxGuaranteedRequired = true;
-                            continue;
+                            reencodingStream = true;
+                            mustReencodeStream = true;
+                            goto checkResize;
                         }
                         else if (bitsPerSample > (GetBitsPerChannel(Options.MaximumBitsPerChannel) ?? int.MaxValue))
                         {
-                            remuxRequired = true;
-                            remuxGuaranteedRequired = true;
-                            continue;
+                            reencodingStream = true;
+                            mustReencodeStream = true;
+                            goto checkResize;
                         }
                         else if (videoStream.BitsPerSample > 0 && bitsPerSample != videoStream.BitsPerSample)
                         {
-                            remuxRequired = true;
-                            remuxGuaranteedRequired = true;
-                            continue;
+                            reencodingStream = true;
+                            mustReencodeStream = true;
+                            goto checkResize;
                         }
                     }
 
@@ -520,17 +531,18 @@ public sealed class VideoProcessor : FileProcessor
                     {
                         if (pixFormatInfo is null)
                         {
-                            remuxRequired = true;
-                            remuxGuaranteedRequired = true;
-                            continue;
+                            reencodingStream = true;
+                            mustReencodeStream = true;
+                            goto checkResize;
                         }
                         else if (
                             !pixFormatInfo.Value.IsStandard ||
+                            videoStream.AlphaMode ||
                             pixFormatInfo.Value.ChromaSubsampling > (GetChromaSubsampling(Options.MaximumChromaSubsampling) ?? 444))
                         {
-                            remuxRequired = true;
-                            remuxGuaranteedRequired = true;
-                            continue;
+                            reencodingStream = true;
+                            mustReencodeStream = true;
+                            goto checkResize;
                         }
                     }
 
@@ -541,17 +553,86 @@ public sealed class VideoProcessor : FileProcessor
                         videoStream.FpsDen <= 0 ||
                         videoStream.FpsNum > (long)videoStream.FpsDen * targetFps.Value))
                     {
-                        remuxRequired = true;
-                        remuxGuaranteedRequired = true;
-                        continue;
+                        reencodingStream = true;
+                        mustReencodeStream = true;
+                        goto checkResize;
                     }
 
                     // Check if hdr:
                     if (Options.RemapHDRToSDR && !IsKnownSDRColorProfile(videoStream.ColorTransfer, videoStream.ColorPrimaries, videoStream.ColorSpace))
                     {
-                        remuxRequired = true;
-                        remuxGuaranteedRequired = true;
+                        reencodingStream = true;
+                        mustReencodeStream = true;
+                        goto checkResize;
                     }
+
+                    // Check interlacing:
+                    if (Options.ForceProgressiveFrames && !IsProgressive(videoStream.FieldOrder))
+                    {
+                        reencodingStream = true;
+                        mustReencodeStream = true;
+                        goto checkResize;
+                    }
+
+                    // Check for non-square pixels:
+                    if (Options.ForceSquarePixels && (videoStream.SarNum, videoStream.SarDen) is not ((<= 0, <= 0) or (1, 1)))
+                    {
+                        reencodingStream = true;
+                        mustReencodeStream = true;
+                    }
+
+                    // Check for if we can resize - if we have to re-encode the stream, we must be able to potentially resize it:
+                    // Note: we also check select smallest logic here.
+                    checkResize:
+                    if (reencodingStream || Options.VideoReencodeMode == StreamReencodeMode.SelectSmallest)
+                    {
+                        // Determine the resulting chroma subsampling:
+                        int sourceSubsampling = pixFormatInfo switch
+                        {
+                            { ChromaSubsampling: 440 } => 444,
+                            { ChromaSubsampling: var x } => x,
+                            _ => 444,
+                        };
+                        int subsampling = int.Min(sourceSubsampling, GetChromaSubsampling(Options.MaximumChromaSubsampling) ?? 444);
+
+                        // Check if the resizing is possible:
+                        var (mode, _, _) = CalculateVideoResize(
+                            videoStream.Width,
+                            videoStream.Height,
+                            videoStream.SarNum,
+                            videoStream.SarDen,
+                            Options.ResizeOptions is null ? null : (Options.ResizeOptions.Width, Options.ResizeOptions.Height),
+                            subsampling is 420 or 422,
+                            subsampling is 444,
+                            Options.ResultVideoCodecs[0] == VideoCodec.HEVC);
+
+                        // If there's an error with resizing, throw now or mark as not re-encoding:
+                        // Also, implement handling for select smallest mode:
+                        if (mustReencodeStream)
+                        {
+                            if (mode == 1)
+                            {
+                                throw new FileProcessingException("Cannot re-encode video to fit within specified dimensions.");
+                            }
+                            else if (mode == 2)
+                            {
+                                throw new FileProcessingException("Cannot re-encode very large video to fit within codec maximum pixel count.");
+                            }
+                        }
+                        else if (mode != 0)
+                        {
+                            reencodingStream = false;
+                        }
+                        else if (Options.VideoReencodeMode == StreamReencodeMode.SelectSmallest)
+                        {
+                            reencodingStream = true;
+                            mustReencodeStream = true;
+                        }
+                    }
+
+                    // Update the global re-encoding flags based on this stream:
+                    remuxGuaranteedRequired |= mustReencodeStream;
+                    remuxRequired |= reencodingStream;
                 }
                 else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
                 {
@@ -596,8 +677,8 @@ public sealed class VideoProcessor : FileProcessor
                     }
 
                     // Check sample rate:
-                    if ((Options.MaxSampleRate != AudioSampleRate.Preserve && audioStream.SampleRate <= 0) ||
-                        audioStream.SampleRate > (GetAudioSampleRate(Options.MaxSampleRate) ?? int.MaxValue))
+                    if ((Options.MaxSampleRate != AudioSampleRate.Preserve && audioStream.SampleRate is null or <= 0.0) ||
+                        audioStream.SampleRate.GetValueOrDefault() > (GetAudioSampleRate(Options.MaxSampleRate) ?? int.MaxValue))
                     {
                         remuxRequired = true;
                         remuxGuaranteedRequired = true;
@@ -618,7 +699,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 else if (stream is FFprobeUtils.UnrecognizedStreamInfo unrecognizedStream)
                 {
-                    bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnail;
+                    bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnails;
                     if (isThumbnail
                         ? (Options.MetadataStrippingMode is not (VideoMetadataStrippingMode.None or VideoMetadataStrippingMode.Preferred))
                         : !Options.TryPreserveUnrecognizedStreams)
@@ -808,7 +889,7 @@ public sealed class VideoProcessor : FileProcessor
                 int id = outputVideoStreamIndex;
 
                 // Handle thumbnail streams:
-                bool isThumbnail = videoStream.IsAttachedPic || videoStream.IsTimedThumbnail;
+                bool isThumbnail = videoStream.IsAttachedPic || videoStream.IsTimedThumbnails;
                 if (isThumbnail)
                 {
                     if (Options.MetadataStrippingMode == VideoMetadataStrippingMode.None)
@@ -859,29 +940,49 @@ public sealed class VideoProcessor : FileProcessor
                     Options.VideoReencodeMode != StreamReencodeMode.AvoidReencoding ||
                     !isCompatibleStream[inputStreamIndex];
                 FFmpegUtils.PerStreamFilterOverride? filterOverride = null;
+                int outputStreamOverridesInitialCount = perOutputStreamOverrides.Count;
 
                 // Check for resizing:
                 if (Options.ResizeOptions is { } resizeOptions &&
-                    ((videoStream.Width > int.Max(resizeOptions.Width, 2)) || (videoStream.Height > int.Max(resizeOptions.Height, 2))))
+                    ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height)))
                 {
                     // Note: we already checked for invalid dimensions earlier, so no need to worry about 0 or -1.
+                    // Note: we also checked for impossible to resize earlier.
+                    reencode = true;
+                    isRequiredReencode = true;
+                }
+
+                // Check for square pixels:
+                if (Options.ForceSquarePixels && (videoStream.SarNum, videoStream.SarDen) is not ((<= 0, <= 0) or (1, 1)))
+                {
                     reencode = true;
                     isRequiredReencode = true;
                     filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
                     perOutputStreamOverrides.Add(filterOverride);
-                    double potentialWidth1 = resizeOptions.Width & ~1; // Ensure even width
-                    double potentialHeight1 = (double)videoStream.Height / videoStream.Width * potentialWidth1;
-                    double potentialHeight2 = resizeOptions.Height & ~1; // Ensure even height
-                    double potentialWidth2 = (double)videoStream.Width / videoStream.Height * potentialHeight2;
-                    var (newWidth, newHeight) = potentialWidth1 < potentialWidth2
-                        ? ((int)Math.Round(potentialWidth1 / 2) * 2, (int)Math.Round(potentialHeight1 / 2) * 2)
-                        : ((int)Math.Round(potentialWidth2 / 2) * 2, (int)Math.Round(potentialHeight2 / 2) * 2); // Ensure even dimensions
-                    filterOverride.Scale = (int.Max(newWidth, 2), int.Max(newHeight, 2));
+                    filterOverride.MakePixelsSquareMode = videoStream.SarNum > videoStream.SarDen ? 2 : 3;
+                }
+
+                // Check for interlacing:
+                if (Options.ForceProgressiveFrames && !IsProgressive(videoStream.FieldOrder))
+                {
+                    reencode = true;
+                    isRequiredReencode = true;
+                    if (filterOverride is null)
+                    {
+                        filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
+                        perOutputStreamOverrides.Add(filterOverride);
+                    }
+
+                    filterOverride.Deinterlace = true;
                 }
 
                 // Check for fps:
+                FFmpegUtils.PerStreamFPSOverride? fpsOverride = null;
                 if (Options.FpsOptions is { } fpsOptions)
                 {
+                    // Note: technically the max fps num & den possible is uint.MaxValue for H.264 and HEVC, but we don't expect to find anything that high or
+                    // which would lead even close to that even in integer division mode, so we just use int for the input & long for the output, and let any
+                    // exceptions that would occur as a result happen.
                     int maxFpsNum = fpsOptions.TargetFps;
 
                     if (videoStream.FpsNum <= 0 || videoStream.FpsDen <= 0 || videoStream.FpsNum > (long)videoStream.FpsDen * maxFpsNum)
@@ -927,7 +1028,7 @@ public sealed class VideoProcessor : FileProcessor
                         }
 
                         filterOverride.FPS = (newFpsNum, newFpsDen);
-                        perOutputStreamOverrides.Add(
+                        perOutputStreamOverrides.Add(fpsOverride =
                             new FFmpegUtils.PerStreamFPSOverride(streamKind: 'v', streamIndexWithinKind: id, fpsNum: newFpsNum, fpsDen: newFpsDen));
                     }
                 }
@@ -950,6 +1051,7 @@ public sealed class VideoProcessor : FileProcessor
                 else if (Options.MaximumChromaSubsampling != ChromaSubsampling.Preserve && (
                     pixFormatInfo is null ||
                     !pixFormatInfo.Value.IsStandard ||
+                    videoStream.AlphaMode ||
                     pixFormatInfo.Value.ChromaSubsampling > GetChromaSubsampling(Options.MaximumChromaSubsampling)))
                 {
                     reencode = true;
@@ -958,12 +1060,10 @@ public sealed class VideoProcessor : FileProcessor
 
                 // If we're re-encoding, we want to specify the pixel format always:
                 // Note: we also check for what HDR remapping causing re-encoding would give here, since it also requires us to always specify something.
-                string pixFormat = string.Empty;
                 if (reencode || (isHdr && Options.RemapHDRToSDR))
                 {
                     int videoSubsampling = pixFormatInfo switch
                     {
-                        { ChromaSubsampling: 400 } => 420,
                         { ChromaSubsampling: 440 } => 444,
                         { ChromaSubsampling: var x } => x,
                         _ => 444,
@@ -980,7 +1080,7 @@ public sealed class VideoProcessor : FileProcessor
                     if (Options.ResultVideoCodecs[0] != VideoCodec.HEVC) maxBitsPerSample = int.Min(maxBitsPerSample, 10);
                     finalBitsPerChannel = int.Min(videoBitsPerSample, maxBitsPerSample);
                     finalChromaSubsampling = int.Min(videoSubsampling, maxSubsampling);
-                    pixFormat = (finalChromaSubsampling, finalBitsPerChannel) switch
+                    string pixFormat = (finalChromaSubsampling, finalBitsPerChannel) switch
                     {
                         (420, 8) => "yuv420p",
                         (420, 10) => "yuv420p10le",
@@ -1006,6 +1106,7 @@ public sealed class VideoProcessor : FileProcessor
                     }
 
                     filterOverride.NewVideoRange = "pc";
+                    filterOverride.PixelFormat = pixFormat;
                 }
 
                 // Deal with HDR:
@@ -1021,7 +1122,6 @@ public sealed class VideoProcessor : FileProcessor
                     }
 
                     filterOverride.HDRToSDR = true;
-                    filterOverride.SDRPixelFormat = pixFormat;
 
                     // Just use BT.709 for everything as our standardized SDR profile:
                     perOutputStreamOverrides.Add(
@@ -1032,13 +1132,139 @@ public sealed class VideoProcessor : FileProcessor
                         new FFmpegUtils.PerStreamColorSpaceOverride(streamKind: 'v', streamIndexWithinKind: id, colorSpace: "bt709"));
                 }
 
+                // Determine round to even info:
+                int chromaSubsampling = GetPixelFormatCharacteristics(filterOverride?.PixelFormat)?.ChromaSubsampling
+                    ?? pixFormatInfo?.ChromaSubsampling
+                    ?? 444;
+                var (roundW, roundH) = chromaSubsampling switch
+                {
+                    420 => (true, true),
+                    422 => (true, false),
+                    444 => (false, false),
+                    _ => throw new UnreachableException("Unimplemented chroma subsampling value."),
+                };
+
+                // Check that we haven't exceeded the maximum possible video size / frame rate combo for the codec, and we have a valid size:
+                if (reencode)
+                {
+                    // Determine the resulting size of the video:
+                    var (mode, resultWidth, resultHeight) = CalculateVideoResize(
+                        videoStream.Width,
+                        videoStream.Height,
+                        videoStream.SarNum,
+                        videoStream.SarDen,
+                        Options.ResizeOptions is null ? null : (Options.ResizeOptions.Width, Options.ResizeOptions.Height),
+                        roundW,
+                        roundH,
+                        Options.ResultVideoCodecs[0] == VideoCodec.HEVC);
+
+                    // If it's impossible to resize to this, we should be in the "if smaller" mode & we just bail out of re-encoding for this stream:
+                    if (mode != 0 && !isRequiredReencode && Options.VideoReencodeMode == StreamReencodeMode.SelectSmallest)
+                    {
+                        reencode = false;
+                        perOutputStreamOverrides.RemoveRange(
+                            outputStreamOverridesInitialCount,
+                            perOutputStreamOverrides.Count - outputStreamOverridesInitialCount);
+                    }
+
+                    // Continue only if we're still re-encoding:
+                    if (reencode)
+                    {
+                        Debug.Assert(mode == 0, "Video resize mode should be valid when we reach this point.");
+
+                        // If we're meant to resize, then set up our filter:
+                        if (resultWidth != videoStream.Width || resultHeight != videoStream.Height)
+                        {
+                            if (filterOverride is null)
+                            {
+                                filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
+                                perOutputStreamOverrides.Add(filterOverride);
+                            }
+
+                            filterOverride.ResizeTo = (resultWidth, resultHeight);
+                        }
+
+                        // If we have a size & fps, continue checking, otherwise we just have to assume it'll be fine:
+                        long resultFpsNum = fpsOverride?.FPSNum ?? videoStream.FpsNum;
+                        long resultFpsDen = fpsOverride?.FPSDen ?? videoStream.FpsDen;
+                        if (resultWidth > 0 && resultHeight > 0 && resultFpsNum > 0 && resultFpsDen > 0)
+                        {
+                            // Determine the number of samples or blocks based on the codec:
+                            int numSamplesOrBlocks = Options.ResultVideoCodecs[0] == VideoCodec.H264
+                                ? (resultWidth + 15) / 16 * ((resultHeight + 15) / 16)
+                                : resultWidth * resultHeight;
+
+                            // Get the maximum samples or blocks per second for the codec (this corresponds to level 6.2 for H.264 and level 6.2 for HEVC):
+                            // Note: most devices won't accelerate level 6+ of H.264 at all, and HEVC level 6 is also rare, but if we re-encode to something
+                            // lower, we would want an option to opt-in/out of that (otherwise preserve wouldn't be possible), so for now we just always use
+                            // the absolute maximum. Level 5.2 for H.264 still supports 1080p@172fps and 4k@60fps, so reasonable FPS and/or size limits can be
+                            // set to ensure it's never hit anyway.
+                            long maxSamplesOrBlocksPerSecond = Options.ResultVideoCodecs[0] == VideoCodec.H264 ? 16711680 : 4278190080;
+
+                            // Determine the maximum fps:
+                            int gcd = (int)BigInteger.GreatestCommonDivisor(numSamplesOrBlocks, maxSamplesOrBlocksPerSecond);
+                            long maxFpsNum = maxSamplesOrBlocksPerSecond / gcd;
+                            long maxFpsDen = numSamplesOrBlocks / gcd;
+
+                            // Check if we exceed the maximum fps:
+                            if (checked(resultFpsNum * maxFpsDen > resultFpsDen * maxFpsNum))
+                            {
+                                if (filterOverride is null)
+                                {
+                                    filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
+                                    perOutputStreamOverrides.Add(filterOverride);
+                                }
+
+                                // Set to maximum fps - in this edge case, we ignore the fps mode and just set to the maximum possible to simplify the logic:
+                                filterOverride.FPS = (maxFpsNum, maxFpsDen);
+                                perOutputStreamOverrides.Add(fpsOverride =
+                                    new FFmpegUtils.PerStreamFPSOverride(streamKind: 'v', streamIndexWithinKind: id, fpsNum: maxFpsNum, fpsDen: maxFpsDen));
+                                resultFpsNum = maxFpsNum;
+                                resultFpsDen = maxFpsDen;
+                            }
+
+                            // If FPS numerator or denominator are too large, adjust manually to ensure they get rounded in a way that doesn't exceed the max:
+                            // FFmpeg reduces any FPS values above 1001000, so we use the same limit here:
+                            if (resultFpsNum > 1001000 || resultFpsDen > 1001000)
+                            {
+                                if (filterOverride is null)
+                                {
+                                    filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
+                                    perOutputStreamOverrides.Add(filterOverride);
+                                }
+
+                                // Round such that both end up <= 1001000, and such that num/den does not increase slightly in the edge case:
+                                const int MaxValue = 1001000;
+                                int divisionFactor = checked((int)long.Max((resultFpsNum + (MaxValue - 1))
+                                    / MaxValue, (maxFpsDen + (MaxValue - 2)) / (MaxValue - 1)));
+                                resultFpsNum /= divisionFactor;
+                                resultFpsDen = (resultFpsDen + divisionFactor - 1) / divisionFactor;
+                                Debug.Assert(resultFpsNum <= MaxValue && resultFpsDen <= MaxValue, "Failed to reduce max fps num and den to <= 1001000.");
+                                filterOverride.FPS = (resultFpsNum, resultFpsDen);
+                            }
+                        }
+                    }
+                }
+
                 // Keep track if we want to check the size later:
-                if (!isRequiredReencode && Options.VideoReencodeMode == StreamReencodeMode.SelectSmallest)
+                if (!isRequiredReencode && reencode && Options.VideoReencodeMode == StreamReencodeMode.SelectSmallest)
                 {
                     streamsToCheckSize.Add((
                         StreamMappingIndex: streamMapping.Count - 1,
                         SourceValidFileExtension: videoCodec!.WritableFileExtension,
                         RequiresReencodeForMP4: !isCompatibleStream[inputStreamIndex]));
+                }
+
+                // If we're re-encoding, and it's interlaced, ensure we de-interlace it always to simplify things:
+                if (reencode && !IsProgressive(videoStream.FieldOrder))
+                {
+                    if (filterOverride is null)
+                    {
+                        filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
+                        perOutputStreamOverrides.Add(filterOverride);
+                    }
+
+                    filterOverride.Deinterlace = true;
                 }
 
                 // Set up codec to use
@@ -1139,11 +1365,14 @@ public sealed class VideoProcessor : FileProcessor
 
                 // Determine sample rate adjustment:
                 int? targetSampleRate = GetAudioSampleRate(Options.MaxSampleRate);
-                if (targetSampleRate.HasValue && (audioStream.SampleRate > targetSampleRate.Value || audioStream.SampleRate <= 0))
+                FFmpegUtils.PerStreamSampleRateOverride? sampleRateOverride = null;
+                if (targetSampleRate.HasValue && (
+                        audioStream.SampleRate.GetValueOrDefault() > targetSampleRate.Value ||
+                        audioStream.SampleRate is null or <= 0))
                 {
                     reencode = true;
                     isRequiredReencode = true;
-                    perOutputStreamOverrides.Add(
+                    perOutputStreamOverrides.Add(sampleRateOverride =
                         new FFmpegUtils.PerStreamSampleRateOverride(streamKind: 'a', streamIndexWithinKind: id, sampleRate: targetSampleRate.Value));
                 }
 
@@ -1159,7 +1388,7 @@ public sealed class VideoProcessor : FileProcessor
                 // Set up codec to use (note - currently the only supported codec is AAC-LC, so we aren't checking which one the user selected here currently):
                 if (reencode)
                 {
-                    if (FFprobeUtils.Configuration.SupportsLibFDKAACEncoder)
+                    if (FFprobeUtils.Configuration.SupportsLibFDKAACEncoder && (audioStream.Channels <= 8 || Options.MaxChannels != AudioChannels.Preserve))
                     {
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(streamKind: 'a', streamIndexWithinKind: id, codec: "libfdk_aac"));
 
@@ -1173,6 +1402,11 @@ public sealed class VideoProcessor : FileProcessor
                     }
                     else if (FFprobeUtils.Configuration.SupportsAACEncoder)
                     {
+                        // Note: we can end up using the native aac encoder even if libfdk_aac is available if there are more than 8 channels & we're trying to
+                        // preserve them. We do not try to handle additionally here, as we might have to specify a channel layout, etc., if we have more than
+                        // the maximum number of channels than is supported by aac (which is 16 + 16 + 16), and we should get an exception if we try to do
+                        // something unsupported in this edge-edge case.
+
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamCodecOverride(streamKind: 'a', streamIndexWithinKind: id, codec: "aac"));
 
                         int bitrate = (int)long.Min((long)numChannels * GetNativeAACEncoderBitratePerChannel(Options.AudioQuality), int.MaxValue);
@@ -1183,6 +1417,35 @@ public sealed class VideoProcessor : FileProcessor
                         // Note: we use Debug.Fail here since we should have already validated this earlier, so this just safeguards so we catch issues testing
                         Debug.Fail("The requested audio codec did not have a supported encoder available in the configured FFmpeg build (unexpected).");
                     }
+                }
+
+                // Check that the sample rate is a valid value for AAC if we're re-encoding:
+                if (reencode && (sampleRateOverride?.SampleRate ?? audioStream.SampleRate ?? -1)
+                    is not (<= 0.0 or 8000 or 11025 or 12000 or 16000 or 22050 or 24000 or 32000 or 44100 or 48000 or 64000 or 88200 or 96000))
+                {
+                    if (sampleRateOverride is null)
+                    {
+                        sampleRateOverride ??=
+                            new FFmpegUtils.PerStreamSampleRateOverride(streamKind: 'a', streamIndexWithinKind: id, sampleRate: 0);
+                        perOutputStreamOverrides.Add(sampleRateOverride);
+                    }
+
+                    // Find the next highest supported sample rate:
+                    sampleRateOverride.SampleRate = (sampleRateOverride?.SampleRate ?? audioStream.SampleRate)!.Value switch
+                    {
+                        > 88200 => 96000,
+                        > 64000 => 88200,
+                        > 48000 => 64000,
+                        > 44000 => 48000,
+                        > 32000 => 44100,
+                        > 24000 => 32000,
+                        > 22050 => 24000,
+                        > 16000 => 22050,
+                        > 12000 => 16000,
+                        > 11025 => 12000,
+                        > 8000 => 11025,
+                        _ => 8000,
+                    };
                 }
             }
             else if (stream is FFprobeUtils.SubtitleStreamInfo subtitleStream)
@@ -1230,6 +1493,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // If we're not copying metadata, we want to manually add the metadata we want to preserve back in after normalizing it:
+                // Note: mp4 does not support title metadata for the subtitle stream (it does support language though, so we preserve that).
                 FFmpegUtils.PerStreamMetadataOverride? metadataOverrides = null;
                 if (!mapMetadata)
                 {
@@ -1237,8 +1501,7 @@ public sealed class VideoProcessor : FileProcessor
                         streamKind: '\0',
                         streamIndexWithinKind: id)
                     {
-                        TitleOrHandlerName = NormalizeTitleOrHandlerName(subtitleStream.TitleOrHandlerName),
-                        Language = IsValidLanguage(subtitleStream.Language) ? subtitleStream.Language : null,
+                        Language = (subtitleStream.Language != "und" && IsValidLanguage(subtitleStream.Language)) ? subtitleStream.Language : null,
                     };
                     perOutputStreamOverrides.Add(metadataOverrides);
                 }
@@ -1249,7 +1512,7 @@ public sealed class VideoProcessor : FileProcessor
             else if (stream is FFprobeUtils.UnrecognizedStreamInfo unrecognizedStream)
             {
                 // Handle thumbnail streams:
-                bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnail;
+                bool isThumbnail = unrecognizedStream.IsAttachedPic || unrecognizedStream.IsTimedThumbnails;
                 int id = outputStreamIndex;
                 if (isThumbnail)
                 {
@@ -1516,7 +1779,10 @@ public sealed class VideoProcessor : FileProcessor
                             wasSmallerIdx++;
                             if (wasSmallerIdx < wasSmaller.Count)
                             {
-                                nextWasSmaller = (streamsToCheckSize[wasSmaller[wasSmallerIdx].Index], wasSmaller[wasSmallerIdx].NeedsReencode, wasSmaller[wasSmallerIdx].StrictlySmaller);
+                                nextWasSmaller = (
+                                    streamsToCheckSize[wasSmaller[wasSmallerIdx].Index],
+                                    wasSmaller[wasSmallerIdx].NeedsReencode,
+                                    wasSmaller[wasSmallerIdx].StrictlySmaller);
                             }
                             else
                             {
@@ -1617,9 +1883,9 @@ public sealed class VideoProcessor : FileProcessor
 
     // Non-exhaustive list of common / standard / well-known SDR profiles configs:
     private static bool IsKnownSDRColorProfile(string? colorTransfer, string? colorPrimaries, string? colorSpace) =>
-        (colorTransfer is null or "bt709" or "bt601" or "bt470" or "bt470bg" or "smpte170m" or "smpte240m") &&
+        (colorTransfer is null or "bt709" or "bt601" or "bt470" or "bt470bg" or "smpte170m" or "smpte240m" or "iec61966-2-1") &&
         (colorPrimaries is null or "bt709" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m") &&
-        (colorSpace is null or "bt709" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m" or "srgb" or "iec61966-2-1");
+        (colorSpace is null or "bt709" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m" or "srgb" or "iec61966-2-1" or "gbr");
 
     private static int? GetAudioChannelCount(AudioChannels audioChannels) => audioChannels switch
     {
@@ -1696,7 +1962,6 @@ public sealed class VideoProcessor : FileProcessor
     // Note: this list is likely not exhaustive, but should cover a lot of files.
     /*
         Chroma subsampling values possible (each samples the luma at every pixel, block sizes are w * h):
-        - 400: monochrome / grayscale
         - 420: 4:2:0, 2x2 blocks
         - 422: 4:2:2, 2x1 blocks
         - 440: 4:4:0, 1x2 blocks
@@ -1711,28 +1976,15 @@ public sealed class VideoProcessor : FileProcessor
             "yuvj422p" => (8, true, 422),
             "yuv444p" => (8, true, 444),
             "yuvj444p" => (8, true, 444),
-            "nv12" => (8, false, 420),
-            "nv16" => (8, false, 422),
-            "nv21" => (8, false, 420),
             "yuv420p10le" => (10, true, 420),
             "yuv422p10le" => (10, true, 422),
             "yuv444p10le" => (10, true, 444),
-            "nv20le" => (10, false, 420),
-            "gray" => (8, false, 400),
-            "gray10le" => (10, false, 400),
             "gbrp" => (8, false, 444),
             "gbrp10le" => (10, false, 444),
             "yuv420p12le" => (12, true, 420),
             "yuv422p12le" => (12, true, 422),
             "yuv444p12le" => (12, true, 444),
             "gbrp12le" => (12, false, 444),
-            "gray12le" => (12, false, 400),
-            "yuva420p" => (8, false, 420),
-            "yuva420p10le" => (10, false, 420),
-            "bgra" => (8, false, 444),
-            "ayuv" => (8, false, 444),
-            "p010le" => (10, false, 420),
-            "p210le" => (10, false, 422),
             "yuv440p" => (8, false, 440),
             "yuv440p10le" => (10, false, 440),
             "yuv440p12le" => (12, false, 440),
@@ -1751,57 +2003,131 @@ public sealed class VideoProcessor : FileProcessor
         .. Enumerable.Range(0xD800, 0x0800).Select((x) => (char)x) // Surrogate range
     ]);
 
-    private static string? NormalizeTitleOrHandlerName(string? value)
+    // Helper to share the logic for resizing a video.
+    // Returned mode is one of 0 (success), 1 (cannot preserve both min & max), or 2 (cannot reduce pixel count w/o violating minimum dimensions).
+    private static (int Mode, int ResultWidth, int ResultHeight) CalculateVideoResize(
+        int streamWidth, int streamHeight, int streamSarNum, int streamSarDen, (int Width, int Height)? maxDimensions, bool roundW, bool roundH, bool isH265)
     {
-        // Remove any null or control characters, limit length to 24 characters, trim whitespace, and remove any unpaired surrogates:
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        Span<char> buffer = stackalloc char[24];
-        var sp = value.AsSpan().Trim();
-        int length = 0;
-        int offset = 0;
-        while (offset < sp.Length && length < buffer.Length)
+        // Determine the maximum dimensions allowed, and the minimum dimension allowed, based on codec and requested max dimensions:
+        int maxW = int.Min(maxDimensions?.Width ?? int.MaxValue, isH265 ? 65535 : 16384);
+        int maxH = int.Min(maxDimensions?.Height ?? int.MaxValue, isH265 ? 65535 : 16384);
+        int minDimension = isH265 ? 16 : 2;
+
+        // Determine the resulting size of the video:
+        int resultWidth, resultHeight;
+        while (true)
         {
-            int nextInteresting = sp[offset..].IndexOfAny(_invalidTitleCharsAndSurrogates);
-            if (nextInteresting == -1) nextInteresting = sp.Length - offset;
-            if (nextInteresting + length > buffer.Length) nextInteresting = buffer.Length - length;
-            sp.Slice(offset, nextInteresting).CopyTo(buffer.Slice(length, nextInteresting));
-            length += nextInteresting;
-            offset += nextInteresting;
+            resultWidth = streamWidth;
+            resultHeight = streamHeight;
 
-            // Handle the interesting characters specially:
-            if (nextInteresting == 0)
+            // Resize to square pixels if wanted:
+
+            if (streamSarNum <= 0 || streamSarDen <= 0)
             {
-                switch (sp[offset])
+                streamSarNum = 1;
+                streamSarDen = 1;
+            }
+
+            if (streamSarNum != 1 || streamSarDen != 1)
+            {
+                if (streamSarNum > streamSarDen)
                 {
-                    case < (char)0x20:
-                        // Control character - skip it:
-                        offset++;
-
-                        break;
-
-                    case >= (char)0xD800 and <= (char)0xDFFF:
-                        // Check if paired:
-                        if (sp[offset..] is [>= (char)0xD800 and <= (char)0xDBFF, >= (char)0xDC00 and <= (char)0xDFFF, ..])
-                        {
-                            // Paired surrogate - keep both if enough space:
-                            if (length + 2 > buffer.Length) break;
-                            sp.Slice(offset, 2).CopyTo(buffer.Slice(length, 2));
-                            length += 2;
-                            offset += 2;
-                        }
-                        else
-                        {
-                            // Unpaired surrogate - skip it:
-                            offset++;
-                        }
-
-                        break;
+                    resultWidth = int.Max(1, (int)double.Truncate(0.5 + (resultWidth * ((double)streamSarNum / streamSarDen))));
+                }
+                else
+                {
+                    resultHeight = int.Max(1, (int)double.Truncate(0.5 + (resultHeight / ((double)streamSarNum / streamSarDen))));
                 }
             }
+
+            // Apply min & max scaling if any:
+            {
+                // Apply max:
+                double w1 = double.Min(maxW, (double)resultWidth / resultHeight * maxH);
+                double h1 = double.Min(maxH, (double)resultHeight / resultWidth * maxW);
+
+                // Apply min:
+                double w2 = double.Max(minDimension, w1 / h1 * minDimension);
+                double h2 = double.Max(minDimension, h1 / w1 * minDimension);
+
+                // Round as required:
+                double w3 = double.Round(w2 / (roundW ? 2 : 1)) * (roundW ? 2 : 1);
+                double h3 = double.Round(h2 / (roundH ? 2 : 1)) * (roundH ? 2 : 1);
+                if (w3 > maxW || h3 > maxH)
+                {
+                    w3 = double.Floor(w2 / (roundW ? 2 : 1)) * (roundW ? 2 : 1);
+                    h3 = double.Floor(h2 / (roundH ? 2 : 1)) * (roundH ? 2 : 1);
+                }
+
+                // Store final size:
+                resultWidth = (int)w3;
+                resultHeight = (int)h3;
+            }
+
+            // If we couldn't achieve both the min & max dimensions, throw an error:
+            if ((resultWidth < minDimension || resultHeight < minDimension) && (resultWidth > maxW || resultHeight > maxH))
+            {
+                return (1, -1, -1);
+            }
+
+            // HEVC supports a minimum size of 16 usually, as it can usually set the CTU size to 16x16, but for suitably large videos,
+            // it needs to use 32x32 CTUs (when one dimension is at least 4217) or 64x64 CTUs (when one dimension is at least 64799).
+            bool newMin = false;
+            if ((resultWidth >= 64799 || resultHeight >= 64799) && (minDimension != 64))
+            {
+                minDimension = int.Max(minDimension, 64);
+                newMin = true;
+            }
+            else if ((resultWidth >= 4217 || resultHeight >= 4217) && (minDimension != 32))
+            {
+                minDimension = int.Max(minDimension, 32);
+                newMin = true;
+            }
+
+            // If our video is smaller than the new minimum size, try again:
+            if (newMin && (resultWidth < minDimension || resultHeight < minDimension))
+            {
+                continue;
+            }
+
+            // The absolute maximum number of pixels is limited by ffmpeg, which sets a limit of (width + 128) * (height + 128) * 8 <= 2^31 - 1.
+            // Note: currently all supported pixel formats used for output use 8 for the bytes per pixel value; if this changes we'd need to update this.
+            // Note: if the limit changed, here is what would happen: either videos would be being resized down more than necessary, or ffmpeg would fail to
+            // apply the resize filter (which will cause an exception to occur), so we consider this to be safe to rely on, as if it changes we will notice &
+            // there is no meaningful malicious usage possible still.
+            if ((resultWidth + 128L) * (resultHeight + 128L) * 8 > int.MaxValue)
+            {
+                // If one dimension is equal to the min, we can't reduce further, so throw an error:
+                if (maxW == minDimension || maxH == minDimension)
+                {
+                    return (2, -1, -1);
+                }
+
+                // Set max dimensions to current size first
+                maxW = resultWidth;
+                maxH = resultHeight;
+
+                // Now, reduce the max dimensions to what should be correct approximately, and ensure at least 1 dimension is reduced:
+                double scaleFactor = double.Sqrt(int.MaxValue / 8.0 / ((resultWidth + 128L) * (resultHeight + 128L)));
+                int newMaxW = int.Min((int)double.Ceiling(resultWidth * scaleFactor), maxW);
+                int newMaxH = int.Min((int)double.Ceiling(resultHeight * scaleFactor), maxH);
+                if (newMaxW == maxW && newMaxH == maxH)
+                {
+                    if (newMaxW > newMaxH) newMaxW--;
+                    else newMaxH--;
+                }
+
+                // Update our max dimensions and try again:
+                maxW = newMaxW;
+                maxH = newMaxH;
+                continue;
+            }
+
+            break;
         }
 
-        // Return the result (and re-use the original string if possible), or null if nothing valid:
-        if (buffer[..length].SequenceEqual(value)) return value;
-        else return length > 0 ? buffer[..length].ToString() : null;
+        return (0, resultWidth, resultHeight);
     }
+
+    private static bool IsProgressive(string? fieldOrder) => fieldOrder is null or "progressive";
 }

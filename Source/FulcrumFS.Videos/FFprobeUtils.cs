@@ -17,76 +17,58 @@ internal static class FFprobeUtils
         public ImmutableArray<StreamInfo> Streams { get; } = streams;
     }
 
-    public abstract class StreamInfo;
+    public abstract record StreamInfo;
 
-    public sealed class VideoStreamInfo(
-        string codecName,
-        string? profileName,
-        bool isAttachedPic,
-        bool isTimedThumbnail,
-        int width,
-        int height,
-        double? duration,
-        int fpsNum,
-        int fpsDen,
-        string? pixelFormat,
-        string? colorRange,
-        string? colorSpace,
-        string? colorTransfer,
-        string? colorPrimaries,
-        int bitsPerSample)
-        : StreamInfo
-    {
-        public string CodecName { get; } = codecName;
-        public string? ProfileName { get; } = profileName;
-        public bool IsAttachedPic { get; } = isAttachedPic;
-        public bool IsTimedThumbnail { get; } = isTimedThumbnail;
-        public int Width { get; } = width;
-        public int Height { get; } = height;
-        public double? Duration { get; } = duration;
-        public int FpsNum { get; } = fpsNum;
-        public int FpsDen { get; } = fpsDen;
-        public string? PixelFormat { get; } = pixelFormat;
-        public string? ColorRange { get; } = colorRange;
-        public string? ColorSpace { get; } = colorSpace;
-        public string? ColorTransfer { get; } = colorTransfer;
-        public string? ColorPrimaries { get; } = colorPrimaries;
-        public int BitsPerSample { get; } = bitsPerSample;
-    }
+    public sealed record VideoStreamInfo(
+        string CodecName,
+        string? ProfileName,
+        bool IsAttachedPic,
+        bool IsTimedThumbnails,
+        int Width,
+        int Height,
+        double? Duration,
+        int FpsNum,
+        int FpsDen,
+        int SarNum,
+        int SarDen,
+        string? PixelFormat,
+        string? ColorRange,
+        string? ColorSpace,
+        string? ColorTransfer,
+        string? ColorPrimaries,
+        string? FieldOrder,
+        int BitsPerSample,
+        bool AlphaMode)
+    : StreamInfo;
 
-    public sealed class AudioStreamInfo(
-        string codecName,
-        string? profileName,
-        double? duration,
-        int channels,
-        int sampleRate)
-        : StreamInfo
-    {
-        public string CodecName { get; } = codecName;
-        public string? ProfileName { get; } = profileName;
-        public double? Duration { get; } = duration;
-        public int Channels { get; } = channels;
-        public int SampleRate { get; } = sampleRate;
-    }
+    public sealed record AudioStreamInfo(
+        string CodecName,
+        string? ProfileName,
+        double? Duration,
+        int Channels,
+        double? SampleRate,
+        string? ChannelLayout)
+    : StreamInfo;
 
-    public sealed class SubtitleStreamInfo(string codecName, string? language, string? titleOrHandlerName) : StreamInfo
-    {
-        public string CodecName { get; } = codecName;
-        public string? Language { get; } = language;
-        public string? TitleOrHandlerName { get; } = titleOrHandlerName;
-    }
+    public sealed record SubtitleStreamInfo(
+        string CodecName,
+        string? Language,
+        string? Title)
+    : StreamInfo;
 
-    public sealed class UnrecognizedStreamInfo(string codecType, char streamShorthand, bool isAttachedPic, bool isTimedThumbnail) : StreamInfo
-    {
-        public string CodecType { get; } = codecType;
-        public char StreamShorthand { get; } = streamShorthand;
-        public bool IsAttachedPic { get; } = isAttachedPic;
-        public bool IsTimedThumbnail { get; } = isTimedThumbnail;
-    }
+    public sealed record UnrecognizedStreamInfo(
+        string CodecType,
+        string? CodecName,
+        char StreamShorthand,
+        bool IsAttachedPic,
+        bool IsTimedThumbnails)
+    : StreamInfo;
 
     private static int? ReadInt32Property(JsonElement element, string propertyName)
     {
-        if (element.TryGetProperty(propertyName, out var propElement) && propElement.TryGetInt32(out int value))
+        if (element.TryGetProperty(propertyName, out var propElement) &&
+            propElement.ValueKind == JsonValueKind.Number &&
+            propElement.TryGetInt32(out int value))
         {
             return value;
         }
@@ -144,23 +126,24 @@ internal static class FFprobeUtils
             string? colorPrimaries = ReadStringProperty(stream, "color_primaries");
             int bitsPerSample = ReadInt32Property(stream, "bits_per_sample") ?? -1;
             int channels = ReadInt32Property(stream, "channels") ?? -1;
-            int sampleRate = ReadInt32Property(stream, "sample_rate") ?? -1;
+            double? sampleRate = ReadStringPropertyAsDouble(stream, "sample_rate");
+            string? sar = ReadStringProperty(stream, "sample_aspect_ratio");
+            string? fieldOrder = ReadStringProperty(stream, "field_order");
+            string? channelLayout = ReadStringProperty(stream, "channel_layout");
 
-            int attachedPicValue = 0, timedThumbnailValue = 0;
+            int attachedPicValue = 0, timedThumbnailsValue = 0;
             if (stream.TryGetProperty("disposition", out var dispositionsProp) && dispositionsProp.ValueKind == JsonValueKind.Object)
             {
                 attachedPicValue = ReadInt32Property(dispositionsProp, "attached_pic") ?? 0;
-                timedThumbnailValue = ReadInt32Property(dispositionsProp, "timed_thumbnail") ?? 0;
+                timedThumbnailsValue = ReadInt32Property(dispositionsProp, "timed_thumbnails") ?? 0;
             }
 
-            string? language = null, titleOrHandlerName = null;
+            string? language = null, title = null, alphaMode = null;
             if (stream.TryGetProperty("tags", out var tagsProp) && tagsProp.ValueKind == JsonValueKind.Object)
             {
                 language = ReadStringProperty(tagsProp, "language");
-                titleOrHandlerName =
-                    ReadStringProperty(tagsProp, "title") ??
-                    ReadStringProperty(tagsProp, "handler_name") ??
-                    ReadStringProperty(tagsProp, "HANDLER_NAME");
+                title = ReadStringProperty(tagsProp, "title");
+                alphaMode = ReadStringProperty(tagsProp, "alpha_mode");
             }
 
             switch (codecType)
@@ -181,30 +164,51 @@ internal static class FFprobeUtils
                         }
                     }
 
+                    int sarNum = 1, sarDen = 1;
+                    if (sar != null)
+                    {
+                        sarNum = -1;
+                        sarDen = -1;
+                        int idx = sar.IndexOf(':');
+                        if (idx > 0 &&
+                            int.TryParse(sar.AsSpan(0, idx), CultureInfo.InvariantCulture, out int num) &&
+                            int.TryParse(sar.AsSpan(idx + 1), CultureInfo.InvariantCulture, out int den) &&
+                            num > 0 &&
+                            den > 0)
+                        {
+                            sarNum = num;
+                            sarDen = den;
+                        }
+                    }
+
                     builder.Add(new VideoStreamInfo(
                         codecName!,
                         profile,
                         attachedPicValue != 0,
-                        timedThumbnailValue != 0,
+                        timedThumbnailsValue != 0,
                         width,
                         height,
                         duration,
                         fpsNum,
                         fpsDen,
+                        sarNum,
+                        sarDen,
                         pixelFormat,
                         colorRange,
                         colorSpace,
                         colorTransfer,
                         colorPrimaries,
-                        bitsPerSample));
+                        fieldOrder,
+                        bitsPerSample,
+                        alphaMode == "1"));
                     break;
 
                 case "audio":
-                    builder.Add(new AudioStreamInfo(codecName!, profile, duration, channels, sampleRate));
+                    builder.Add(new AudioStreamInfo(codecName!, profile, duration, channels, sampleRate, channelLayout));
                     break;
 
                 case "subtitle":
-                    builder.Add(new SubtitleStreamInfo(codecName!, language, titleOrHandlerName));
+                    builder.Add(new SubtitleStreamInfo(codecName!, language, title));
                     break;
 
                 default:
@@ -214,7 +218,7 @@ internal static class FFprobeUtils
                         "attachment" => 't',
                         _ => '\0',
                     };
-                    builder.Add(new UnrecognizedStreamInfo(codecType!, codecChar, attachedPicValue != 0, timedThumbnailValue != 0));
+                    builder.Add(new UnrecognizedStreamInfo(codecType!, codecName, codecChar, attachedPicValue != 0, timedThumbnailsValue != 0));
                     break;
             }
         }
@@ -271,6 +275,7 @@ internal static class FFprobeUtils
         public bool SupportsFpsFilter { get; set; }
         public bool SupportsTonemapFilter { get; set; }
         public bool SupportsFormatFilter { get; set; }
+        public bool SupportsBwdifFilter { get; set; }
     }
 
     private static ConfigurationInfo _configInfo;
@@ -437,6 +442,7 @@ internal static class FFprobeUtils
                     case "fps": _configInfo.SupportsFpsFilter = true; break;
                     case "tonemap": _configInfo.SupportsTonemapFilter = true; break;
                     case "format": _configInfo.SupportsFormatFilter = true; break;
+                    case "bwdif": _configInfo.SupportsBwdifFilter = true; break;
                 }
             }
 

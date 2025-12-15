@@ -9,8 +9,8 @@ public sealed record VideoResizeOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified mode and target size.
-    /// Note: restrictions of H.264 and HEVC still apply when rescaling videos, such as requiring even dimensions, being internally padded up to block sizes,
-    /// etc.
+    /// Note: restrictions of H.264 and HEVC still apply when rescaling videos, such as requiring even dimensions with 4:2:0 subsampling, being internally
+    /// padded up to block sizes, etc.; if the size you specify is too small for the video to be possible, an exception will be thrown during processing.
     /// </summary>
     public VideoResizeOptions(VideoResizeMode mode, int width, int height)
     {

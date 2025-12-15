@@ -132,8 +132,8 @@ public abstract class VideoCodec
     private sealed class H263Impl : VideoCodec
     {
         public override string Name => "h263";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
+        internal override string WritableFileExtension => ".3gp";
+        internal override bool SupportsMP4Muxing => false;
         internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsH263Decoder;
     }
 
@@ -166,8 +166,8 @@ public abstract class VideoCodec
     private sealed class Mpeg1Impl : VideoCodec
     {
         public override string Name => "mpeg1video";
-        internal override string WritableFileExtension => ".mpeg";
-        internal override bool SupportsMP4Muxing => false;
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
         internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMpeg1VideoDecoder;
     }
 
