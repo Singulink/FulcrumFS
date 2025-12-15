@@ -1,0 +1,25 @@
+﻿<Project Sdk="MSTest.Sdk/4.0.2">
+  <PropertyGroup>
+    <RootNamespace>FulcrumFS.Videos</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\FulcrumFS.Videos\FulcrumFS.Videos.csproj" />
+    <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Videos\test_subtitles_1.srt" />
+    <None Update="Videos\video*.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\video*.mkv" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\video*.mov" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\video*.webm" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\video*.avi" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\video*.ts" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\video*.mpeg" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\video*.3gp" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Remove="FFprobeUtils.cs" Condition=" '$(Configuration)' != 'Debug' " />
+    <Compile Remove="Tests.cs" /> <!-- incomplete -->
+  </ItemGroup>
+</Project>
