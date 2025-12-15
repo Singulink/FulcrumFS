@@ -1441,7 +1441,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     if (sampleRateOverride is null)
                     {
-                        sampleRateOverride ??=
+                        sampleRateOverride =
                             new FFmpegUtils.PerStreamSampleRateOverride(streamKind: 'a', streamIndexWithinKind: id, sampleRate: 0);
                         perOutputStreamOverrides.Add(sampleRateOverride);
                     }
