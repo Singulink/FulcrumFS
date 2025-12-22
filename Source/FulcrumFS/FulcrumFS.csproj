@@ -14,7 +14,7 @@
     
     <PackageReference Include="Singulink.Collections.Weak" Version="2.2.0" />
     <PackageReference Include="Singulink.Enums" Version="2.3.1" />
-    <PackageReference Include="Singulink.IO.FileSystem" Version="2.3.4" />
+    <PackageReference Include="Singulink.IO.FileSystem" Version="2.4.0" />
     <PackageReference Include="Singulink.Threading" Version="2.1.0" />
 
     <PackageReference Include="Nito.AsyncEx.Coordination" Version="5.1.2" />
