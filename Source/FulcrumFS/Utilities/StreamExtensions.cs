@@ -54,7 +54,6 @@ internal static class StreamExtensions
                 ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        memoryStream.Position = 0;
         return memoryStream;
     }
 
@@ -78,8 +77,6 @@ internal static class StreamExtensions
 
         // Write the rest of the source stream
         await source.CopyToAsync(fileStream, CopySeekableBufferSize, cancellationToken).ConfigureAwait(false);
-
-        fileStream.Position = 0;
         return fileStream;
     }
 }
