@@ -176,6 +176,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
         if (!_leaveOpen)
             await sourceStream.DisposeAsync().ConfigureAwait(false);
 
+        streamCopy.Position = 0;
         _source = streamCopy;
         _leaveOpen = false;
         return streamCopy;
@@ -231,6 +232,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
         if (!_leaveOpen)
             await sourceStream.DisposeAsync().ConfigureAwait(false);
 
+        workFileStream.Position = 0;
         _source = workFileStream;
         _leaveOpen = false;
     }

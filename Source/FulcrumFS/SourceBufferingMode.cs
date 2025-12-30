@@ -6,23 +6,22 @@ namespace FulcrumFS;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Security &amp; Performance Trade-offs:</strong><br/> Disabling intermediate buffering avoids unnecessary I/O and can improve throughput. However, it
-/// may increase memory usage (due to in-memory buffering of slow sources) and expose the service to "slow POST" / Slowloris-style denial-of-service
-/// attacks.</para>
+/// <strong>Security &amp; Performance Trade-offs:</strong><br/> Disabling source buffering to temporary files avoids unnecessary I/O and can improve
+/// throughput. However, memory usage may increase and make the service more susceptible to "low and slow" style denial-of-service attacks.</para>
 /// <para>
 /// <strong>Recommendations:</strong>
 /// <list type="bullet">
 ///   <item>
 ///     <description><strong>General Use:</strong> <see cref="Auto"/> is recommended as it balances performance and security. It avoids copying likely fast
-///     sources (like <see cref="MemoryStream"/> or <see cref="FileStream"/>) while protecting against unknown streams.</description>
+///     sources (like <see cref="MemoryStream"/> or <see cref="FileStream"/>) while protecting against direct processing of unknown streams.</description>
 ///   </item>
 ///   <item>
-///     <description><strong>Slow Storage:</strong> If a file source exists on slow storage (e.g. high-latency network shares) and the repository is located on
-///     fast storage, use <see cref="ForceTempCopy"/> to ensure it is copied to the faster storage location before processing.</description>
+///     <description><strong>Slow Storage:</strong> If the source is a slow <see cref="FileStream"/> (e.g. to a high-latency network share), use <see
+///     cref="ForceTempCopy"/> to ensure it is copied before processing.</description>
 ///   </item>
 ///   <item>
-///     <description><strong>Trusted Environments:</strong> <see cref="Disabled"/> is appropriate if clients are trusted or other security mitigations are in
-///     place. May increase memory usage if many concurrent files are processed from slow sources.</description>
+///     <description><strong>Trusted Environments:</strong> <see cref="Disabled"/> can be appropriate when repositories are local-only access, clients are
+///     trusted, or other security mitigations are in place. May increase memory usage if many concurrent files are processed from slow sources.</description>
 ///   </item>
 /// </list>
 /// </para>
@@ -30,8 +29,8 @@ namespace FulcrumFS;
 public enum SourceBufferingMode
 {
     /// <summary>
-    /// Optimizes based on the source type. Sources presumed to be fast (i.e. inheriting from <see cref="MemoryStream"/> or <see cref="FileStream"/>, and direct
-    /// file paths) are processed directly. All other source streams are force-copied to a temporary file before processing.
+    /// Optimizes based on the source type. Sources presumed to be fast (i.e. <see cref="MemoryStream"/> and <see cref="FileStream"/>) may be processed
+    /// directly. All other source streams are force-copied to a temporary file before processing.
     /// </summary>
     Auto,
 
