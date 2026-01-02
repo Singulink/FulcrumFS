@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using FulcrumFS.Internals;
 using Singulink.Enums;
 
 namespace FulcrumFS.Images;
@@ -30,9 +32,9 @@ public sealed record ImageProcessingOptions
     {
         get;
         init {
-            IReadOnlyList<ImageFormatMapping> values = [.. value];
+            ImmutableArray<ImageFormatMapping> values = [.. value];
 
-            if (values.Count is 0)
+            if (values.Length is 0)
                 throw new ArgumentException("Formats cannot be empty.", nameof(value));
 
             if (values.Any(f => f is null))
@@ -41,7 +43,7 @@ public sealed record ImageProcessingOptions
             if (values.Select(f => f.SourceFormat).Distinct().Count() != value.Count)
                 throw new ArgumentException("Formats cannot contain duplicate source formats.", nameof(value));
 
-            field = values;
+            field = new EquatableArray<ImageFormatMapping>(values);
         }
     }
 
@@ -132,10 +134,4 @@ public sealed record ImageProcessingOptions
             field = value;
         }
     } = ImageReencodeMode.SelectSmallest;
-
-    /// <inheritdoc cref="IEquatable{T}.Equals" />
-    public bool Equals([NotNullWhen(true)] ImageProcessingOptions? other) => (object)this == other;
-
-    /// <inheritdoc />
-    public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
 }
