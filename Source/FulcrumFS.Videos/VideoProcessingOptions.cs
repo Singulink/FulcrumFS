@@ -20,10 +20,39 @@ public sealed record VideoProcessingOptions
     /// Gets a predefined instance of <see cref="VideoProcessingOptions"/> that always re-encodes to standardized H.264 video stream/s (60fps max, 8 bits per
     /// channel, 4:2:0 chroma subsampling, SDR, square pixels, and progressive frames) and standardized AAC audio stream/s (48kHz max, stereo max) in an MP4
     /// container, while attempting to preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.
+    /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
+    /// limit) yourself via <see cref="ResizeOptions" />.
     /// </summary>
     public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
         ResultVideoCodecs = [VideoCodec.H264],
+        ResultAudioCodecs = [AudioCodec.AAC],
+        ResultFormats = [MediaContainerFormat.MP4],
+        ForceProgressiveDownload = true,
+        TryPreserveUnrecognizedStreams = false,
+        MetadataStrippingMode = VideoMetadataStrippingMode.ThumbnailOnly,
+        VideoReencodeMode = StreamReencodeMode.Always,
+        AudioReencodeMode = StreamReencodeMode.Always,
+        MaximumBitsPerChannel = BitsPerChannel.Bits8,
+        MaximumChromaSubsampling = ChromaSubsampling.Subsampling420,
+        FpsOptions = new(VideoFpsMode.LimitByIntegerDivision, 60),
+        RemapHDRToSDR = true,
+        MaxChannels = AudioChannels.Stereo,
+        MaxSampleRate = AudioSampleRate.Hz48000,
+        ForceSquarePixels = true,
+        ForceProgressiveFrames = true,
+    };
+
+    /// <summary>
+    /// Gets a predefined instance of <see cref="VideoProcessingOptions"/> that always re-encodes to standardized HEVC video stream/s (60fps max, 8 bits per
+    /// channel, 4:2:0 chroma subsampling, SDR, square pixels, progressive frames, and hvc1 tag) and standardized AAC audio stream/s (48kHz max, stereo max) in
+    /// an MP4 container, while attempting to preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.
+    /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
+    /// limit) yourself via <see cref="ResizeOptions" />.
+    /// </summary>
+    public static VideoProcessingOptions StandardizedHEVCAACMP4 { get; } = new VideoProcessingOptions()
+    {
+        ResultVideoCodecs = [VideoCodec.HEVC],
         ResultAudioCodecs = [AudioCodec.AAC],
         ResultFormats = [MediaContainerFormat.MP4],
         ForceProgressiveDownload = true,
@@ -51,7 +80,7 @@ public sealed record VideoProcessingOptions
         ResultFormats = MediaContainerFormat.AllSourceFormats,
         ForceProgressiveDownload = false,
         TryPreserveUnrecognizedStreams = true,
-        MetadataStrippingMode = VideoMetadataStrippingMode.ThumbnailOnly,
+        MetadataStrippingMode = VideoMetadataStrippingMode.None,
         VideoReencodeMode = StreamReencodeMode.AvoidReencoding,
         AudioReencodeMode = StreamReencodeMode.AvoidReencoding,
         MaximumBitsPerChannel = BitsPerChannel.Preserve,
@@ -86,7 +115,7 @@ public sealed record VideoProcessingOptions
 
             field = new EquatableArray<VideoCodec>(result);
         }
-    } = VideoCodec.AllSourceCodecs;
+    } = new EquatableArray<VideoCodec>([.. VideoCodec.AllSourceCodecs]);
 
     /// <summary>
     /// Gets the source audio codecs for this mapping (it matches any of these, but all streams must match).
@@ -110,7 +139,7 @@ public sealed record VideoProcessingOptions
 
             field = new EquatableArray<AudioCodec>(result);
         }
-    } = AudioCodec.AllSourceCodecs;
+    } = new EquatableArray<AudioCodec>([.. AudioCodec.AllSourceCodecs]);
 
     /// <summary>
     /// Gets or initializes the allowable result video codecs.
@@ -194,7 +223,7 @@ public sealed record VideoProcessingOptions
 
             field = new EquatableArray<MediaContainerFormat>(result);
         }
-    } = MediaContainerFormat.AllSourceFormats;
+    } = new EquatableArray<MediaContainerFormat>([.. MediaContainerFormat.AllSourceFormats]);
 
     /// <summary>
     /// Gets the result media container format for this mapping, or null to use the same as the input.
@@ -525,4 +554,9 @@ public sealed record VideoProcessingOptions
 #pragma warning disable SA1623 // Property summary documentation should match accessors
     public bool ForceProgressiveFrames { get; init; }
 #pragma warning restore SA1623 // Property summary documentation should match accessors
+
+#if DEBUG
+    // Internal property to force usage of libfdk_aac or native aac encoding for testing purposes:
+    internal bool? ForceLibFDKAACUsage { get; set; }
+#endif
 }

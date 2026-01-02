@@ -351,3 +351,6 @@ MigrationBackup/
 # macOS unnecessary Files
 ._*
 .DS_Store
+
+# FulcrumFS.Videos.Tests project environment variables file
+/Tests/FulcrumFS.Videos.Tests/ffmpeg_path.txt

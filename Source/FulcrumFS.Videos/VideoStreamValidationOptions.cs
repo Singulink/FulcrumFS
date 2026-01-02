@@ -80,7 +80,7 @@ public sealed record VideoStreamValidationOptions
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxStreams));
+            ArgumentOutOfRangeException.ThrowIfNegative(value ?? 0, nameof(MaxStreams));
             field = value;
         }
     } = 1;

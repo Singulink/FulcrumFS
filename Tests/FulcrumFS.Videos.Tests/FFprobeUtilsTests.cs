@@ -9,8 +9,10 @@ using Singulink.IO;
 namespace FulcrumFS.Videos;
 
 [PrefixTestClass]
-public class FFprobeUtilsTests
+public sealed class FFprobeUtilsTests
 {
+    public TestContext TestContext { get; set; }
+
     private static readonly IAbsoluteDirectoryPath _appDir = DirectoryPath.GetAppBase();
     private static readonly IAbsoluteDirectoryPath _videosDir = _appDir.CombineDirectory("Videos");
 
@@ -18,7 +20,7 @@ public class FFprobeUtilsTests
     [DynamicData(nameof(VideosToCheck))]
     internal async Task ValidateReading(string file, FFprobeUtils.VideoFileInfo expectedInfo)
     {
-        var actualInfo = await FFprobeUtils.GetVideoFileAsync(_videosDir.CombineFile(file));
+        var actualInfo = await FFprobeUtils.GetVideoFileAsync(_videosDir.CombineFile(file), TestContext.CancellationToken);
         actualInfo.FormatName.ShouldBe(expectedInfo.FormatName);
         if (actualInfo.FormatName != expectedInfo.FormatName ||
             actualInfo.Duration != expectedInfo.Duration ||
@@ -51,7 +53,9 @@ public class FFprobeUtilsTests
             {
                 case FFprobeUtils.VideoStreamInfo videoStream:
                     tw.WriteLine("Codec Name: " + videoStream.CodecName);
+                    tw.WriteLine("Codec Tag String: " + videoStream.CodecTagString);
                     if (videoStream.ProfileName is not null) tw.WriteLine("Profile Name: " + videoStream.ProfileName);
+                    if (videoStream.Language is not null) tw.WriteLine("Language: " + videoStream.Language);
                     tw.WriteLine("Is Attached Pic: " + videoStream.IsAttachedPic);
                     tw.WriteLine("Is Timed Thumbnail: " + videoStream.IsTimedThumbnails);
                     if (videoStream.Width > 0) tw.WriteLine("Width: " + videoStream.Width);
@@ -74,6 +78,7 @@ public class FFprobeUtilsTests
                 case FFprobeUtils.AudioStreamInfo audioStream:
                     tw.WriteLine("Codec Name: " + audioStream.CodecName);
                     if (audioStream.ProfileName is not null) tw.WriteLine("Profile Name: " + audioStream.ProfileName);
+                    if (audioStream.Language is not null) tw.WriteLine("Language: " + audioStream.Language);
                     if (audioStream.Duration is not null) tw.WriteLine("Duration: " + audioStream.Duration);
                     if (audioStream.Channels > 0) tw.WriteLine("Channel: " + audioStream.Channels);
                     if (audioStream.SampleRate > 0) tw.WriteLine("Sample Rate: " + audioStream.SampleRate);
@@ -89,6 +94,7 @@ public class FFprobeUtilsTests
                 case FFprobeUtils.UnrecognizedStreamInfo unrecognizedStream:
                     tw.WriteLine("Codec Type: " + unrecognizedStream.CodecType);
                     if (unrecognizedStream.CodecName is not null) tw.WriteLine("Codec Name: " + unrecognizedStream.CodecName);
+                    if (unrecognizedStream.Language is not null) tw.WriteLine("Language: " + unrecognizedStream.Language);
                     if (unrecognizedStream.StreamShorthand != '\0') tw.WriteLine("Stream Shorthand: " + unrecognizedStream.StreamShorthand);
                     tw.WriteLine("Is Attached Pic: " + unrecognizedStream.IsAttachedPic);
                     tw.WriteLine("Is Timed Thumbnail: " + unrecognizedStream.IsTimedThumbnails);
@@ -109,12 +115,86 @@ public class FFprobeUtilsTests
     public static IEnumerable<object[]> VideosToCheck =>
     [
         [
+            "bbb_sunflower_1080p_60fps_normal-1s.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.033,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 60,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv420p",
+                    ColorRange: null,
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.MP3.Name,
+                    ProfileName: AudioCodec.MP3.Profile,
+                    Language: "und",
+                    Duration: 1.008,
+                    Channels: 2,
+                    SampleRate: 48000,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "bbb_sunflower_1080p_60fps_normal-25s.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 25.033,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 25.0,
+                    FpsNum: 60,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv420p",
+                    ColorRange: null,
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.MP3.Name,
+                    ProfileName: AudioCodec.MP3.Profile,
+                    Language: "und",
+                    Duration: 25.008,
+                    Channels: 2,
+                    SampleRate: 48000,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
             "video1.mp4",
             new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -130,14 +210,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -147,7 +228,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -163,14 +246,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -180,7 +264,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -196,14 +282,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -213,7 +300,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.VP9.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Profile 0",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -234,9 +323,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Opus.Name,
                     ProfileName: AudioCodec.Opus.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 48000.0,
+                    SampleRate: 48000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -246,7 +336,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "H264",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -262,14 +354,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: 1.091338,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -279,7 +372,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.Mpeg2.Name,
+                    CodecTagString: "[2][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -300,9 +395,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.MP3.Name,
                     ProfileName: AudioCodec.MP3.Profile,
+                    Language: null,
                     Duration: 0.940411,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -312,7 +408,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.Mpeg1.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: null,
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -333,9 +431,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.MP2.Name,
                     ProfileName: AudioCodec.MP2.Profile,
+                    Language: null,
                     Duration: 1.018778,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -345,7 +444,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H263.Name,
+                    CodecTagString: "s263",
                     ProfileName: null,
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -366,9 +467,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -378,7 +480,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H263.Name,
+                    CodecTagString: "H263",
                     ProfileName: null,
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -399,9 +503,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: 1.068118,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -411,7 +516,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -432,9 +539,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -444,7 +552,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.VP8.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "0",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -465,9 +575,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -477,7 +588,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.AV1.Name,
+                    CodecTagString: "av01",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -498,9 +611,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -510,7 +624,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -526,14 +642,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.HEAAC.Name,
                     ProfileName: AudioCodec.HEAAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -543,7 +660,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -559,14 +678,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -576,7 +696,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.VVC.Name,
+                    CodecTagString: "vvc1",
                     ProfileName: null, // FFmpeg does not seem to report a profile for H.266 streams yet
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -597,9 +719,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -609,7 +732,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -625,14 +750,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "subrip",
@@ -646,7 +772,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -662,14 +790,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "ass",
@@ -683,7 +812,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -699,14 +830,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "ass",
@@ -720,7 +852,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -736,14 +870,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "webvtt",
@@ -757,7 +892,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -773,14 +910,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "mov_text",
@@ -794,7 +932,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -810,14 +950,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "mov_text",
@@ -826,12 +967,14 @@ public class FFprobeUtilsTests
             ])
         ],
         [
-            "video16.mkv",
+            "video22.mkv",
             new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.046,
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -847,19 +990,20 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "subrip",
                     Language: null,
-                    Title: null),
+                    Title: "Test Title"),
             ])
         ],
         [
@@ -868,7 +1012,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -884,14 +1030,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "ass",
@@ -905,7 +1052,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -921,14 +1070,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "ass",
@@ -942,7 +1092,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -958,14 +1110,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "webvtt",
@@ -979,7 +1132,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -995,14 +1150,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "subrip",
@@ -1016,7 +1172,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1032,14 +1190,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "ass",
@@ -1053,7 +1212,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1069,14 +1230,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "ass",
@@ -1090,7 +1252,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1106,14 +1270,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "webvtt",
@@ -1127,7 +1292,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:2:2",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1143,14 +1310,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1160,7 +1328,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1176,14 +1346,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1193,7 +1364,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 10",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1209,14 +1382,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1226,7 +1400,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:2:2",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1242,14 +1418,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1259,7 +1436,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1275,14 +1454,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1292,7 +1472,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1308,14 +1490,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1325,7 +1508,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:2:2",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1341,14 +1526,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1358,7 +1544,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1374,14 +1562,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1391,7 +1580,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 10",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1407,14 +1598,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1424,7 +1616,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:2:2",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1440,14 +1634,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1457,7 +1652,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1473,14 +1670,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1490,7 +1688,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1511,9 +1711,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1523,7 +1724,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1544,9 +1747,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1556,7 +1760,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1577,9 +1783,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1589,7 +1796,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1610,9 +1819,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1622,7 +1832,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1643,9 +1855,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1655,7 +1868,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1676,9 +1891,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1688,7 +1904,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1709,9 +1927,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1721,7 +1940,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1742,9 +1963,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1754,7 +1976,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1775,9 +1999,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1787,7 +2012,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main 10",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1808,9 +2035,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1820,7 +2048,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.VP9.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Profile 0",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1841,9 +2071,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Opus.Name,
                     ProfileName: AudioCodec.Opus.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 48000.0,
+                    SampleRate: 48000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1853,7 +2084,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.VP9.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Profile 0",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1874,9 +2107,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Opus.Name,
                     ProfileName: AudioCodec.Opus.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 48000.0,
+                    SampleRate: 48000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -1886,7 +2120,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1902,18 +2138,21 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: "png",
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: null,
+                    Language: null,
                     IsAttachedPic: true,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1939,7 +2178,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1955,18 +2196,21 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: "mjpeg",
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Baseline",
+                    Language: null,
                     IsAttachedPic: true,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -1982,7 +2226,7 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: null,
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
             ])
         ],
@@ -1992,7 +2236,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Constrained Baseline",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2008,14 +2254,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2025,7 +2272,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2041,14 +2290,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2058,7 +2308,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2074,14 +2326,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 1,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "mono"),
             ])
         ],
@@ -2091,7 +2344,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2107,14 +2362,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2124,7 +2380,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2140,14 +2398,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 4,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "quad"),
             ])
         ],
@@ -2157,7 +2416,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2173,14 +2434,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 6,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "5.1"),
             ])
         ],
@@ -2190,7 +2452,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2206,14 +2470,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.021995,
                     Channels: 8,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "7.1"),
             ])
         ],
@@ -2223,7 +2488,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2239,14 +2506,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 3,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "2.1"),
             ])
         ],
@@ -2256,7 +2524,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2272,14 +2542,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 4,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: null),
             ])
         ],
@@ -2289,7 +2560,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2305,14 +2578,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 5,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: null),
             ])
         ],
@@ -2322,7 +2596,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2338,14 +2614,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 7,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: null),
             ])
         ],
@@ -2355,7 +2632,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2371,14 +2650,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 16,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: null),
             ])
         ],
@@ -2388,7 +2668,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2404,14 +2686,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 8000.0,
+                    SampleRate: 8000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2421,7 +2704,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2437,14 +2722,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022041,
                     Channels: 2,
-                    SampleRate: 11025.0,
+                    SampleRate: 11025,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2454,7 +2740,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2470,14 +2758,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 12000.0,
+                    SampleRate: 12000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2487,7 +2776,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2503,14 +2794,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 16000.0,
+                    SampleRate: 16000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2520,7 +2812,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2536,14 +2830,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.021995,
                     Channels: 2,
-                    SampleRate: 22050.0,
+                    SampleRate: 22050,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2553,7 +2848,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2569,14 +2866,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.021,
                     Channels: 2,
-                    SampleRate: 24000.0,
+                    SampleRate: 24000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2586,7 +2884,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2602,14 +2902,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 32000.0,
+                    SampleRate: 32000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2619,7 +2920,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2635,14 +2938,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 48000.0,
+                    SampleRate: 48000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2652,7 +2956,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2668,14 +2974,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 64000.0,
+                    SampleRate: 64000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2685,7 +2992,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2701,14 +3010,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 2,
-                    SampleRate: 88200.0,
+                    SampleRate: 88200,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2718,7 +3028,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2734,14 +3046,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 96000.0,
+                    SampleRate: 96000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2751,7 +3064,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2767,14 +3082,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 192000.0,
+                    SampleRate: 192000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2784,7 +3100,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2800,14 +3118,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 200000.0,
+                    SampleRate: 200000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2817,7 +3136,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2833,14 +3154,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 4000.0,
+                    SampleRate: 4000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2850,7 +3172,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2866,14 +3190,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
+                    Language: "und",
                     Duration: 0.818182,
                     Channels: 2,
-                    SampleRate: 22.0,
+                    SampleRate: 22,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2883,7 +3208,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2899,14 +3226,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
+                    Language: "und",
                     Duration: 1.022,
                     Channels: 2,
-                    SampleRate: 45000.0,
+                    SampleRate: 45000,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2916,7 +3244,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2932,14 +3262,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
+                    Language: "und",
                     Duration: 29.0,
                     Channels: 2,
-                    SampleRate: 1.0,
+                    SampleRate: 1,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2949,7 +3280,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:2:2 Intra",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2965,14 +3298,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -2982,7 +3316,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:4:4 Intra",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -2998,14 +3334,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3015,7 +3352,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 10 Intra",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3031,14 +3370,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 10,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3048,7 +3388,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3069,9 +3411,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3081,7 +3424,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3102,9 +3447,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3114,7 +3460,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3130,14 +3478,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3147,7 +3496,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3163,14 +3514,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3180,7 +3532,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3196,14 +3550,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3213,7 +3568,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3229,14 +3586,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3246,7 +3604,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3262,14 +3622,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3279,7 +3640,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3295,14 +3658,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3312,7 +3676,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3328,14 +3694,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3345,7 +3712,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3361,14 +3730,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3378,7 +3748,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3394,14 +3766,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3411,7 +3784,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3427,14 +3802,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3444,7 +3820,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3460,14 +3838,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3477,7 +3856,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3493,14 +3874,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3510,7 +3892,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3526,14 +3910,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3543,7 +3928,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3559,14 +3946,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3576,7 +3964,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3592,14 +3982,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3609,7 +4000,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3625,14 +4018,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 2.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3642,7 +4036,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 1920,
@@ -3658,14 +4054,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3675,7 +4072,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 4096,
@@ -3691,14 +4090,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3708,7 +4108,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 8192,
@@ -3724,14 +4126,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3741,7 +4144,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 8192,
@@ -3757,14 +4162,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 0.2,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3774,7 +4180,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 1920,
@@ -3790,14 +4198,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3807,7 +4216,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 2,
@@ -3823,14 +4234,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3840,7 +4252,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3856,14 +4270,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3873,7 +4288,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3889,14 +4306,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "tt",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3906,7 +4324,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -3922,14 +4342,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "bb",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3939,7 +4360,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H265.Name,
+                    CodecTagString: "hvc1",
                     ProfileName: "Main 10",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 1920,
@@ -3960,9 +4383,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 0.998005,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -3972,7 +4396,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 176,
@@ -3988,14 +4414,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4005,7 +4432,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 320,
@@ -4021,14 +4450,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4038,7 +4468,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 320,
@@ -4054,14 +4486,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4071,7 +4504,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 320,
@@ -4087,14 +4522,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4104,7 +4540,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 320,
@@ -4120,14 +4558,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4137,7 +4576,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 352,
@@ -4153,14 +4594,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4170,7 +4612,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 352,
@@ -4186,14 +4630,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4203,7 +4648,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 1280,
@@ -4219,14 +4666,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4236,7 +4684,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 1280,
@@ -4252,14 +4702,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4269,7 +4720,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 2048,
@@ -4285,14 +4738,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4302,6 +4756,8 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    Language: "und",
                     ProfileName: "Main",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
@@ -4318,14 +4774,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4335,6 +4792,8 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    Language: "und",
                     ProfileName: "Main",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
@@ -4351,14 +4810,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4368,6 +4828,8 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    Language: "und",
                     ProfileName: "Main",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
@@ -4384,14 +4846,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4401,6 +4864,8 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    Language: "und",
                     ProfileName: "Main",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
@@ -4417,14 +4882,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4434,7 +4900,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 1920,
@@ -4450,14 +4918,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4467,7 +4936,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 3840,
@@ -4483,14 +4954,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4500,7 +4972,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 3840,
@@ -4516,14 +4990,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4533,7 +5008,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 3840,
@@ -4549,14 +5026,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4566,7 +5044,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4582,18 +5062,21 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hvc1",
                     ProfileName: "Main 10",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 1920,
@@ -4613,7 +5096,9 @@ public class FFprobeUtilsTests
                     AlphaMode: false),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4629,25 +5114,29 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4663,7 +5152,7 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "mov_text",
@@ -4675,7 +5164,9 @@ public class FFprobeUtilsTests
                     Title: null),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4691,18 +5182,21 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 3840,
@@ -4718,11 +5212,13 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4738,11 +5234,13 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 3840,
@@ -4758,7 +5256,7 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "mov_text",
@@ -4766,7 +5264,9 @@ public class FFprobeUtilsTests
                     Title: null),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: "mjpeg",
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Baseline",
+                    Language: null,
                     IsAttachedPic: true,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4782,11 +5282,13 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: null,
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: "png",
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: null,
+                    Language: null,
                     IsAttachedPic: true,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4806,7 +5308,9 @@ public class FFprobeUtilsTests
                     AlphaMode: false),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: "png",
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: null,
+                    Language: null,
                     IsAttachedPic: true,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4832,7 +5336,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4848,18 +5354,20 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: null,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.UnrecognizedStreamInfo(
                     CodecType: "attachment",
                     CodecName: null,
+                    Language: null,
                     StreamShorthand: 't',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
@@ -4871,7 +5379,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[27][0][0][0]",
                     ProfileName: "Main",
+                    Language: null,
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -4887,18 +5397,20 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
                     Duration: 0.998022,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
                 new FFprobeUtils.UnrecognizedStreamInfo(
                     CodecType: "data",
                     CodecName: "bin_data",
+                    Language: null,
                     StreamShorthand: 'd',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
@@ -4910,7 +5422,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 2,
@@ -4926,14 +5440,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4943,7 +5458,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 16384,
@@ -4959,14 +5476,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -4976,7 +5494,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 16000,
@@ -4992,14 +5512,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5009,7 +5530,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 16,
@@ -5030,9 +5553,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5042,7 +5566,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 4216,
@@ -5063,9 +5589,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5075,7 +5602,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 32,
@@ -5096,9 +5625,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5108,7 +5638,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 64798,
@@ -5129,9 +5661,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5141,7 +5674,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 64,
@@ -5162,9 +5697,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5174,7 +5710,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 65534,
@@ -5195,9 +5733,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5207,7 +5746,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 16000,
@@ -5228,9 +5769,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5240,7 +5782,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 65535,
@@ -5261,9 +5805,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5273,7 +5818,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hev1",
                     ProfileName: "Rext",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 64,
@@ -5294,9 +5841,10 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5306,7 +5854,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 101,
@@ -5322,14 +5872,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5339,7 +5890,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "High 4:2:2",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 100,
@@ -5355,14 +5908,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.0,
                     Channels: 2,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "stereo"),
             ])
         ],
@@ -5372,7 +5926,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5388,14 +5944,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 3,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "3.0"),
             ])
         ],
@@ -5405,7 +5962,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5421,14 +5980,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 4,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "4.0"),
             ])
         ],
@@ -5438,7 +5998,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5454,14 +6016,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 5,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "5.0"),
             ])
         ],
@@ -5471,7 +6034,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5487,14 +6052,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 7,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: null),
             ])
         ],
@@ -5504,7 +6070,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5520,14 +6088,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.020998,
                     Channels: 8,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: null),
             ])
         ],
@@ -5537,7 +6106,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5553,14 +6124,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.021995,
                     Channels: 8,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "5.1.2(back)"),
             ])
         ],
@@ -5570,7 +6142,9 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5586,14 +6160,15 @@ public class FFprobeUtilsTests
                     ColorTransfer: null,
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
-                    BitsPerSample: -1,
+                    BitsPerSample: 8,
                     AlphaMode: false),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
                     Duration: 1.021995,
                     Channels: 7,
-                    SampleRate: 44100.0,
+                    SampleRate: 44100,
                     ChannelLayout: "6.1(back)"),
             ])
         ],
@@ -5603,7 +6178,208 @@ public class FFprobeUtilsTests
             [
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
                     ProfileName: "Main",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.021995,
+                    Channels: 8,
+                    SampleRate: 44100,
+                    ChannelLayout: "7.1(wide)"),
+            ])
+        ],
+        [
+            "video158.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 0.5,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video159.ts",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.TS.Name, null,
+            [
+                new FFprobeUtils.UnrecognizedStreamInfo(
+                    CodecType: "data",
+                    CodecName: "bin_data",
+                    Language: null,
+                    StreamShorthand: 'd',
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false),
+            ])
+        ],
+        [
+            "video160.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "Main",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+            ])
+        ],
+        [
+            "video161.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video162.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "Main",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video163.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "Main",
+                    Language: "eng",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "fre",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video164.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "hvc1",
+                    ProfileName: "Main",
+                    Language: "und",
                     IsAttachedPic: false,
                     IsTimedThumbnails: false,
                     Width: 128,
@@ -5624,10 +6400,1313 @@ public class FFprobeUtilsTests
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
-                    Duration: 1.021995,
-                    Channels: 8,
-                    SampleRate: 44100.0,
-                    ChannelLayout: "7.1(wide)"),
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video165.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.046,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video166.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 96,
+                    Height: 128,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 4,
+                    SarDen: 3,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video167.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "Main",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: 0.999999,
+                    FpsNum: 1000999,
+                    FpsDen: 1000998,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video168.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, null,
+            [
+            ])
+        ],
+        [
+            "video169.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.068,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+                new FFprobeUtils.SubtitleStreamInfo(
+                    CodecName: "dvd_subtitle",
+                    Language: "eng",
+                    Title: null),
+            ])
+        ],
+        [
+            "video170.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.296,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+                new FFprobeUtils.SubtitleStreamInfo(
+                    CodecName: "dvb_subtitle",
+                    Language: "eng",
+                    Title: null),
+            ])
+        ],
+        [
+            "video171.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+            ])
+        ],
+        [
+            "video172.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.002,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.002,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+            ])
+        ],
+        [
+            "video173.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.002,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.002,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+            ])
+        ],
+        [
+            "video174.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+            ])
+        ],
+        [
+            "video175.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "Main",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video176.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:2:2",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 2,
+                    Height: 527,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj422p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video177.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 16,
+                    Height: 4216,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video178.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:2:2",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 16,
+                    Height: 4217,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj422p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video179.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 16,
+                    Height: 4218,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video180.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:2:2",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 8,
+                    Height: 2109,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj422p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video181.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.VP9.Name,
+                    CodecTagString: "vp09",
+                    ProfileName: "Profile 1",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 32,
+                    Height: 64799,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv422p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video182.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.VP9.Name,
+                    CodecTagString: "vp09",
+                    ProfileName: "Profile 1",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 63,
+                    Height: 64799,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv444p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video183.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.VP9.Name,
+                    CodecTagString: "vp09",
+                    ProfileName: "Profile 0",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 32,
+                    Height: 64798,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video184.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.VP9.Name,
+                    CodecTagString: "vp09",
+                    ProfileName: "Profile 1",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 64,
+                    Height: 64799,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv422p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video185.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.046,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 64,
+                    Height: 65536,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video186.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 97,
+                    Height: 97,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj444p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video187.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:4:4 Predictive",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 99,
+                    Height: 99,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj444p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video188.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:4:4 Predictive",
+                    Language: "eng",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "eng",
+                    Duration: 1.0,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+                new FFprobeUtils.UnrecognizedStreamInfo(
+                    CodecType: "data",
+                    CodecName: null,
+                    Language: "eng",
+                    StreamShorthand: 'd',
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false),
+            ])
+        ],
+        [
+            "video189.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.002,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "eng",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "eng",
+                    Duration: 1.002,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+                new FFprobeUtils.UnrecognizedStreamInfo(
+                    CodecType: "data",
+                    CodecName: null,
+                    Language: "eng",
+                    StreamShorthand: 'd',
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false),
+            ])
+        ],
+        [
+            "video190.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.002,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High 4:4:4 Predictive",
+                    Language: "eng",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "eng",
+                    Duration: 1.002,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+                new FFprobeUtils.UnrecognizedStreamInfo(
+                    CodecType: "data",
+                    CodecName: null,
+                    Language: "eng",
+                    StreamShorthand: 'd',
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false),
+            ])
+        ],
+        [
+            "video191.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "eng",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: 1.0,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "eng",
+                    Duration: 1.0,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+                new FFprobeUtils.UnrecognizedStreamInfo(
+                    CodecType: "data",
+                    CodecName: null,
+                    Language: "eng",
+                    StreamShorthand: 'd',
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false),
+            ])
+        ],
+        [
+            "video192.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.021,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 32,
+                    Height: 65536,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+            ])
+        ],
+        [
+            "video193.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.023,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.HEVC.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 32,
+                    Height: 65536,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 1,
+                    SampleRate: 48000,
+                    ChannelLayout: "mono"),
+            ])
+        ],
+        [
+            "video194.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.046,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.VP8.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "0",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video195.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.046,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.VP8.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "0",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 1920,
+                    Height: 1080,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: -1,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video196.mkv",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.Mkv.Name, 1.5,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "[0][0][0][0]",
+                    ProfileName: "Main",
+                    Language: null,
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 128,
+                    Height: 72,
+                    Duration: null,
+                    FpsNum: 30,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: null,
+                    Duration: null,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video197.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 16,
+                    Height: 4208,
+                    Duration: 1.0,
+                    FpsNum: 1985,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video198.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 16,
+                    Height: 4208,
+                    Duration: 1.0,
+                    FpsNum: 1986,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video199.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 26,
+                    Height: 4208,
+                    Duration: 1.0,
+                    FpsNum: 992,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video200.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    Width: 26,
+                    Height: 4208,
+                    Duration: 1.0,
+                    FpsNum: 993,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
             ])
         ],
     ];

@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using Singulink.IO;
 
 namespace FulcrumFS.Videos;
@@ -20,17 +22,34 @@ internal static class ProcessUtils
         // Note: short-lived can still use the main semaphore if available, we are just trying to prioritize them running since they're fast to allow tasks to
         // continue asap.
         var processesSemaphore = ProcessesSemaphore;
-        if (processesSemaphore.Wait(0, cancellationToken)) return processesSemaphore;
+        if (processesSemaphore.Wait(0, cancellationToken: default)) return processesSemaphore;
 
         // If the process is short-lived, try to enter its extra semaphore without waiting.
-        if (isShortLived && _shortLivedProcessesSemaphore.Wait(0, cancellationToken)) return _shortLivedProcessesSemaphore;
+        if (isShortLived && _shortLivedProcessesSemaphore.Wait(0, cancellationToken: default)) return _shortLivedProcessesSemaphore;
 
         // Otherwise, wait asynchronously for availability.
         // Note: short-lived processes have their own semaphore to avoid being blocked by long-running ones, but if the process is not actually short-lived,
         // the queue to run short-lived processes quickly may get starved as there's only one slot available for quick running.
         var semaphore = isShortLived ? _shortLivedProcessesSemaphore : processesSemaphore;
         if (runAsynchronously) await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        else semaphore.Wait(cancellationToken: default);
+        else semaphore.Wait(cancellationToken);
+
+        // If we entered the short-lived semaphore but a slot is available in the main semaphore, switch to that one.
+        try
+        {
+            if (semaphore == _shortLivedProcessesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
+            {
+                _shortLivedProcessesSemaphore.Release();
+                semaphore = processesSemaphore;
+            }
+        }
+        catch
+        {
+            semaphore.Release();
+            throw;
+        }
+
+        // Return the semaphore we acquired.
         return semaphore;
     }
 
@@ -53,6 +72,7 @@ internal static class ProcessUtils
         {
             while ((read = reader.Read(buffer.AsSpan(0, buffer.Length))) > 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 writer.Write(buffer.AsSpan(0, read));
                 writer.Flush();
             }
@@ -74,6 +94,7 @@ internal static class ProcessUtils
     {
         List<Task>? redirectTasks = null;
         Process? process = null;
+        cancellationToken.ThrowIfCancellationRequested();
 
         try
         {
@@ -94,6 +115,12 @@ internal static class ProcessUtils
                 foreach (string argument in arguments) process.StartInfo.ArgumentList.Add(argument);
 
                 process.Start();
+
+                if (OperatingSystem.IsWindows())
+                {
+                    // On Windows, processes will not exit until their output streams are read, so we must redirect continually always.
+                    redirectOutputContinually = true;
+                }
 
                 if (redirectOutputContinually)
                 {
@@ -128,12 +155,22 @@ internal static class ProcessUtils
                     }
                     else
                     {
-                        SpinWait sw = default;
-                        while (!process.HasExited)
+                        using var registration = cancellationToken.Register(() =>
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            sw.SpinOnce();
-                        }
+                            try
+                            {
+                                if (!process.HasExited)
+                                {
+                                    process.Kill(entireProcessTree: true);
+                                }
+                            }
+                            catch
+                            {
+                                // Ignore exceptions from killing the process.
+                            }
+                        });
+                        process.WaitForExit();
+                        cancellationToken.ThrowIfCancellationRequested(); // In case we exited due to cancellation.
                     }
                 }
                 catch (OperationCanceledException)
@@ -176,6 +213,7 @@ internal static class ProcessUtils
                 await Task.WhenAll(redirectTasks).ConfigureAwait(false);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             return process.ExitCode;
         }
         finally
@@ -229,7 +267,20 @@ internal static class ProcessUtils
 
         if (returnCode != 0)
         {
-            var err = new InvalidOperationException($"Process exited with code {returnCode}.");
+#if DEBUG
+            StringBuilder sb = new();
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"ExecutablePath: {fileName.PathExport}");
+            sb.AppendLine("Arguments: " + string.Join(" ", arguments));
+            sb.AppendLine("StandardError:");
+            sb.AppendLine(standardErrorWriter.ToString());
+            sb.AppendLine("StandardOutput:");
+            sb.AppendLine(standardOutputWriter.ToString());
+            string msg = sb.ToString();
+#else
+            string msg = string.Create(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
+#endif
+            var err = new InvalidOperationException(msg);
             err.Data["ReturnCode"] = returnCode;
             err.Data["ExecutablePath"] = fileName.PathExport;
             err.Data["Arguments"] = arguments;
@@ -263,7 +314,18 @@ internal static class ProcessUtils
 
         if (returnCode != 0)
         {
-            var err = new InvalidOperationException($"Process exited with code {returnCode}.");
+#if DEBUG
+            StringBuilder sb = new();
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"ExecutablePath: {fileName.PathExport}");
+            sb.AppendLine("Arguments: " + string.Join(" ", arguments));
+            sb.AppendLine("StandardError:");
+            sb.AppendLine(standardErrorWriter.ToString());
+            string msg = sb.ToString();
+#else
+            string msg = string.Create(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
+#endif
+            var err = new InvalidOperationException(msg);
             err.Data["ReturnCode"] = returnCode;
             err.Data["ExecutablePath"] = fileName.PathExport;
             err.Data["Arguments"] = arguments;

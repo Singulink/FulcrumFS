@@ -21,7 +21,9 @@ internal static class FFprobeUtils
 
     public sealed record VideoStreamInfo(
         string CodecName,
+        string CodecTagString,
         string? ProfileName,
+        string? Language,
         bool IsAttachedPic,
         bool IsTimedThumbnails,
         int Width,
@@ -44,9 +46,10 @@ internal static class FFprobeUtils
     public sealed record AudioStreamInfo(
         string CodecName,
         string? ProfileName,
+        string? Language,
         double? Duration,
         int Channels,
-        double? SampleRate,
+        int? SampleRate,
         string? ChannelLayout)
     : StreamInfo;
 
@@ -59,6 +62,7 @@ internal static class FFprobeUtils
     public sealed record UnrecognizedStreamInfo(
         string CodecType,
         string? CodecName,
+        string? Language,
         char StreamShorthand,
         bool IsAttachedPic,
         bool IsTimedThumbnails)
@@ -92,6 +96,12 @@ internal static class FFprobeUtils
         return (strValue != null && double.TryParse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)) ? value : null;
     }
 
+    private static int? ReadStringPropertyAsInt32(JsonElement element, string propertyName)
+    {
+        string? strValue = ReadStringProperty(element, propertyName);
+        return (strValue != null && int.TryParse(strValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)) ? value : null;
+    }
+
     public static async Task<VideoFileInfo> GetVideoFileAsync(IAbsoluteFilePath filePath, CancellationToken cancellationToken = default)
     {
         // Get the ffprobe JSON output for the file:
@@ -102,18 +112,22 @@ internal static class FFprobeUtils
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         // Parse the JSON output:
+        cancellationToken.ThrowIfCancellationRequested();
         using var document = JsonDocument.Parse(json);
         var (streams, streamsCount) = document.RootElement.TryGetProperty("streams", out var streamsElement) && streamsElement.ValueKind == JsonValueKind.Array
             ? (streamsElement.EnumerateArray(), streamsElement.GetArrayLength())
             : (default, 0);
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Read each stream's info:
         double? duration;
         var builder = ImmutableArray.CreateBuilder<StreamInfo>(streamsCount);
         foreach (var stream in streams)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string? codecName = ReadStringProperty(stream, "codec_name");
             string? codecType = ReadStringProperty(stream, "codec_type");
+            string? codecTagString = ReadStringProperty(stream, "codec_tag_string");
             string? profile = ReadStringProperty(stream, "profile");
             int width = ReadInt32Property(stream, "width") ?? -1;
             int height = ReadInt32Property(stream, "height") ?? -1;
@@ -124,9 +138,9 @@ internal static class FFprobeUtils
             string? colorSpace = ReadStringProperty(stream, "color_space");
             string? colorTransfer = ReadStringProperty(stream, "color_transfer");
             string? colorPrimaries = ReadStringProperty(stream, "color_primaries");
-            int bitsPerSample = ReadInt32Property(stream, "bits_per_sample") ?? -1;
+            int bitsPerSample = ReadStringPropertyAsInt32(stream, "bits_per_raw_sample") ?? -1;
             int channels = ReadInt32Property(stream, "channels") ?? -1;
-            double? sampleRate = ReadStringPropertyAsDouble(stream, "sample_rate");
+            int? sampleRate = ReadStringPropertyAsInt32(stream, "sample_rate");
             string? sar = ReadStringProperty(stream, "sample_aspect_ratio");
             string? fieldOrder = ReadStringProperty(stream, "field_order");
             string? channelLayout = ReadStringProperty(stream, "channel_layout");
@@ -183,7 +197,9 @@ internal static class FFprobeUtils
 
                     builder.Add(new VideoStreamInfo(
                         codecName!,
+                        codecTagString!,
                         profile,
+                        language,
                         attachedPicValue != 0,
                         timedThumbnailsValue != 0,
                         width,
@@ -204,7 +220,7 @@ internal static class FFprobeUtils
                     break;
 
                 case "audio":
-                    builder.Add(new AudioStreamInfo(codecName!, profile, duration, channels, sampleRate, channelLayout));
+                    builder.Add(new AudioStreamInfo(codecName!, profile, language, duration, channels, sampleRate, channelLayout));
                     break;
 
                 case "subtitle":
@@ -218,7 +234,7 @@ internal static class FFprobeUtils
                         "attachment" => 't',
                         _ => '\0',
                     };
-                    builder.Add(new UnrecognizedStreamInfo(codecType!, codecName, codecChar, attachedPicValue != 0, timedThumbnailsValue != 0));
+                    builder.Add(new UnrecognizedStreamInfo(codecType!, codecName, language, codecChar, attachedPicValue != 0, timedThumbnailsValue != 0));
                     break;
             }
         }
@@ -239,6 +255,8 @@ internal static class FFprobeUtils
         public bool SupportsLibX265Encoder { get; set; }
         public bool SupportsLibFDKAACEncoder { get; set; }
         public bool SupportsAACEncoder { get; set; }
+        public bool SupportsMovTextEncoder { get; set; }
+        public bool SupportsDvdSubEncoder { get; set; }
 
         // Video codec decoder support
         public bool SupportsMpeg1VideoDecoder { get; set; }
@@ -276,6 +294,7 @@ internal static class FFprobeUtils
         public bool SupportsTonemapFilter { get; set; }
         public bool SupportsFormatFilter { get; set; }
         public bool SupportsBwdifFilter { get; set; }
+        public bool SupportsSetsarFilter { get; set; }
     }
 
     private static ConfigurationInfo _configInfo;
@@ -310,6 +329,7 @@ internal static class FFprobeUtils
                 {
                     removeStart = line.AsSpan().IndexOf('-');
                     configLength = sp.Length;
+                    break;
                 }
             }
 
@@ -377,6 +397,8 @@ internal static class FFprobeUtils
                     case "libx265" when info is ['V', ..]: _configInfo.SupportsLibX265Encoder = true; break;
                     case "libfdk_aac" when info is ['A', ..]: _configInfo.SupportsLibFDKAACEncoder = true; break;
                     case "aac" when info is ['A', ..]: _configInfo.SupportsAACEncoder = true; break;
+                    case "mov_text" when info is ['S', ..]: _configInfo.SupportsMovTextEncoder = true; break;
+                    case "dvdsub" when info is ['S', ..]: _configInfo.SupportsDvdSubEncoder = true; break;
                 }
             }
 
@@ -386,23 +408,23 @@ internal static class FFprobeUtils
                 switch (name)
                 {
                     // Video decoders
-                    case "mpeg1video" when info is ['D', _, 'V']: _configInfo.SupportsMpeg1VideoDecoder = true; break;
-                    case "mpeg2video" when info is ['D', _, 'V']: _configInfo.SupportsMpeg2VideoDecoder = true; break;
-                    case "mpeg4" when info is ['D', _, 'V']: _configInfo.SupportsMpeg4Decoder = true; break;
-                    case "h263" when info is ['D', _, 'V']: _configInfo.SupportsH263Decoder = true; break;
-                    case "h264" when info is ['D', _, 'V']: _configInfo.SupportsH264Decoder = true; break;
-                    case "hevc" when info is ['D', _, 'V']: _configInfo.SupportsHEVCDecoder = true; break;
-                    case "vvc" when info is ['D', _, 'V']: _configInfo.SupportsVVCDecoder = true; break;
-                    case "vp8" when info is ['D', _, 'V']: _configInfo.SupportsVP8Decoder = true; break;
-                    case "vp9" when info is ['D', _, 'V']: _configInfo.SupportsVP9Decoder = true; break;
-                    case "av1" when info is ['D', _, 'V']: _configInfo.SupportsAV1Decoder = true; break;
+                    case "mpeg1video" when info is ['D', _, 'V', ..]: _configInfo.SupportsMpeg1VideoDecoder = true; break;
+                    case "mpeg2video" when info is ['D', _, 'V', ..]: _configInfo.SupportsMpeg2VideoDecoder = true; break;
+                    case "mpeg4" when info is ['D', _, 'V', ..]: _configInfo.SupportsMpeg4Decoder = true; break;
+                    case "h263" when info is ['D', _, 'V', ..]: _configInfo.SupportsH263Decoder = true; break;
+                    case "h264" when info is ['D', _, 'V', ..]: _configInfo.SupportsH264Decoder = true; break;
+                    case "hevc" when info is ['D', _, 'V', ..]: _configInfo.SupportsHEVCDecoder = true; break;
+                    case "vvc" when info is ['D', _, 'V', ..]: _configInfo.SupportsVVCDecoder = true; break;
+                    case "vp8" when info is ['D', _, 'V', ..]: _configInfo.SupportsVP8Decoder = true; break;
+                    case "vp9" when info is ['D', _, 'V', ..]: _configInfo.SupportsVP9Decoder = true; break;
+                    case "av1" when info is ['D', _, 'V', ..]: _configInfo.SupportsAV1Decoder = true; break;
 
                     // Audio decoders
-                    case "aac" when info is ['D', _, 'A']: _configInfo.SupportsAACDecoder = true; break;
-                    case "mp2" when info is ['D', _, 'A']: _configInfo.SupportsMP2Decoder = true; break;
-                    case "mp3" when info is ['D', _, 'A']: _configInfo.SupportsMP3Decoder = true; break;
-                    case "vorbis" when info is ['D', _, 'A']: _configInfo.SupportsVorbisDecoder = true; break;
-                    case "opus" when info is ['D', _, 'A']: _configInfo.SupportsOpusDecoder = true; break;
+                    case "aac" when info is ['D', _, 'A', ..]: _configInfo.SupportsAACDecoder = true; break;
+                    case "mp2" when info is ['D', _, 'A', ..]: _configInfo.SupportsMP2Decoder = true; break;
+                    case "mp3" when info is ['D', _, 'A', ..]: _configInfo.SupportsMP3Decoder = true; break;
+                    case "vorbis" when info is ['D', _, 'A', ..]: _configInfo.SupportsVorbisDecoder = true; break;
+                    case "opus" when info is ['D', _, 'A', ..]: _configInfo.SupportsOpusDecoder = true; break;
                 }
             }
 
@@ -411,10 +433,15 @@ internal static class FFprobeUtils
             {
                 switch (name)
                 {
-                    // Muxers
                     case "mp4" when info is [_, 'E', ..]: _configInfo.SupportsMP4Muxing = true; break;
+                }
+            }
 
-                    // Demuxers
+            // Initialize demuxing support
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-demuxers", noStartingLine: false))
+            {
+                switch (name)
+                {
                     case { } when info is ['D', ..]:
                         foreach (var fmt in name.AsSpan().Split(','))
                         {
@@ -443,6 +470,7 @@ internal static class FFprobeUtils
                     case "tonemap": _configInfo.SupportsTonemapFilter = true; break;
                     case "format": _configInfo.SupportsFormatFilter = true; break;
                     case "bwdif": _configInfo.SupportsBwdifFilter = true; break;
+                    case "setsar": _configInfo.SupportsSetsarFilter = true; break;
                 }
             }
 

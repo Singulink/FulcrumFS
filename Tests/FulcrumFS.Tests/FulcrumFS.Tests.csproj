@@ -5,7 +5,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\PrefixClassName.MsTest\Source\PrefixClassName.MsTest\PrefixClassName.MsTest.csproj" />
     <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
   </ItemGroup>
 </Project>

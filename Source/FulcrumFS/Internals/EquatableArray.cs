@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace FulcrumFS.Internals;
 
@@ -149,4 +150,21 @@ public sealed class EquatableArray<T>(ImmutableArray<T> array) : IReadOnlyList<T
 
     /// <inheritdoc />
     bool ICollection<T>.Remove(T item) => throw new NotSupportedException("Collection is read-only.");
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        StringBuilder sb = new();
+        sb.Append($"EquatableArray<{typeof(T).Name}>[{_array.Length}]");
+        sb.Append(" { ");
+
+        foreach (var item in _array)
+        {
+            sb.Append(item);
+            sb.Append(", ");
+        }
+
+        sb.Append(" } ");
+        return sb.ToString();
+    }
 }

@@ -8,11 +8,40 @@ public static class FFmpegPathInitializer
     [ModuleInitializer]
     public static void Initialize()
     {
-        string env = Environment.GetEnvironmentVariable("FFMPEG_BINARIES_PATH");
+        VideoProcessor.ConfigureWithFFmpegExecutables(DirectoryPath.ParseAbsolute(BinariesDirectoryPath));
+    }
 
-        if (string.IsNullOrWhiteSpace(env))
-            throw new ArgumentException("Must set FFMPEG_BINARIES_PATH environment variable to run FulcrumFS.Videos.Tests project.");
+    public static string BinariesDirectoryPath
+    {
+        get
+        {
+            if (field is not null) return field;
 
-        VideoProcessor.ConfigureWithFFmpegExecutables(DirectoryPath.ParseAbsolute(env));
+            string value = Environment.GetEnvironmentVariable("FFMPEG_BINARIES_PATH");
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                var projDir = DirectoryPath.GetAppBase();
+                while (projDir?.CombineFile("FulcrumFS.Videos.Tests.csproj").Exists == false)
+                {
+                    projDir = projDir.ParentDirectory;
+                }
+
+                if (projDir is not null)
+                {
+                    var envFile = projDir.CombineFile("ffmpeg_path.txt");
+                    if (envFile.Exists)
+                    {
+                        value = File.ReadAllText(envFile.PathExport).Trim();
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new ArgumentException("Must set FFMPEG_BINARIES_PATH environment variable to run FulcrumFS.Videos.Tests project.");
+            }
+
+            field = value;
+            return value;
+        }
     }
 }

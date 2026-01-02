@@ -63,7 +63,7 @@ internal static class FFmpegUtils
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamIndexWithinKind}"));
             }
-            else // if (AppliesToAllStreamsOfKind)
+            else
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamKind}"));
             }
@@ -157,7 +157,11 @@ internal static class FFmpegUtils
         public bool Deinterlace { get; set; }
         public int MakePixelsSquareMode { get; set; } // 0 - keep 1:1, 1 - ignore, 2 - currently wider, 3 - currently taller
         protected override string CommandName => "filter";
-        protected override string CommandArgument => field ??= string.Join(',', ((string?[])[HDRToSDR switch
+        protected override string CommandArgument => field ??= string.Join(',', ((string?[])[Deinterlace switch
+        {
+            false => null,
+            true => "bwdif",
+        }, HDRToSDR switch
         {
             // Remap to HDR first for accurate results - however, this could have a performance penalty if we're also then scaling / sampling it after.
             false => null,
@@ -176,15 +180,11 @@ internal static class FFmpegUtils
             null => null,
             _ when HDRToSDR => null, // We already handled this above.
             var range => string.Create(CultureInfo.InvariantCulture, $"scale=out_range={range}"),
-        }, Deinterlace switch
-        {
-            false => null,
-            true => "bwdif",
         }, FPS switch
         {
             null => null,
-            (long num, 1) => string.Create(CultureInfo.InvariantCulture, $"fps={num}"),
-            var (num, den) => string.Create(CultureInfo.InvariantCulture, $"fps={num}/{den}"),
+            (long num, 1) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}:eof_action=pass"),
+            var (num, den) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}/{den}:eof_action=pass"),
         }, MakePixelsSquareMode switch
         {
             /* Resizing to square pixels is rare, so we do it as a pre-step to the normal resize & just resize again after if needed. */
@@ -248,6 +248,14 @@ internal static class FFmpegUtils
         public string ColorSpace { get; } = colorSpace;
         protected override string CommandName => "colorspace";
         protected override string CommandArgument => ColorSpace;
+    }
+
+    public sealed class PerStreamTagOverride(char streamKind, int streamIndexWithinKind, string tag)
+        : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
+    {
+        public string Tag { get; } = tag;
+        protected override string CommandName => "tag";
+        protected override string CommandArgument => Tag;
     }
 
     // For now we only support setting metadata by overall index to a stream, as we only need that currently.
@@ -319,7 +327,7 @@ internal static class FFmpegUtils
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}:{StreamIndexWithinKind}"));
             }
-            else // if (AppliesToAllStreamsOfKind)
+            else
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{argumentPrefix}{FileIndex}:{StreamKind}"));
             }
@@ -370,7 +378,7 @@ internal static class FFmpegUtils
                 if (FileIndex != -1) args.Add(string.Create(CultureInfo.InvariantCulture, $"{FileIndex}:s:{StreamIndexWithinKind}"));
                 else args.Add("-1");
             }
-            else // if (AppliesToAllStreamsOfKind)
+            else
             {
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-map_metadata:s:{StreamKind}"));
                 if (FileIndex != -1) args.Add(string.Create(CultureInfo.InvariantCulture, $"{FileIndex}:s:{StreamKind}"));
@@ -421,7 +429,7 @@ internal static class FFmpegUtils
         if (progressFilePath != null)
         {
             args.Add("-progress");
-            args.Add(new Uri(Path.GetFullPath(progressFilePath), UriKind.Absolute).AbsoluteUri);
+            args.Add(progressFilePath);
 
             // Update stats every 16ms
             args.Add("-stats_period");
@@ -432,6 +440,7 @@ internal static class FFmpegUtils
         args.Add("-copy_unknown");
         args.Add("-xerror");
         args.Add("-hide_banner");
+        args.Add("-nostdin");
 
         // Output file:
         args.Add("-y");
@@ -452,6 +461,9 @@ internal static class FFmpegUtils
             throw new ArgumentException("If a progress callback or progress file path is provided, both must be provided and non-null.");
         }
 
+        // Ensure dest dirs exists:
+        command.OutputFile.ParentDirectory.Create();
+
         // Run actual ffmpeg command:
         await RunRawFFmpegCommandAsync(
             CreateArguments(command, progressFilePath?.PathExport),
@@ -466,9 +478,11 @@ internal static class FFmpegUtils
         IEnumerable<string> args,
         Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
-        bool ensureAllProgressRead,
+        bool ensureAllProgressRead, // Ensures that all progress is read if at least one progress callback is invoked.
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Validate progress callback and progress temp file path args:
         if (progressCallback is null != progressFilePath is null)
         {
@@ -478,8 +492,9 @@ internal static class FFmpegUtils
         // Set up progress callback reading if needed:
         using var progressCallbackCts = new CancellationTokenSource();
         var progressCallbackCt = progressCallbackCts.Token;
+        progressFilePath?.ParentDirectory.Create();
         progressFilePath?.Delete();
-        FileStream? fs = progressFilePath?.OpenAsyncStream(FileMode.CreateNew, FileAccess.Read, FileShare.ReadWrite);
+        FileStream? fs = progressFilePath?.OpenAsyncStream(FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
         try
         {
             var progressCallbackTask = fs != null ? Task.Run(async () =>
@@ -488,7 +503,9 @@ internal static class FFmpegUtils
                 byte[] buffer = new byte[32];
                 int bytesRead;
                 bool justRead = false;
-                for (int i = 0; i < (ensureAllProgressRead ? 2 : 1); i++) // This loop is for ensuring we read all progress (even post-exit) if requested.
+
+                // This loop is for ensuring we read all progress (even post-exit) if requested.
+                for (int i = 0; i < (ensureAllProgressRead ? 2 : 1); i++)
                 {
                     do
                     {

@@ -30,8 +30,18 @@ public abstract class VideoCodec
 
     /// <summary>
     /// Gets the H.265 (HEVC) video codec, supports encoding.
+    /// Note: this instance corresponds only to the 'hvc1' tag (which is more compatible), to refer to the 'hev1' tag / others, use <see cref="H265AnyTag" />.
+    /// Note: a video file can be lossly converted between to this tag without re-encoding, but would require remuxing.
+    /// Note: these tags are only relevant when muxing into MP4 container formats - this instance won't correspond to any stream outside of an mp4 container.
     /// </summary>
     public static VideoCodec H265 { get; } = new H265Impl();
+
+    /// <summary>
+    /// Gets the H.265 (HEVC) video codec, supports encoding.
+    /// Note: this instance corresponds to any hevc tag (e.g., 'hev1' or 'hvc1'), and does not change tag when used as output.
+    /// Note: these tags are only relevant when muxing into MP4 container formats - this instance will match all H.265 streams in any container.
+    /// </summary>
+    public static VideoCodec H265AnyTag { get; } = new H265AnyTagImpl();
 
     /// <summary>
     /// Gets the H.266 (VVC) video codec, does not support encoding.
@@ -56,6 +66,9 @@ public abstract class VideoCodec
 
     /// <inheritdoc cref="H265" />
     public static VideoCodec HEVC => H265;
+
+    /// <inheritdoc cref="H265AnyTag" />
+    public static VideoCodec HEVCAnyTag => H265AnyTag;
 
     /// <inheritdoc cref="H266" />
     public static VideoCodec VVC => H266;
@@ -82,6 +95,7 @@ public abstract class VideoCodec
     [
         H264,
         H265,
+        H265AnyTag,
         H262,
         H263,
         H266,
@@ -99,6 +113,7 @@ public abstract class VideoCodec
     [
         H264,
         H265,
+        H265AnyTag,
     ];
 
     /// <summary>
@@ -120,6 +135,9 @@ public abstract class VideoCodec
 
     // Internal helper to get whether this codec has a supported decoder in the current ffmpeg configuration:
     internal abstract bool HasSupportedDecoder { get; }
+
+    // Internal helper to get the supported tag names that this codec can correspond to:
+    internal virtual string? TagName => null;
 
     private sealed class H262Impl : VideoCodec
     {
@@ -147,6 +165,16 @@ public abstract class VideoCodec
     }
 
     private sealed class H265Impl : VideoCodec
+    {
+        public override bool SupportsEncoding => true;
+        public override string Name => "hevc";
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
+        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsHEVCDecoder;
+        internal override string? TagName => "hvc1";
+    }
+
+    private sealed class H265AnyTagImpl : VideoCodec
     {
         public override bool SupportsEncoding => true;
         public override string Name => "hevc";
@@ -190,8 +218,8 @@ public abstract class VideoCodec
     private sealed class VP9Impl : VideoCodec
     {
         public override string Name => "vp9";
-        internal override string WritableFileExtension => ".webm";
-        internal override bool SupportsMP4Muxing => false;
+        internal override string WritableFileExtension => ".mp4";
+        internal override bool SupportsMP4Muxing => true;
         internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVP9Decoder;
     }
 

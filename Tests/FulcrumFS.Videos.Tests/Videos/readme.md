@@ -1,25 +1,39 @@
 To figure out what each file is meant to be, view `FFprobeUtilsTests.cs`, as it lists all of the files & their expected FFprobe info:
 - The files named `videoN.ext` where `N` is an integer are synthetic videos used to test a bunch of cases.
+- The file `bbb_sunflower_1080p_60fps_normal-25s.mp4` is the first 25 seconds (to reduce size & processing time) of big buck bunny, licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), as per https://peach.blender.org/about/, which is (c) copyright 2008, Blender Foundation / www.bigbuckbunny.org, which was generated with the command `ffmpeg -i bbb_sunflower_1080p_60fps_normal.mp4 -t 1 -c copy -map v:0 -map a:0 -y bbb_sunflower_1080p_60fps_normal-25s.mp4` with the file from https://download.blender.org/demo/movies/BBB/ (linked from https://peach.blender.org/download/).
+- Similarly, the file `bbb_sunflower_1080p_60fps_normal-1s.mp4` was generated with `ffmpeg -i bbb_sunflower_1080p_60fps_normal.mp4 -t 1 -c copy -map v:0 -map a:0 -y bbb_sunflower_1080p_60fps_normal-1s.mp4` (under the same license).
+- The files `Y0__auYqGXY-20s.mp4`, `Y0__auYqGXY-5s.mp4`, `Y0__auYqGXY-1s-low.mp4` and `Y0__auYqGXY-1s-high.mp4` are based on https://www.youtube.com/watch?v=Y0__auYqGXY, which is released under [CC BY](https://support.google.com/youtube/answer/2797468) as per their description. Title of the work: "Nature is breathtaking @Vindsvept #relaxing", Author of the work: [breathe.](https://www.youtube.com/@LiminalLofi7). They were modified using ffmpeg using the following commands: `ffmpeg -i original.mp4 -an -c:v libx265 -crf 16 -t 20s -y -tag:v hvc1 -y Y0__auYqGXY-20s.mp4`, `ffmpeg -ss 55 -i original.mp4 -an -c:v libx265 -crf 16 -t 5s -tag hvc1 -y Y0__auYqGXY-5s.mp4`, `ffmpeg -ss 55 -i original.mp4 -an -c:v libx265 -crf 50 -t 1s -tag hvc1 -y Y0__auYqGXY-1s-low.mp4`, `ffmpeg -ss 55 -i original.mp4 -an -c:v libx265 -crf 1 -t 1s -tag hvc1 -y Y0__auYqGXY-1s-high.mp4`.
 
 Currently the following sets of cases test the following functionality of our ffprobe code:
 - Media container formats: 1-8
-- Video codecs: 1, 4, 6, 8-12, 15
-- Audio codecs: 1, 4, 6, 7, 13-14
-- Subtitle codecs: 16-20
+- Video codecs: 1, 4, 6-12, 15
+- Audio codecs: 1, 4, 6-7, 13-14
+- Subtitle codecs: 16-20, 169-170
 - Subtitle language / title: 21-29
 - Pixel format / color range combinations: 1, 30-52
-- Thumbnail detection: 53, 54
+- Thumbnail detection: 53-54
 - H.264/H.265 video profiles: 1, 10, 30-32, 35, 41, 50, 55-56, 84-88
 - Audio channel counts / layouts: 57-66, 150-157
 - Audio sample rates: 1, 67-83
-- Video fps: 1, 89-104
+- Video fps: 1, 89-104, 167
 - Video resolution: 1, 8, 105-110, 136-149
-- Pixel shapes (SAR): 1, 111
+- Pixel shapes (SAR): 1, 111, 166
 - Interlacing: 1, 112-113
 - HDR: 114
 - H.264 levels: 1 (level 1.0), 115 (level 1.1), 116 (level 1.2), 117 (level 1.3), 118 (level 2.0), 119 (level 2.1), 120 (level 2.2), 121 (level 3.0), 122 (level 3.1), 123 (level 3.2), 124 (level 4.0), 125 (level 4.1), 126 (level 4.2), 127 (level 5.0), 128 (level 5.1), 129 (level 5.2), 130 (level 6.0), 131 (level 6.1), 132 (level 6.2)
 - Many Streams: 133
-- Unrecognised Streams: 134-135
+- Unrecognised Streams: 134-135, 159
+- Incorrect duration: 158, 196
+- One stream only: 159-161
+- Metadata other than on subtitle streams: 162-163
+- HEVC Tags: 10, 164-165
+- Zero streams: 168
+- Over/under-sized streams: 171-174
+- Invalid (only when validating) file: 175
+- Misc. sizes for unit testing: 176-187, 197-200
+- Misc. files for SelectSmallest unit testing: 188-195
+
+The following files are also explicitly used for tests in `Tests.cs`: 1-21, 30-54, 57, 60, 67-82, 95, 100-103, 111, 114, 133-136, 143, 158-164, 166-200
 
 Commands to generate the synthetic videos:
 1. `ffmpeg -f lavfi -i color=c=green:s=128x72:d=1:r=30 -f lavfi -i sine=frequency=440:duration=1 -shortest -c:v libx264 -c:a libfdk_aac -ar 44100 -ac 2 -pix_fmt yuv420p -color_range pc -profile:v main -y video1.mp4`
@@ -179,3 +193,46 @@ Commands to generate the synthetic videos:
 155. `ffmpeg -i video1.mp4 -ac 8 -channel_layout "5.1.2(back)" -c:v copy -c:a libfdk_aac -y video155.mp4`
 156. `ffmpeg -i video1.mp4 -ac 7 -channel_layout "6.1(back)" -c:v copy -c:a libfdk_aac -y video156.mp4`
 157. `ffmpeg -i video1.mp4 -ac 8 -channel_layout "7.1(wide)" -c:v copy -c:a libfdk_aac -y video157.mp4`
+158. Manually created based off of video2.mkv
+159. `ffmpeg -i video135.ts -c copy -map 0:d -y video159.ts`
+160. `ffmpeg -i video1.mp4 -c copy -map 0:v -y video160.mp4`
+161. `ffmpeg -i video1.mp4 -c copy -map 0:a -y video161.mp4`
+162. `ffmpeg -i video1.mp4 -c copy -metadata artist="Test Artist" -metadata custom_metadata="Test Custom Metadata" -movflags +use_metadata_tags -y video162.mp4`
+163. `ffmpeg -i video1.mp4 -c copy -metadata:s:v:0 language="eng" -metadata:s:a:0 language="fre" -y video163.mp4`
+164. `ffmpeg -i video10.mp4 -tag:v hvc1 -c copy -y video164.mp4`
+165. `ffmpeg -i video10.mp4 -c copy -y video165.mkv`
+166. `ffmpeg -i video1.mp4 -filter:v "scale=w=96:h=128:force_original_aspect_ratio=disable,setsar=4/3" -c:a copy -c:v libx264 -y video166.mp4`
+167. `ffmpeg -f lavfi -i color=c=green:s=128x72:d=1:r=1000999/1000998 -f lavfi -i sine=frequency=440:duration=1 -shortest -c:v libx264 -c:a libfdk_aac -ar 44100 -ac 2 -pix_fmt yuv420p -color_range pc -profile:v main -y video167.mp4`
+168. `ffmpeg -i video167.mp4 -map 0:v -filter "fps=1/2" -y video168.mp4`
+169. `mkvmerge -o video169.mkv video1.mp4 test_subtitles_1.idx` (.idx/.sub file made in Subtitle Edit from the .srt file)
+170. `ffmpeg -i video169.mkv -map 0 -c copy -c:s dvb_subtitle -y video170.mkv`
+171. `ffmpeg -f lavfi -i mandelbrot=size=1920x1080:rate=30:inner=convergence:end_scale=0.01:end_pts=30 -f lavfi -i "anoisesrc=color=white:amplitude=0.4,lowpass=f=800,tremolo=f=3:d=0.7,aecho=0.8:0.9:1200:0.3" -pix_fmt:v yuv420p -color_range pc -map 0:v -map 1:a -c:v libx264 -crf 0 -t 1 -c:a aac -strict:a -2 -b:a 288k -minrate:a 288k -maxrate:a 288k -bufsize:a 288k -y video171.mp4`
+172. `ffmpeg -i video171.mp4 -c:v libx264 -crf:v 50 -c:a aac -b:a 10k -y video172.mp4`
+173. `ffmpeg -i video171.mp4 -i video172.mp4 -map 0:v -map 1:a -c copy -y video173.mp4`
+174. `ffmpeg -i video171.mp4 -i video172.mp4 -map 1:v -map 0:a -c copy -y video174.mp4`
+175. Manually created (with a script) based of off video1.mp4
+176. `ffmpeg -i video1.mp4 -filter:v "format=yuv422p,scale=w=2:h=527:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -pix_fmt yuv422p -color_range pc -y video176.mp4`
+177. `ffmpeg -i video1.mp4 -filter:v "scale=w=16:h=4216:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video177.mp4`
+178. `ffmpeg -i video1.mp4 -filter:v "format=yuv422p,scale=w=16:h=4217:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -pix_fmt yuv422p -color_range pc -y video178.mp4`
+179. `ffmpeg -i video1.mp4 -filter:v "scale=w=16:h=4218:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video179.mp4`
+180. `ffmpeg -i video1.mp4 -filter:v "format=yuv422p,scale=w=8:h=2109:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -pix_fmt yuv422p -color_range pc -y video180.mp4`
+181. `ffmpeg -i video1.mp4 -filter:v "format=yuv422p,scale=w=32:h=64799:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libvpx-vp9 -pix_fmt yuv422p -color_range pc -y video181.mp4`
+182. `ffmpeg -i video1.mp4 -filter:v "format=yuv444p,scale=w=63:h=64799:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libvpx-vp9 -pix_fmt yuv444p -color_range pc -y video182.mp4`
+183. `ffmpeg -i video1.mp4 -filter:v "scale=w=32:h=64798:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libvpx-vp9 -y video183.mp4`
+184. `ffmpeg -i video1.mp4 -filter:v "format=yuv422p,scale=w=64:h=64799:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libvpx-vp9 -pix_fmt yuv422p -color_range pc -y video184.mp4`
+185. `ffmpeg -i video1.mp4 -filter:v "scale=w=64:h=65536:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx265 -y video185.mkv`
+186. `ffmpeg -i video1.mp4 -filter:v "format=yuv444p,scale=w=97:h=97:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y -pix_fmt yuv444p -color_range pc video186.mp4`
+187. `ffmpeg -i video1.mp4 -filter:v "format=yuv444p,scale=w=99:h=99:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y -pix_fmt yuv444p -color_range pc video187.mp4`
+188. `ffmpeg -f lavfi -i mandelbrot=size=1920x1080:rate=30:inner=convergence:end_scale=0.01:end_pts=30 -f lavfi -i "anoisesrc=color=white:amplitude=0.4,lowpass=f=800,tremolo=f=3:d=0.7,aecho=0.8:0.9:1200:0.3" -pix_fmt:v yuv420p -color_range pc -map 0:v -map 1:a -c:v libx264 -crf 0 -t 1 -c:a aac -strict:a -2 -b:a 288k -minrate:a 288k -maxrate:a 288k -bufsize:a 288k -timecode "00:00:05.00" -metadata artist="Test Artist" -metadata:s:v:0 language=eng -metadata:s:a:0 language=eng -y video188.mp4`
+189. `ffmpeg -i video188.mp4 -c:v libx264 -crf:v 50 -c:a aac -b:a 10k -map_metadata:g 0:g -map_metadata:s:v:0 0:s:v:0 -map_metadata:s:a:0 0:s:a:0 -y video189.mp4`
+190. `ffmpeg -i video188.mp4 -i video189.mp4 -map 0:v -map 1:a -c copy -map_metadata:g 0:g -map_metadata:s:v:0 0:s:v:0 -map_metadata:s:a:0 1:s:a:0 -y video190.mp4`
+191. `ffmpeg -i video188.mp4 -i video189.mp4 -map 1:v -map 0:a -c copy -map_metadata:g 0:g -map_metadata:s:v:0 1:s:v:0 -map_metadata:s:a:0 0:s:a:0 -y video191.mp4`
+192. `ffmpeg -i video171.mp4 -filter:v "scale=w=32:h=65536:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx265 -crf 0 -y video192.mkv`
+193. `ffmpeg -i video171.mp4 -i video172.mp4 -filter:v "scale=w=32:h=65536:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx265 -crf 50 -map 0:v -map 1:a -y video193.mkv`
+194. `ffmpeg -i video171.mp4 -i video1.mp4 -map 0:v -map 1:a -shortest -c:v libvpx -c:a copy -pix_fmt yuv420p -color_range pc -b:v 100000k -y video194.mkv`
+195. `ffmpeg -i video171.mp4 -i video1.mp4 -map 0:v -map 1:a -shortest -c:v libvpx -c:a copy -pix_fmt yuv420p -color_range pc -b:v 5k -y video195.mkv`
+196. Manually created based off of video2.mkv
+197. `ffmpeg -i video1.mp4 -filter:v "fps=fps=1985,scale=w=16:h=4208:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video197.mp4`
+198. `ffmpeg -i video1.mp4 -filter:v "fps=fps=1986,scale=w=16:h=4208:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video198.mp4`
+199. `ffmpeg -i video1.mp4 -filter:v "fps=fps=992,scale=w=26:h=4208:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video199.mp4`
+200. `ffmpeg -i video1.mp4 -filter:v "fps=fps=993,scale=w=26:h=4208:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video200.mp4`

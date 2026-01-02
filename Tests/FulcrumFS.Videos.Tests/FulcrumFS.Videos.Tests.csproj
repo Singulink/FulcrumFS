@@ -2,6 +2,9 @@
   <PropertyGroup>
     <RootNamespace>FulcrumFS.Videos</RootNamespace>
     <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Disable parts of tests that require manual inspection in CI to save on CI testing time -->
+    <DefineConstants Condition=" '$(CI)' == 'true' ">$(DefineConstants);CI</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,7 +22,12 @@
     <None Update="Videos\video*.ts" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Videos\video*.mpeg" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Videos\video*.3gp" CopyToOutputDirectory="PreserveNewest" />
-    <Compile Remove="FFprobeUtils.cs" Condition=" '$(Configuration)' != 'Debug' " />
-    <Compile Remove="Tests.cs" /> <!-- incomplete -->
+    <None Update="Videos\bbb_sunflower_1080p_60fps_normal-1s.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\bbb_sunflower_1080p_60fps_normal-25s.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\Y0__auYqGXY-1s-high.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\Y0__auYqGXY-1s-low.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\Y0__auYqGXY-5s.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Videos\Y0__auYqGXY-20s.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Remove="FFprobeUtilsTests.cs" Condition=" '$(Configuration)' != 'Debug' " />
   </ItemGroup>
 </Project>
