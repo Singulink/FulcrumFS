@@ -487,7 +487,7 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// Gets or initializes the options for resizing the video.
-    /// If set to <see langword="null" />, the video will not be resized.
+    /// If set to <see langword="null" />, the video will not be resized unless required.
     /// Default is <see langword="null" />.
     /// </summary>
     public VideoResizeOptions? ResizeOptions { get; init; }

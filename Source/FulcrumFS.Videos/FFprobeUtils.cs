@@ -26,6 +26,9 @@ internal static class FFprobeUtils
         string? Language,
         bool IsAttachedPic,
         bool IsTimedThumbnails,
+        bool IsStillImage,
+        bool IsDefaultStream,
+        bool IsBadCandidateForThumbnail,
         int Width,
         int Height,
         double? Duration,
@@ -145,11 +148,28 @@ internal static class FFprobeUtils
             string? fieldOrder = ReadStringProperty(stream, "field_order");
             string? channelLayout = ReadStringProperty(stream, "channel_layout");
 
-            int attachedPicValue = 0, timedThumbnailsValue = 0;
+            int attachedPicValue = 0, timedThumbnailsValue = 0, stillImageValue = 0, defaultStreamValue = 0, badCandidateForThumbnailValue = 0;
             if (stream.TryGetProperty("disposition", out var dispositionsProp) && dispositionsProp.ValueKind == JsonValueKind.Object)
             {
                 attachedPicValue = ReadInt32Property(dispositionsProp, "attached_pic") ?? 0;
                 timedThumbnailsValue = ReadInt32Property(dispositionsProp, "timed_thumbnails") ?? 0;
+                stillImageValue = ReadInt32Property(dispositionsProp, "still_image") ?? 0;
+                defaultStreamValue = ReadInt32Property(dispositionsProp, "default") ?? 0;
+                badCandidateForThumbnailValue =
+                    (ReadInt32Property(dispositionsProp, "dub") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "comment") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "lyrics") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "karaoke") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "forced") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "hearing_impaired") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "visual_impaired") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "clean_effects") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "non_diegetic") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "captions") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "descriptions") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "metadata") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "dependent") ?? 0) |
+                    (ReadInt32Property(dispositionsProp, "multilayer") ?? 0);
             }
 
             string? language = null, title = null, alphaMode = null;
@@ -202,6 +222,9 @@ internal static class FFprobeUtils
                         language,
                         attachedPicValue != 0,
                         timedThumbnailsValue != 0,
+                        stillImageValue != 0,
+                        defaultStreamValue != 0,
+                        badCandidateForThumbnailValue != 0,
                         width,
                         height,
                         duration,
@@ -253,6 +276,7 @@ internal static class FFprobeUtils
         // Library-specific encoder support
         public bool SupportsLibX264Encoder { get; set; }
         public bool SupportsLibX265Encoder { get; set; }
+        public bool SupportsPngEncoder { get; set; }
         public bool SupportsLibFDKAACEncoder { get; set; }
         public bool SupportsAACEncoder { get; set; }
         public bool SupportsMovTextEncoder { get; set; }
@@ -395,10 +419,10 @@ internal static class FFprobeUtils
                 {
                     case "libx264" when info is ['V', ..]: _configInfo.SupportsLibX264Encoder = true; break;
                     case "libx265" when info is ['V', ..]: _configInfo.SupportsLibX265Encoder = true; break;
+                    case "png" when info is ['V', ..]: _configInfo.SupportsPngEncoder = true; break;
                     case "libfdk_aac" when info is ['A', ..]: _configInfo.SupportsLibFDKAACEncoder = true; break;
                     case "aac" when info is ['A', ..]: _configInfo.SupportsAACEncoder = true; break;
                     case "mov_text" when info is ['S', ..]: _configInfo.SupportsMovTextEncoder = true; break;
-                    case "dvdsub" when info is ['S', ..]: _configInfo.SupportsDvdSubEncoder = true; break;
                 }
             }
 

@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
@@ -1865,12 +1864,13 @@ public sealed class VideoProcessor : FileProcessor
         var resultTempFile = context.GetNewWorkFile(".mp4"); // currently this is our only supported output format when remuxing, so just use it
         resultTempFile.ParentDirectory.Create();
         FFmpegUtils.FFmpegCommand command = new(
-            inputFiles: [sourceFileWithCorrectExtension],
+            inputFiles: [(File: sourceFileWithCorrectExtension, Seek: null)],
             outputFile: resultTempFile,
             perInputStreamOverrides: [.. perInputStreamOverrides],
             perOutputStreamOverrides: [.. perOutputStreamOverrides],
             mapChaptersFrom: Options.MetadataStrippingMode is VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred ? -1 : 0,
-            forceProgressiveDownloadSupport: Options.ForceProgressiveDownload);
+            forceProgressiveDownloadSupport: Options.ForceProgressiveDownload,
+            isToMov: true);
 
         // Run the command
         // Note: The last 5% of progress is reserved for the "checking if smaller" pass & since the progress reported is the highest timestamp completed of any
@@ -1970,7 +1970,7 @@ public sealed class VideoProcessor : FileProcessor
                 // We approximate the size of the stream by using the copy codec for the 1 stream on the original file vs output file, and seeing how big that
                 // output is:
                 FFmpegUtils.FFmpegCommand extractCommandReencoded = new(
-                    inputFiles: [resultTempFile],
+                    inputFiles: [(File: resultTempFile, Seek: null)],
                     outputFile: reencodedTempFile,
                     perInputStreamOverrides:
                     [
@@ -1995,7 +1995,8 @@ public sealed class VideoProcessor : FileProcessor
                         new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: -1, codec: "copy")
                     ],
                     mapChaptersFrom: -1,
-                    forceProgressiveDownloadSupport: false);
+                    forceProgressiveDownloadSupport: false,
+                    isToMov: true);
                 try
                 {
                     await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, context.CancellationToken).ConfigureAwait(false);
@@ -2014,7 +2015,7 @@ public sealed class VideoProcessor : FileProcessor
                     : fromOriginalTempFileMp4;
                 fromOriginalTempFile.ParentDirectory.Create();
                 FFmpegUtils.FFmpegCommand extractCommandOriginal = new(
-                    inputFiles: [sourceFileWithCorrectExtension],
+                    inputFiles: [(File: sourceFileWithCorrectExtension, Seek: null)],
                     outputFile: fromOriginalTempFile,
                     perInputStreamOverrides:
                     [
@@ -2039,7 +2040,8 @@ public sealed class VideoProcessor : FileProcessor
                         new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: -1, codec: "copy")
                     ],
                     mapChaptersFrom: -1,
-                    forceProgressiveDownloadSupport: false);
+                    forceProgressiveDownloadSupport: false,
+                    isToMov: true);
                 try
                 {
                     await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, context.CancellationToken).ConfigureAwait(false);
@@ -2157,12 +2159,13 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 FFmpegUtils.FFmpegCommand mixCommand = new(
-                    inputFiles: [sourceFileWithCorrectExtension, resultTempFile],
+                    inputFiles: [(File: sourceFileWithCorrectExtension, Seek: null), (File: resultTempFile, Seek: null)],
                     outputFile: newResultTempFile,
                     perInputStreamOverrides: [.. perInputStreamOverrides],
                     perOutputStreamOverrides: [.. perOutputStreamOverrides],
                     mapChaptersFrom: Options.MetadataStrippingMode is VideoMetadataStrippingMode.Required or VideoMetadataStrippingMode.Preferred ? -1 : 0,
-                    forceProgressiveDownloadSupport: Options.ForceProgressiveDownload);
+                    forceProgressiveDownloadSupport: Options.ForceProgressiveDownload,
+                    isToMov: true);
 
                 // Run the command
                 // Note: The last 2% of remaining available progress is reserved since the progress reported is the highest timestamp completed of any stream,
@@ -2229,8 +2232,8 @@ public sealed class VideoProcessor : FileProcessor
     };
 
     // Non-exhaustive list of common / standard / well-known SDR profiles configs:
-    private static bool IsKnownSDRColorProfile(string? colorTransfer, string? colorPrimaries, string? colorSpace) =>
-        (colorTransfer is null or "bt709" or "bt601" or "bt470" or "bt470bg" or "smpte170m" or "smpte240m" or "iec61966-2-1") &&
+    internal static bool IsKnownSDRColorProfile(string? colorTransfer, string? colorPrimaries, string? colorSpace) =>
+        (colorTransfer is null or "bt709" or "bt601" or "bt470" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m" or "iec61966-2-1") &&
         (colorPrimaries is null or "bt709" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m") &&
         (colorSpace is null or "bt709" or "bt470m" or "bt470bg" or "smpte170m" or "smpte240m" or "srgb" or "iec61966-2-1" or "gbr");
 
@@ -2599,7 +2602,7 @@ public sealed class VideoProcessor : FileProcessor
     private static bool IsThumbnailStream(FFprobeUtils.UnrecognizedStreamInfo stream)
         => stream.IsAttachedPic || stream.IsTimedThumbnails;
 
-    private static bool HasNonSquarePixels(int sarNum, int sarDen)
+    internal static bool HasNonSquarePixels(int sarNum, int sarDen)
         => (sarNum, sarDen) is not ((<= 0, <= 0) or (1, 1));
 
     private static (bool RoundWidth, bool RoundHeight) GetChromaSubsamplingRounding(int chromaSubsampling)

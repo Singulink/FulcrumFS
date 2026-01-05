@@ -12,19 +12,21 @@ internal static class FFmpegUtils
 {
     // Note: by default, the command is set up such that no streams nor metadata are copied over unless explicitly specified.
     public sealed class FFmpegCommand(
-        ImmutableArray<IAbsoluteFilePath> inputFiles,
+        ImmutableArray<(IAbsoluteFilePath File, (double Offset, bool FromEnd)? Seek)> inputFiles,
         IAbsoluteFilePath outputFile,
         ImmutableArray<PerInputStreamOverride> perInputStreamOverrides,
         ImmutableArray<PerOutputStreamOverride> perOutputStreamOverrides,
         int mapChaptersFrom,
-        bool forceProgressiveDownloadSupport)
+        bool forceProgressiveDownloadSupport,
+        bool isToMov)
     {
-        public ImmutableArray<IAbsoluteFilePath> InputFiles { get; } = inputFiles;
+        public ImmutableArray<(IAbsoluteFilePath File, (double Offset, bool FromEnd)? Seek)> InputFiles { get; } = inputFiles;
         public IAbsoluteFilePath OutputFile { get; } = outputFile;
         public ImmutableArray<PerInputStreamOverride> PerInputStreamOverrides { get; } = perInputStreamOverrides;
         public ImmutableArray<PerOutputStreamOverride> PerOutputStreamOverrides { get; } = perOutputStreamOverrides;
         public int MapChaptersFrom { get; } = mapChaptersFrom;
         public bool ForceProgressiveDownloadSupport { get; } = forceProgressiveDownloadSupport;
+        public bool IsToMov { get; } = isToMov;
     }
 
     // For streamIndexWithinKind, if set to -1, applies to all streams of that kind in the file.
@@ -157,6 +159,7 @@ internal static class FFmpegUtils
         public bool Deinterlace { get; set; }
         public int MakePixelsSquareMode { get; set; } // 0 - keep 1:1, 1 - ignore, 2 - currently wider, 3 - currently taller
         protected override string CommandName => "filter";
+        public bool AssumePotentialAlphaChannelForHDRToSDR { get; set; }
         protected override string CommandArgument => field ??= string.Join(',', ((string?[])[Deinterlace switch
         {
             false => null,
@@ -164,10 +167,12 @@ internal static class FFmpegUtils
         }, HDRToSDR switch
         {
             // Remap to HDR first for accurate results - however, this could have a performance penalty if we're also then scaling / sampling it after.
+            // Note: for a massive resolution video, this could fail to allocate memory for the frames due to requiring 96/128 bits per pixel (which eats into
+            // the 2^31 - 1 byte limit that ffmpeg imposes faster than usual).
             false => null,
             _ =>
                 $"zscale=t=linear:npl=500," +
-                $"format=gbrpf32le," +
+                $"format={(AssumePotentialAlphaChannelForHDRToSDR ? "gbrapf32le" : "gbrpf32le")}," +
                 $"zscale=p=bt709," +
                 $"tonemap=tonemap=mobius:param=0.3:desat=0," +
                 $"zscale=t=bt709:m=bt709:r={NewVideoRange ?? "pc"}",
@@ -185,12 +190,6 @@ internal static class FFmpegUtils
             null => null,
             (long num, 1) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}:eof_action=pass"),
             var (num, den) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}/{den}:eof_action=pass"),
-        }, MakePixelsSquareMode switch
-        {
-            /* Resizing to square pixels is rare, so we do it as a pre-step to the normal resize & just resize again after if needed. */
-            2 => "scale=w='max(trunc(iw*sar+0.5),1)':h=ih:reset_sar=1:force_original_aspect_ratio=disable",
-            3 => "scale=w=iw:h='max(trunc(ih/sar+0.5),1)':reset_sar=1:force_original_aspect_ratio=disable",
-            _ => null,
         }, ResizeTo switch
         {
             null => null,
@@ -279,6 +278,14 @@ internal static class FFmpegUtils
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"language={Language}"));
             }
         }
+    }
+
+    public sealed class PerStreamFramesOverride(char streamKind, int streamIndexWithinKind, int frames)
+        : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
+    {
+        public int Frames { get; } = frames;
+        protected override string CommandName => "frames";
+        protected override string CommandArgument { get; } = frames.ToString(CultureInfo.InvariantCulture);
     }
 
     // For streamIndexWithinKind, if set to -1, applies to all streams of that kind in the file.
@@ -394,13 +401,22 @@ internal static class FFmpegUtils
         // Input files:
         for (int i = 0; i < command.InputFiles.Length; i++)
         {
+            if (command.InputFiles[i].Seek is (double offset, bool fromEnd))
+            {
+                args.Add(fromEnd ? "-sseof" : "-ss");
+                args.Add(offset.ToString("F6", CultureInfo.InvariantCulture));
+            }
+
             args.Add("-i");
-            args.Add(command.InputFiles[i].PathExport);
+            args.Add(command.InputFiles[i].File.PathExport);
         }
 
-        // Specifies how to map chapter metadata:
-        args.Add("-map_chapters");
-        args.Add(command.MapChaptersFrom.ToString(CultureInfo.InvariantCulture));
+        // Specifies how to map chapter metadata if it's .mov/.mp4 output:
+        if (command.IsToMov)
+        {
+            args.Add("-map_chapters");
+            args.Add(command.MapChaptersFrom.ToString(CultureInfo.InvariantCulture));
+        }
 
         // Per-input-stream overrides:
         foreach (var perInputOverride in command.PerInputStreamOverrides)
@@ -414,15 +430,19 @@ internal static class FFmpegUtils
             perOutputOverride.PrepareArguments(args);
         }
 
-        // Emit option to force progressive download support if requested:
-        args.Add("-movflags");
-        if (command.ForceProgressiveDownloadSupport)
+        // Set mov/mp4 specific options if outputting to .mov/.mp4:
+        if (command.IsToMov)
         {
-            args.Add("+faststart+use_metadata_tags");
-        }
-        else
-        {
-            args.Add("+use_metadata_tags");
+            // Emit option to force progressive download support if requested:
+            args.Add("-movflags");
+            if (command.ForceProgressiveDownloadSupport)
+            {
+                args.Add("+faststart+use_metadata_tags");
+            }
+            else
+            {
+                args.Add("+use_metadata_tags");
+            }
         }
 
         // Progress reporting:
@@ -503,6 +523,10 @@ internal static class FFmpegUtils
                 byte[] buffer = new byte[32];
                 int bytesRead;
                 bool justRead = false;
+                bool skipOne = false;
+#if DEBUG
+                int iter = 0;
+#endif
 
                 // This loop is for ensuring we read all progress (even post-exit) if requested.
                 for (int i = 0; i < (ensureAllProgressRead ? 2 : 1); i++)
@@ -524,7 +548,7 @@ internal static class FFmpegUtils
                                     // Check if line begins with out_time_us=, and send the seconds to the progress callback if so.
                                     ReadOnlySpan<byte> lineSpan = CollectionsMarshal.AsSpan(lineBuffer);
                                     if (lineSpan is [.., (byte)'\r']) lineSpan = lineSpan[..^1];
-                                    if (lineSpan.StartsWith("out_time_us="u8))
+                                    if (!skipOne && lineSpan.StartsWith("out_time_us="u8))
                                     {
                                         ReadOnlySpan<byte> timeSpan = lineSpan["out_time_us="u8.Length..];
                                         if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
@@ -541,6 +565,19 @@ internal static class FFmpegUtils
                                     lineBuffer.AddRange(buffer.AsSpan()[beginIdx..bytesRead]);
                                     break;
                                 }
+                            }
+
+                            // Check if progress file is large (>1MB), and if so, truncate it to avoid it growing indefinitely (note: we can lose some progress
+                            // info here, but it's better than the file growing indefinitely & we will get a new lot in ~16ms anyway):
+                            // Note: we do this every third time in debug mode instead to test the logic in CI.
+#if !DEBUG
+                            if (fs.Length > 1 << 20)
+#else
+                            if (++iter % 5 == 0)
+#endif
+                            {
+                                fs.SetLength(0);
+                                skipOne = true;
                             }
                         }
 
