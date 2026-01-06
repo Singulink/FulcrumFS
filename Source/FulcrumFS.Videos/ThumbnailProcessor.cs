@@ -199,14 +199,14 @@ public sealed class ThumbnailProcessor : FileProcessor
             // Success:
             return FileProcessingResult.File(outputImageFile, hasChanges: true);
         }
-        else if (timestampSeconds is null)
+        else if (timestampSeconds is null || duration is null)
         {
             // Nothing else to try in this case, re-throw original exception:
             ExceptionDispatchInfo.Capture(originalException).Throw();
         }
 
         // If we got an error, try again from end (since our duration info is only approximate):
-        if (duration is not null && await TryRun((Offset: duration.Value - timestampSeconds.Value, FromEnd: false)).ConfigureAwait(false) == null)
+        if (await TryRun((Offset: timestampSeconds.Value - duration.Value, FromEnd: true)).ConfigureAwait(false) == null)
         {
             // Success:
             return FileProcessingResult.File(outputImageFile, hasChanges: true);
@@ -230,7 +230,7 @@ public sealed class ThumbnailProcessor : FileProcessor
         return null;
     }
 
-    // Helper to share the logic for resizing a video thumnail (similar to VideoProcessor.CalculateVideoResize, but simpler).
+    // Helper to share the logic for resizing a video thumbnail (similar to VideoProcessor.CalculateVideoResize, but simpler).
     private static (int Width, int Height) CalculateThumbnailResize(
         int streamWidth,
         int streamHeight,
@@ -339,5 +339,9 @@ public sealed class ThumbnailProcessor : FileProcessor
         return (resultWidth, resultHeight);
     }
 
-    private static bool DoesPixelFormatHaveAlphaChannel(string pixelFormat) => !pixelFormat.StartsWith("bayer_", StringComparison.Ordinal) && pixelFormat.Contains('a');
+    // Note: this API might give some false positives; our usages of it will not be incorrect if it does though.
+    private static bool DoesPixelFormatHaveAlphaChannel(string pixelFormat) =>
+        !pixelFormat.StartsWith("bayer_", StringComparison.Ordinal) &&
+        !pixelFormat.StartsWith("gray", StringComparison.Ordinal) &&
+        pixelFormat.Contains('a');
 }

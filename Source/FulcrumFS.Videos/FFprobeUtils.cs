@@ -423,6 +423,7 @@ internal static class FFprobeUtils
                     case "libfdk_aac" when info is ['A', ..]: _configInfo.SupportsLibFDKAACEncoder = true; break;
                     case "aac" when info is ['A', ..]: _configInfo.SupportsAACEncoder = true; break;
                     case "mov_text" when info is ['S', ..]: _configInfo.SupportsMovTextEncoder = true; break;
+                    case "dvdsub" when info is ['S', ..]: _configInfo.SupportsDvdSubEncoder = true; break;
                 }
             }
 

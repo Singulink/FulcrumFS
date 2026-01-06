@@ -2619,9 +2619,9 @@ public sealed class VideoProcessor : FileProcessor
 
     private static string NullDevicePath => OperatingSystem.IsWindows() ? "NUL" : "/dev/null";
 
-    // This helper implements the logic for the ForceValidateAllStreams check. We seperate it out into a helper so we can call it more cleverly.
+    // This helper implements the logic for the ForceValidateAllStreams check. We separate it out into a helper so we can call it more cleverly.
     // In particular: since we expect it to be an edge case where it actually fails, we try to avoid doing it as much as possible, and try to do it as late as
-    // possible. For when validating stream length throroughly, we will call it early still, but otherwise we rely on the main processing pass to receive an
+    // possible. For when validating stream length thoroughly, we will call it early still, but otherwise we rely on the main processing pass to receive an
     // exception also in the case that this would for streams that it re-encodes, and for streams that it copies or skips, we call that just before the main
     // processing loop to give everything else a chance to fail or exit first. For the shortcut exits, we also just manually check remaining streams in those
     // just before exiting also. This way, we can reduce the overhead of this measurably expensive check in the common case where everything is valid.

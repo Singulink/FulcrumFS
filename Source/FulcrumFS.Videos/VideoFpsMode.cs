@@ -14,7 +14,7 @@ public enum VideoFpsMode
     /// Limits the FPS by dividing the original FPS by an integer value - that is, if the original video has a higher FPS, it will be reduced to the original
     /// FPS divided by the smallest integer that is large enough to achieve the desired limit.
     /// Note: this can be calculated by using integer division: <c>newFps = originalFps / (originalFps \ targetFps)</c>; where '\' is integer division (rounded
-    /// up, as opposed to the normal rounding of integer division). Or with standard integer division rounding (floored):
+    /// up, as opposed to the normal rounding of integer division). Or with '\' representing standard integer division rounding (floored):
     /// <c>newFps = -originalFps / (-originalFps \ targetFps)</c>.
     /// </summary>
     LimitByIntegerDivision,

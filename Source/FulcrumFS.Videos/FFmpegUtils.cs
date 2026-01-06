@@ -133,6 +133,7 @@ internal static class FFmpegUtils
     public sealed class PerStreamFPSOverride(char streamKind, int streamIndexWithinKind, long fpsNum, long fpsDen)
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
+        // Note: the setter is public, but the CommandArgument is cached - correct usage requires setting all properties before first call to CommandArgument.
         public long FPSNum { get; set; } = fpsNum;
         public long FPSDen { get; set; } = fpsDen;
         protected override string CommandName => "r";
@@ -151,6 +152,7 @@ internal static class FFmpegUtils
     public sealed class PerStreamFilterOverride(char streamKind, int streamIndexWithinKind)
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
+        // Note: the setter is public, but the CommandArgument is cached - correct usage requires setting all properties before first call to CommandArgument.
         public (long Num, long Den)? FPS { get; set; }
         public (int Width, int Height)? ResizeTo { get; set; }
         public string? NewVideoRange { get; set; }
@@ -212,6 +214,7 @@ internal static class FFmpegUtils
     public sealed class PerStreamSampleRateOverride(char streamKind, int streamIndexWithinKind, int sampleRate)
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
+        // Note: the setter is public, but the CommandArgument is cached - correct usage requires setting all properties before first call to CommandArgument.
         public int SampleRate { get; set; } = sampleRate;
         protected override string CommandName => "ar";
         protected override string CommandArgument => field ??= SampleRate.ToString(CultureInfo.InvariantCulture);
@@ -559,6 +562,7 @@ internal static class FFmpegUtils
                                     }
 
                                     lineBuffer.Clear();
+                                    skipOne = false;
                                 }
                                 else
                                 {
@@ -590,6 +594,7 @@ internal static class FFmpegUtils
                         {
                             // If we just read something, yield to allow more data to be written, but don't delay.
                             await Task.Yield();
+                            justRead = false;
                         }
                         else if (ensureAllProgressRead)
                         {

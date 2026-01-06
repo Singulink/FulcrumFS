@@ -4,7 +4,7 @@ namespace FulcrumFS.Videos;
 /// Specifies the options for processing videos to create a thumbnail with a <see cref="ThumbnailProcessor" />.
 /// If <see cref="IncludeThumbnailVideoStreams" /> is <see langword="true" /> and there is a video stream marked as a thumbnail stream, the thumbnail image is
 /// taken from that stream.
-/// Otherwise, the thumbnail image is taken from the lowest of <see cref="ImageTimestamp" /> and <see cref="ImageTimestampFraction" /> if both are specified
+/// Otherwise, the thumbnail image is taken from the earlier of <see cref="ImageTimestamp" /> and <see cref="ImageTimestampFraction" /> if both are specified
 /// and in range (this allows specifying options that work well for both long and short videos, e.g., by specifying 5s and 30%, for short videos 5s may be way
 /// too far in, it could be the end of the video so it takes 30%, and for long videos 30% could be way too far in, whereas 5s would be better).
 /// The thumbnail image is taken from the first video stream that is most likely to be the main video based on dispositions.
