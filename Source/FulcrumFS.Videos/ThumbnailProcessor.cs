@@ -13,7 +13,7 @@ public sealed class ThumbnailProcessor : FileProcessor
     /// Note: you must configure the ffmpeg executable paths by calling <see cref="VideoProcessor.ConfigureWithFFmpegExecutables"/> before creating an instance
     /// of this class.
     /// Note: if you want to do source video validation, you need to use <see cref="VideoProcessor" /> first and chain this after it, as this class does not
-    /// perform any validation itself (other than checking file extension), it just extracts a thumbnail from the provided video.
+    /// perform any validation itself, it just extracts a thumbnail from the provided video.
     /// </summary>
     public ThumbnailProcessor(ThumbnailProcessingOptions options)
     {
@@ -35,7 +35,7 @@ public sealed class ThumbnailProcessor : FileProcessor
     public ThumbnailProcessingOptions Options { get; }
 
     /// <inheritdoc/>
-    public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. MediaContainerFormat.AllSourceFormats.SelectMany(f => f.CommonExtensions).Distinct()];
+    public override IReadOnlyList<string> AllowedFileExtensions => [];
 
     /// <inheritdoc/>
     protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
