@@ -588,7 +588,7 @@ partial class Tests
         await RunTest(
             "video158.mkv",
             VideoProcessingOptions.Preserve with { VideoSourceValidation = VideoStreamValidationOptions.None with { MaxLength = TimeSpan.FromSeconds(0.5) } },
-            "Measured video stream duration exceeds the maximum allowed length.");
+            "Measured video stream duration exceeds the maximum allowed duration.");
         await RunTest(
             "video158.mkv",
             VideoProcessingOptions.Preserve with { VideoSourceValidation = VideoStreamValidationOptions.None with { MaxLength = TimeSpan.FromSeconds(1.5) } },
@@ -596,7 +596,7 @@ partial class Tests
         await RunTest(
             "video158.mkv",
             VideoProcessingOptions.Preserve with { AudioSourceValidation = AudioStreamValidationOptions.None with { MaxLength = TimeSpan.FromSeconds(0.5) } },
-            "Measured audio stream duration exceeds the maximum allowed length.");
+            "Measured audio stream duration exceeds the maximum allowed duration.");
         await RunTest(
             "video158.mkv",
             VideoProcessingOptions.Preserve with { AudioSourceValidation = AudioStreamValidationOptions.None with { MaxLength = TimeSpan.FromSeconds(1.5) } },
@@ -622,7 +622,7 @@ partial class Tests
         await RunTest(
             "video196.mkv",
             VideoProcessingOptions.Preserve with { VideoSourceValidation = VideoStreamValidationOptions.None with { MinLength = TimeSpan.FromSeconds(1.5) } },
-            "Measured video stream duration is less than the minimum required length.");
+            "Measured video stream duration is less than the minimum required duration.");
         await RunTest(
             "video196.mkv",
             VideoProcessingOptions.Preserve with { VideoSourceValidation = VideoStreamValidationOptions.None with { MinLength = TimeSpan.FromSeconds(1.0) } },
@@ -630,7 +630,7 @@ partial class Tests
         await RunTest(
             "video196.mkv",
             VideoProcessingOptions.Preserve with { AudioSourceValidation = AudioStreamValidationOptions.None with { MinLength = TimeSpan.FromSeconds(1.5) } },
-            "Measured audio stream duration is less than the minimum required length.");
+            "Measured audio stream duration is less than the minimum required duration.");
         await RunTest(
             "video196.mkv",
             VideoProcessingOptions.Preserve with { AudioSourceValidation = AudioStreamValidationOptions.None with { MinLength = TimeSpan.FromSeconds(1.0) } },

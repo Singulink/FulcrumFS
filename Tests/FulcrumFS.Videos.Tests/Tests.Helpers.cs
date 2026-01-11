@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Globalization;
 #if !DEBUG
 using System.Linq.Expressions;

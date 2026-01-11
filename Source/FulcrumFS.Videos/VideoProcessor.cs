@@ -486,73 +486,95 @@ public sealed class VideoProcessor : FileProcessor
 #endif
         }
 
+        // NOTE!!! Measured duration may be slightly lower than what it should be on large files due to us keeping progress file size under control (< 1MB).
+        // Whether it happens or not is non-deterministic, but the error should be very small (on the order of a few frames at most ordinarily).
+        // Note: this is explicitly avoided / disabled in Debug mode to ensure the tests are reliable, since it usually does it at a much smaller size.
+
         // Validate the actual video streams duration if we want to check their min/max lengths & we're forcing full validation:
         if (Options.ForceValidateAllStreams && Options.VideoSourceValidation is { MinLength: not null } or { MaxLength: not null })
         {
-            // Get the actual duration:
-            var (exceeded, measuredDuration) = await ValidateStreamsAsync(
-                Options.VideoSourceValidation.MaxLength?.TotalSeconds,
-                maxDuration,
-                [
-                    .. sourceInfo.Streams
-                        .Select((x, i) => (Value: x, Index: i))
-                        .Where((t) => t.Value is FFprobeUtils.VideoStreamInfo vs && !IsThumbnailStream(vs))
-                        .Select((t) => t.Index)
-                ],
-                [
-                    new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: 'v', streamIndexWithinKind: -1, mapToOutput: true),
-                    .. sourceInfo.Streams
-                        .Select((x, i) => (Value: x, Index: i))
-                        .Where((t) => t.Value is FFprobeUtils.VideoStreamInfo vs && IsThumbnailStream(vs))
-                        .Select((t) => new FFmpegUtils.PerStreamMapOverride(
-                            fileIndex: 0,
-                            streamKind: '\0',
-                            streamIndexWithinKind: t.Index,
-                            mapToOutput: false)),
-                ],
-                countDuration: true)
-            .ConfigureAwait(false);
+            // Get the streams:
+            int[] streams =
+            [
+                .. sourceInfo.Streams
+                    .Select((x, i) => (Value: x, Index: i))
+                    .Where((t) => t.Value is FFprobeUtils.VideoStreamInfo vs && !IsThumbnailStream(vs))
+                    .Select((t) => t.Index)
+            ];
 
-            // Check if duration is outside of allowed range:
-            measuredDuration ??= 0.0;
-            var measuredDurationTimeSpan = TimeSpan.FromSeconds(measuredDuration.Value);
-            if (exceeded ||
-                (Options.VideoSourceValidation.MaxLength is { } && measuredDurationTimeSpan > Options.VideoSourceValidation.MaxLength.Value))
+            // If at least 1 stream to check:
+            if (streams.Length > 0)
             {
-                throw new FileProcessingException("Measured video stream duration exceeds the maximum allowed duration.");
-            }
-            else if (Options.VideoSourceValidation.MinLength is { } && measuredDurationTimeSpan < Options.VideoSourceValidation.MinLength.Value)
-            {
-                throw new FileProcessingException("Measured video stream duration is less than the minimum required duration.");
+                // Get the actual duration:
+                var (exceeded, measuredDuration) = await ValidateStreamsAsync(
+                    Options.VideoSourceValidation.MaxLength?.TotalSeconds,
+                    maxDuration,
+                    streams,
+                    [
+                        new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: 'v', streamIndexWithinKind: -1, mapToOutput: true),
+                        .. sourceInfo.Streams
+                            .Select((x, i) => (Value: x, Index: i))
+                            .Where((t) => t.Value is FFprobeUtils.VideoStreamInfo vs && IsThumbnailStream(vs))
+                            .Select((t) => new FFmpegUtils.PerStreamMapOverride(
+                                fileIndex: 0,
+                                streamKind: '\0',
+                                streamIndexWithinKind: t.Index,
+                                mapToOutput: false)),
+                    ],
+                    countDuration: true)
+                .ConfigureAwait(false);
+
+                // Check if duration is outside of allowed range:
+                measuredDuration ??= 0.0;
+                var measuredDurationTimeSpan = TimeSpan.FromSeconds(measuredDuration.Value);
+                if (exceeded ||
+                    (Options.VideoSourceValidation.MaxLength is { } && measuredDurationTimeSpan > Options.VideoSourceValidation.MaxLength.Value))
+                {
+                    throw new FileProcessingException("Measured video stream duration exceeds the maximum allowed duration.");
+                }
+                else if (Options.VideoSourceValidation.MinLength is { } && measuredDurationTimeSpan < Options.VideoSourceValidation.MinLength.Value)
+                {
+                    throw new FileProcessingException("Measured video stream duration is less than the minimum required duration.");
+                }
             }
         }
 
         // Validate the actual audio streams duration if we want to check their min/max lengths & we're forcing full validation:
         if (Options.ForceValidateAllStreams && Options.AudioSourceValidation is { MinLength: not null } or { MaxLength: not null })
         {
-            // Get the actual duration:
-            var (exceeded, measuredDuration) = await ValidateStreamsAsync(
-                Options.AudioSourceValidation.MaxLength?.TotalSeconds,
-                maxDuration,
-                [.. sourceInfo.Streams
+            // Get the streams:
+            int[] streams =
+            [
+                .. sourceInfo.Streams
                     .Select((x, i) => (Value: x, Index: i))
                     .Where((t) => t.Value is FFprobeUtils.AudioStreamInfo)
-                    .Select((t) => t.Index)],
-                [new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: 'a', streamIndexWithinKind: -1, mapToOutput: true)],
-                countDuration: !Options.RemoveAudioStreams)
-            .ConfigureAwait(false);
+                    .Select((t) => t.Index)
+            ];
 
-            // Check if duration is outside of allowed range:
-            measuredDuration ??= 0.0;
-            var measuredDurationTimeSpan = TimeSpan.FromSeconds(measuredDuration.Value);
-            if (exceeded ||
-                (Options.AudioSourceValidation.MaxLength is { } && measuredDurationTimeSpan > Options.AudioSourceValidation.MaxLength.Value))
+            // If at least 1 stream to check:
+            if (streams.Length > 0)
             {
-                throw new FileProcessingException("Measured audio stream duration exceeds the maximum allowed duration.");
-            }
-            else if (Options.AudioSourceValidation.MinLength is { } && measuredDurationTimeSpan < Options.AudioSourceValidation.MinLength.Value)
-            {
-                throw new FileProcessingException("Measured audio stream duration is less than the minimum required duration.");
+                // Get the actual duration:
+                var (exceeded, measuredDuration) = await ValidateStreamsAsync(
+                    Options.AudioSourceValidation.MaxLength?.TotalSeconds,
+                    maxDuration,
+                    streams,
+                    [new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: 'a', streamIndexWithinKind: -1, mapToOutput: true)],
+                    countDuration: !Options.RemoveAudioStreams)
+                .ConfigureAwait(false);
+
+                // Check if duration is outside of allowed range:
+                measuredDuration ??= 0.0;
+                var measuredDurationTimeSpan = TimeSpan.FromSeconds(measuredDuration.Value);
+                if (exceeded ||
+                    (Options.AudioSourceValidation.MaxLength is { } && measuredDurationTimeSpan > Options.AudioSourceValidation.MaxLength.Value))
+                {
+                    throw new FileProcessingException("Measured audio stream duration exceeds the maximum allowed duration.");
+                }
+                else if (Options.AudioSourceValidation.MinLength is { } && measuredDurationTimeSpan < Options.AudioSourceValidation.MinLength.Value)
+                {
+                    throw new FileProcessingException("Measured audio stream duration is less than the minimum required duration.");
+                }
             }
         }
 

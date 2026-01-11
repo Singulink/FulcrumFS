@@ -573,11 +573,15 @@ internal static class FFmpegUtils
 
                             // Check if progress file is large (>1MB), and if so, truncate it to avoid it growing indefinitely (note: we can lose some progress
                             // info here, but it's better than the file growing indefinitely & we will get a new lot in ~16ms anyway):
-                            // Note: we do this every third time in debug mode instead to test the logic in CI.
+                            // Note: we do this every 5th time in debug mode instead to test the logic in CI (note: only ever change to a suitably large prime
+                            // number, that way it is unlikely to be equal to the number of lines from ffmpeg, which would make this testing useless).
+                            // Note: we disable this debug feature when ensureAllProgressRead is set, as we want to ensure the final progress is read in that
+                            // case, and 5 is far too small for suitably consistent behaviour for our tests (and other massive values would be too large to be
+                            // useful).
 #if !DEBUG
                             if (fs.Length > 1 << 20)
 #else
-                            if (++iter % 5 == 0)
+                            if (!ensureAllProgressRead && ++iter % 5 == 0)
 #endif
                             {
                                 fs.SetLength(0);
