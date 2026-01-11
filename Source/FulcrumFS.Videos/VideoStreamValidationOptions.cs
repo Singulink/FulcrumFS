@@ -1,6 +1,7 @@
 namespace FulcrumFS.Videos;
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
+#pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
 
 /// <summary>
 /// Options for validating video streams during processing.
@@ -8,8 +9,10 @@ namespace FulcrumFS.Videos;
 public sealed record VideoStreamValidationOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="VideoStreamValidationOptions"/> class.
-    /// By default, validates that there is exactly 1 video stream only.
+    /// <para>
+    /// Initializes a new instance of the <see cref="VideoStreamValidationOptions"/> class.</para>
+    /// <para>
+    /// By default, validates that there is exactly 1 video stream only.</para>
     /// </summary>
     public VideoStreamValidationOptions()
     {
@@ -30,8 +33,10 @@ public sealed record VideoStreamValidationOptions
     public static VideoStreamValidationOptions StandardVideo { get; } = new VideoStreamValidationOptions();
 
     /// <summary>
-    /// Gets or initializes the maximum width of the source video in pixels.
-    /// Default is no maximum.
+    /// <para>
+    /// Gets or initializes the maximum width of the source video in pixels.</para>
+    /// <para>
+    /// Default is no maximum.</para>
     /// </summary>
     public int? MaxWidth
     {
@@ -44,8 +49,10 @@ public sealed record VideoStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the maximum height of the source video in pixels.
-    /// Default is no maximum.
+    /// <para>
+    /// Gets or initializes the maximum height of the source video in pixels.</para>
+    /// <para>
+    /// Default is no maximum.</para>
     /// </summary>
     public int? MaxHeight
     {
@@ -58,8 +65,10 @@ public sealed record VideoStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the maximum number of pixels in the source video.
-    /// Default is no maximum.
+    /// <para>
+    /// Gets or initializes the maximum number of pixels in the source video.</para>
+    /// <para>
+    /// Default is no maximum.</para>
     /// </summary>
     public int? MaxPixels
     {
@@ -72,8 +81,10 @@ public sealed record VideoStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the maximum number of video streams in the source video file.
-    /// Default is 1.
+    /// <para>
+    /// Gets or initializes the maximum number of video streams in the source video file.</para>
+    /// <para>
+    /// Default is 1.</para>
     /// </summary>
     public int? MaxStreams
     {
@@ -86,8 +97,10 @@ public sealed record VideoStreamValidationOptions
     } = 1;
 
     /// <summary>
-    /// Gets or initializes the maximum length of each video stream in the source video file.
-    /// Default is no maximum.
+    /// <para>
+    /// Gets or initializes the maximum length of each video stream in the source video file.</para>
+    /// <para>
+    /// Default is no maximum.</para>
     /// </summary>
     public TimeSpan? MaxLength
     {
@@ -100,8 +113,10 @@ public sealed record VideoStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the minimum width of the source video in pixels.
-    /// Default is no minimum.
+    /// <para>
+    /// Gets or initializes the minimum width of the source video in pixels.</para>
+    /// <para>
+    /// Default is no minimum.</para>
     /// </summary>
     public int? MinWidth
     {
@@ -114,8 +129,10 @@ public sealed record VideoStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the minimum height of the source video in pixels.
-    /// Default is no minimum.
+    /// <para>
+    /// Gets or initializes the minimum height of the source video in pixels.</para>
+    /// <para>
+    /// Default is no minimum.</para>
     /// </summary>
     public int? MinHeight
     {
@@ -128,8 +145,10 @@ public sealed record VideoStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the minimum number of pixels in the source video.
-    /// Default is no minimum.
+    /// <para>
+    /// Gets or initializes the minimum number of pixels in the source video.</para>
+    /// <para>
+    /// Default is no minimum.</para>
     /// </summary>
     public int? MinPixels
     {
@@ -142,8 +161,10 @@ public sealed record VideoStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the minimum number of video streams in the source video file.
-    /// Default is 1.
+    /// <para>
+    /// Gets or initializes the minimum number of video streams in the source video file.</para>
+    /// <para>
+    /// Default is 1.</para>
     /// </summary>
     public int? MinStreams
     {
@@ -156,8 +177,10 @@ public sealed record VideoStreamValidationOptions
     } = 1;
 
     /// <summary>
-    /// Gets or initializes the minimum length of each video stream in the source video file.
-    /// Default is no minimum.
+    /// <para>
+    /// Gets or initializes the minimum length of each video stream in the source video file.</para>
+    /// <para>
+    /// Default is no minimum.</para>
     /// </summary>
     public TimeSpan? MinLength
     {

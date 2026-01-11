@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using FulcrumFS.Internals;
+using Singulink.Collections;
 using Singulink.Enums;
 
 namespace FulcrumFS.Images;
@@ -43,7 +43,7 @@ public sealed record ImageProcessingOptions
             if (values.Select(f => f.SourceFormat).Distinct().Count() != value.Count)
                 throw new ArgumentException("Formats cannot contain duplicate source formats.", nameof(value));
 
-            field = new EquatableArray<ImageFormatMapping>(values);
+            field = EquatableArray.Create(values);
         }
     }
 

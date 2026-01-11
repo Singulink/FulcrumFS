@@ -2,15 +2,20 @@ using Singulink.Enums;
 
 namespace FulcrumFS.Videos;
 
+#pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
+
 /// <summary>
 /// Represents options for resizing videos.
 /// </summary>
 public sealed record VideoResizeOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified mode and target size.
+    /// <para>
+    /// Initializes a new instance of the <see cref="VideoResizeOptions" /> class with the specified mode and target size.</para>
+    /// <para>
     /// Note: restrictions of H.264 and HEVC still apply when rescaling videos, such as requiring even dimensions with 4:2:0 subsampling, being internally
     /// padded up to block sizes, etc.; if the size you specify is too small for the video to be possible, an exception will be thrown during processing.
+    /// </para>
     /// </summary>
     public VideoResizeOptions(VideoResizeMode mode, int width, int height)
     {

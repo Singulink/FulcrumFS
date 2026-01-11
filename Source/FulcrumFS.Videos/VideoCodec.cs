@@ -29,17 +29,25 @@ public abstract class VideoCodec
     public static VideoCodec H264 { get; } = new H264Impl();
 
     /// <summary>
-    /// Gets the H.265 (HEVC) video codec, supports encoding.
+    /// <para>
+    /// Gets the H.265 (HEVC) video codec, supports encoding.</para>
+    /// <para>
     /// Note: this instance corresponds only to the 'hvc1' tag (which is more compatible), to refer to the 'hev1' tag / others, use <see cref="H265AnyTag" />.
-    /// Note: a video file can be lossly converted between to this tag without re-encoding, but would require remuxing.
+    /// </para><para>
+    /// Note: a video file can be lossly converted between to this tag without re-encoding, but would require remuxing.</para>
+    /// <para>
     /// Note: these tags are only relevant when muxing into MP4 container formats - this instance won't correspond to any stream outside of an mp4 container.
+    /// </para>
     /// </summary>
     public static VideoCodec H265 { get; } = new H265Impl();
 
     /// <summary>
-    /// Gets the H.265 (HEVC) video codec, supports encoding.
-    /// Note: this instance corresponds to any hevc tag (e.g., 'hev1' or 'hvc1'), and does not change tag when used as output.
-    /// Note: these tags are only relevant when muxing into MP4 container formats - this instance will match all H.265 streams in any container.
+    /// <para>
+    /// Gets the H.265 (HEVC) video codec, supports encoding.</para>
+    /// <para>
+    /// Note: this instance corresponds to any hevc tag (e.g., 'hev1' or 'hvc1'), and does not change tag when used as output.</para>
+    /// <para>
+    /// Note: these tags are only relevant when muxing into MP4 container formats - this instance will match all H.265 streams in any container.</para>
     /// </summary>
     public static VideoCodec H265AnyTag { get; } = new H265AnyTagImpl();
 

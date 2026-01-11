@@ -5,6 +5,7 @@ using Singulink.IO;
 using Singulink.Threading;
 
 #pragma warning disable SA1203 // Constants should appear before fields
+#pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
 
 namespace FulcrumFS.Videos;
 
@@ -14,8 +15,11 @@ namespace FulcrumFS.Videos;
 public sealed class VideoProcessor : FileProcessor
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="VideoProcessor"/> class with the specified options.
+    /// <para>
+    /// Initializes a new instance of the <see cref="VideoProcessor"/> class with the specified options.</para>
+    /// <para>
     /// Note: you must configure the ffmpeg executable paths by calling <see cref="ConfigureWithFFmpegExecutables"/> before creating an instance of this class.
+    /// </para>
     /// </summary>
     public VideoProcessor(VideoProcessingOptions options)
     {
@@ -120,9 +124,12 @@ public sealed class VideoProcessor : FileProcessor
     public VideoProcessingOptions Options { get; }
 
     /// <summary>
-    /// Configures the directory containing ffmpeg binaries to use for processing.
-    /// On Windows: should contain ffmpeg.exe and ffprobe.exe.
-    /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.
+    /// <para>
+    /// Configures the directory containing ffmpeg binaries to use for processing.</para>
+    /// <para>
+    /// On Windows: should contain ffmpeg.exe and ffprobe.exe.</para>
+    /// <para>
+    /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.</para>
     /// </summary>
     /// <param name="dirPath">The directory path containing the ffmpeg executables.</param>
     /// <param name="maxConcurrentProcesses">The maximum number of concurrent ffmpeg processes to allow. Default is currently

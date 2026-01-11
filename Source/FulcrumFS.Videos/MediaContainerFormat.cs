@@ -8,9 +8,12 @@ namespace FulcrumFS.Videos;
 public abstract class MediaContainerFormat
 {
     /// <summary>
-    /// Gets the MP4 media container format.
-    /// Note: since the file structure of mp4, mov, m4a, 3gp, 3g2, and mj2 are all the same for ffmpeg demuxing, they can all be matched by this format.
-    /// Note: this format supports muxing to .mp4.
+    /// <para>
+    /// Gets the MP4 media container format.</para>
+    /// <para>
+    /// Note: since the file structure of mp4, mov, m4a, 3gp, 3g2, and mj2 are all the same for ffmpeg demuxing, they can all be matched by this format.</para>
+    /// <para>
+    /// Note: this format supports muxing to .mp4.</para>
     /// </summary>
     public static MediaContainerFormat MP4 { get; } = new MP4Impl();
 
@@ -18,9 +21,12 @@ public abstract class MediaContainerFormat
     public static MediaContainerFormat Mov => MP4;
 
     /// <summary>
-    /// Gets the MKV media container format.
-    /// Note: since the file structure of mkv, and webm are all the same for ffmpeg demuxing, they can both be matched by this format.
-    /// Note: this format does not support muxing, only demuxing.
+    /// <para>
+    /// Gets the MKV media container format.</para>
+    /// <para>
+    /// Note: since the file structure of mkv, and webm are all the same for ffmpeg demuxing, they can both be matched by this format.</para>
+    /// <para>
+    /// Note: this format does not support muxing, only demuxing.</para>
     /// </summary>
     public static MediaContainerFormat Mkv { get; } = new MKVImpl();
 
@@ -28,21 +34,28 @@ public abstract class MediaContainerFormat
     public static MediaContainerFormat WebM => Mkv;
 
     /// <summary>
-    /// Gets the AVI media container format.
-    /// Note: this format does not support muxing, only demuxing.
+    /// <para>
+    /// Gets the AVI media container format.</para>
+    /// <para>
+    /// Note: this format does not support muxing, only demuxing.</para>
     /// </summary>
     public static MediaContainerFormat Avi { get; } = new AviImpl();
 
     /// <summary>
-    /// Gets the TS media container format.
-    /// Note: since the file structure of ts, mts, and m2ts are all the same for ffmpeg demuxing, they can all be matched by this format.
-    /// Note: this format does not support muxing, only demuxing.
+    /// <para>
+    /// Gets the TS media container format.</para>
+    /// <para>
+    /// Note: since the file structure of ts, mts, and m2ts are all the same for ffmpeg demuxing, they can all be matched by this format.</para>
+    /// <para>
+    /// Note: this format does not support muxing, only demuxing.</para>
     /// </summary>
     public static MediaContainerFormat TS { get; } = new TSImpl();
 
     /// <summary>
-    /// Gets the MPEG media container format.
-    /// Note: this format does not support muxing, only demuxing.
+    /// <para>
+    /// Gets the MPEG media container format.</para>
+    /// <para>
+    /// Note: this format does not support muxing, only demuxing.</para>
     /// </summary>
     public static MediaContainerFormat Mpeg { get; } = new MpegImpl();
 

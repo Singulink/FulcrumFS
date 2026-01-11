@@ -22,8 +22,8 @@ public class ThumbnailSelectingException : FileProcessingException
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ThumbnailSelectingException"/> class with a specified error message and a reference to the inner exception that is
-    /// the cause of this exception.
+    /// Initializes a new instance of the <see cref="ThumbnailSelectingException"/> class with a specified error message and a reference to the inner exception
+    /// that is the cause of this exception.
     /// </summary>
     public ThumbnailSelectingException(string? message, Exception? innerException) : base(message ?? DefaultMessage, innerException)
     {

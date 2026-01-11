@@ -1,6 +1,7 @@
 namespace FulcrumFS.Videos;
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
+#pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
 
 /// <summary>
 /// Options for validating audio streams during processing.
@@ -8,8 +9,10 @@ namespace FulcrumFS.Videos;
 public sealed record AudioStreamValidationOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="AudioStreamValidationOptions"/> class.
-    /// By default, validates that there is at most 1 audio stream only.
+    /// <para>
+    /// Initializes a new instance of the <see cref="AudioStreamValidationOptions"/> class.</para>
+    /// <para>
+    /// By default, validates that there is at most 1 audio stream only.</para>
     /// </summary>
     public AudioStreamValidationOptions()
     {
@@ -37,8 +40,10 @@ public sealed record AudioStreamValidationOptions
     public static AudioStreamValidationOptions OptionalStandardAudio { get; } = new AudioStreamValidationOptions();
 
     /// <summary>
-    /// Gets or initializes the maximum number of audio streams in the source video file.
-    /// Default is 1.
+    /// <para>
+    /// Gets or initializes the maximum number of audio streams in the source video file.</para>
+    /// <para>
+    /// Default is 1.</para>
     /// </summary>
     public int? MaxStreams
     {
@@ -51,8 +56,10 @@ public sealed record AudioStreamValidationOptions
     } = 1;
 
     /// <summary>
-    /// Gets or initializes the maximum length of each audio stream in the source video file.
-    /// Default is no maximum.
+    /// <para>
+    /// Gets or initializes the maximum length of each audio stream in the source video file.</para>
+    /// <para>
+    /// Default is no maximum.</para>
     /// </summary>
     public TimeSpan? MaxLength
     {
@@ -65,8 +72,10 @@ public sealed record AudioStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the minimum number of audio streams in the source video file.
-    /// Default is no minimum.
+    /// <para>
+    /// Gets or initializes the minimum number of audio streams in the source video file.</para>
+    /// <para>
+    /// Default is no minimum.</para>
     /// </summary>
     public int? MinStreams
     {
@@ -79,8 +88,10 @@ public sealed record AudioStreamValidationOptions
     }
 
     /// <summary>
-    /// Gets or initializes the minimum length of each audio stream in the source video file.
-    /// Default is no minimum.
+    /// <para>
+    /// Gets or initializes the minimum length of each audio stream in the source video file.</para>
+    /// <para>
+    /// Default is no minimum.</para>
     /// </summary>
     public TimeSpan? MinLength
     {

@@ -3,17 +3,22 @@ using Singulink.IO;
 
 namespace FulcrumFS.Videos;
 
+#pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
+
 /// <summary>
 /// Provides functionality to extract thumbnails from video files with specified options.
 /// </summary>
 public sealed class ThumbnailProcessor : FileProcessor
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ThumbnailProcessor"/> class with the specified options.
+    /// <para>
+    /// Initializes a new instance of the <see cref="ThumbnailProcessor"/> class with the specified options.</para>
+    /// <para>
     /// Note: you must configure the ffmpeg executable paths by calling <see cref="VideoProcessor.ConfigureWithFFmpegExecutables"/> before creating an instance
-    /// of this class.
+    /// of this class.</para>
+    /// <para>
     /// Note: if you want to do source video validation, you need to use <see cref="VideoProcessor" /> first and chain this after it, as this class does not
-    /// perform any validation itself, it just extracts a thumbnail from the provided video.
+    /// perform any validation itself, it just extracts a thumbnail from the provided video.</para>
     /// </summary>
     public ThumbnailProcessor(ThumbnailProcessingOptions options)
     {
