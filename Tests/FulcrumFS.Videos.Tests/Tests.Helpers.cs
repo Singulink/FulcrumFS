@@ -399,7 +399,7 @@ partial class Tests
         var fullFileName = pathIsAbsolute ? FilePath.ParseAbsolute(videoFileName) : _videoFilesDir.CombineFile(videoFileName);
         await using var stream = fullFileName.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId = null;
+        FileId fileId;
 
         if (exceptionMessage is not null)
         {
@@ -416,6 +416,7 @@ partial class Tests
                     await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
                 }
             });
+            ex.Message.ShouldBe(exceptionMessage);
 
             // No more checks to do:
             return;

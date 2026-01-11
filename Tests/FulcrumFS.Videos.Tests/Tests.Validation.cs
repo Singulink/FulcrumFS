@@ -307,10 +307,8 @@ partial class Tests
 
             await using var stream = _videoFilesDir.CombineFile(fileName).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-            FileId? fileId = null;
-
             await using var txn = await repo.BeginTransactionAsync();
-            fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+            await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         }
     }
 
@@ -353,10 +351,8 @@ partial class Tests
 
             await using var stream = _videoFilesDir.CombineFile(fileName).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-            FileId? fileId = null;
-
             await using var txn = await repo.BeginTransactionAsync();
-            fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+            await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         }
     }
 
@@ -408,10 +404,8 @@ partial class Tests
 
             await using var stream = _videoFilesDir.CombineFile(fileName).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-            FileId? fileId = null;
-
             await using var txn = await repo.BeginTransactionAsync();
-            fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+            await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         }
     }
 
@@ -463,10 +457,8 @@ partial class Tests
 
             await using var stream = _videoFilesDir.CombineFile(fileName).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-            FileId? fileId = null;
-
             await using var txn = await repo.BeginTransactionAsync();
-            fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+            await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         }
     }
 
@@ -485,10 +477,8 @@ partial class Tests
 
         await using var stream = _videoFilesDir.CombineFile(fileName).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId = null;
-
         await using var txn = await repo.BeginTransactionAsync();
-        fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
     }
 
     [TestMethod]

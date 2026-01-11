@@ -69,7 +69,7 @@ partial class Tests
 
         await using var stream = _videoFilesDir.CombineFile("video1.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId = null;
+        FileId fileId;
 
         await using var txn = await repo.BeginTransactionAsync();
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
@@ -80,11 +80,11 @@ partial class Tests
 
         // Check that the original file was not progressive download, and the new one is (note: the check is very basic & could be fooled, but is sufficient
         // for test purposes):
-        var (outputOriginal, errorOriginal, returnCodeOriginal) = await RunFFtoolProcess(
+        var (_, errorOriginal, returnCodeOriginal) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", _videoFilesDir.CombineFile("video1.mp4").PathExport, "-v", "trace"],
             TestContext.CancellationToken);
-        var (outputModified, errorModified, returnCodeModified) = await RunFFtoolProcess(
+        var (_, errorModified, returnCodeModified) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", videoPath.PathExport, "-v", "trace"],
             TestContext.CancellationToken);

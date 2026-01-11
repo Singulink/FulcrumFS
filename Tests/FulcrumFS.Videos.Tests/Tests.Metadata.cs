@@ -77,7 +77,7 @@ partial class Tests
         // video20.mp4: unknown language.
         await using var stream20 = _videoFilesDir.CombineFile("video20.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId20 = null;
+        FileId fileId20;
 
         await using var txn20 = await repo.BeginTransactionAsync();
         fileId20 = (await txn20.AddAsync(stream20, true, pipeline, TestContext.CancellationToken)).FileId;
@@ -87,7 +87,7 @@ partial class Tests
         videoPath20.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (this subtitle has an unknown language):
-        var (outputModified20, errorModified20, returnCodeModified20) = await RunFFtoolProcess(
+        var (outputModified20, _, returnCodeModified20) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", videoPath20.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
@@ -97,7 +97,7 @@ partial class Tests
         // video21.mp4: eng language.
         await using var stream21 = _videoFilesDir.CombineFile("video21.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId21 = null;
+        FileId fileId21;
 
         await using var txn21 = await repo.BeginTransactionAsync();
         fileId21 = (await txn21.AddAsync(stream21, true, pipeline, TestContext.CancellationToken)).FileId;
@@ -107,7 +107,7 @@ partial class Tests
         videoPath21.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (the subtitle has "eng" language):
-        var (outputModified21, errorModified21, returnCodeModified21) = await RunFFtoolProcess(
+        var (outputModified21, _, returnCodeModified21) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", videoPath21.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
@@ -117,7 +117,7 @@ partial class Tests
         // video163.mp4: eng video, fre audio.
         await using var stream163 = _videoFilesDir.CombineFile("video163.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId163 = null;
+        FileId fileId163;
 
         await using var txn163 = await repo.BeginTransactionAsync();
         fileId163 = (await txn163.AddAsync(stream163, true, pipeline, TestContext.CancellationToken)).FileId;
@@ -127,7 +127,7 @@ partial class Tests
         videoPath163.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (the video stream has "eng" language, and the audio stream has "fre" language):
-        var (outputModified163, errorModified163, returnCodeModified163) = await RunFFtoolProcess(
+        var (outputModified163, _, returnCodeModified163) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", videoPath163.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
@@ -170,7 +170,7 @@ partial class Tests
         var origFile = _videoFilesDir.CombineFile("video162.mp4");
         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId = null;
+        FileId fileId;
 
         await using var txn = await repo.BeginTransactionAsync();
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
@@ -179,11 +179,11 @@ partial class Tests
         var videoPath = await repo.GetAsync(fileId);
         videoPath.Exists.ShouldBeTrue();
 
-        var (outputOriginal, errorOriginal, returnCodeOriginal) = await RunFFtoolProcess(
+        var (outputOriginal, _, returnCodeOriginal) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", origFile.PathExport, "-hide_banner", "-print_format", "json", "-show_format", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
-        var (outputModified, errorModified, returnCodeModified) = await RunFFtoolProcess(
+        var (outputModified, _, returnCodeModified) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", videoPath.PathExport, "-hide_banner", "-print_format", "json", "-show_format", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
@@ -217,7 +217,7 @@ partial class Tests
         var origFile = _videoFilesDir.CombineFile("video162.mp4");
         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId = null;
+        FileId fileId;
 
         await using var txn = await repo.BeginTransactionAsync();
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
@@ -234,6 +234,7 @@ partial class Tests
             "ffprobe",
             ["-i", videoPath.PathExport, "-hide_banner", "-print_format", "json", "-show_format", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
+        returnCodeOriginal.ShouldBe(0);
         returnCodeModified.ShouldBe(0);
 
         outputOriginal.Contains("\"artist\": \"Test Artist\"", StringComparison.Ordinal).ShouldBeTrue();
@@ -265,7 +266,7 @@ partial class Tests
 
         await using var stream = _videoFilesDir.CombineFile("video163.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId = null;
+        FileId fileId;
 
         await using var txn = await repo.BeginTransactionAsync();
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
@@ -320,7 +321,7 @@ partial class Tests
         var origFile = _videoFilesDir.CombineFile("video162.mp4");
         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        FileId? fileId = null;
+        FileId fileId;
 
         await using var txn = await repo.BeginTransactionAsync();
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
