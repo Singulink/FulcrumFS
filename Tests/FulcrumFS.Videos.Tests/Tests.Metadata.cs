@@ -276,7 +276,7 @@ partial class Tests
         videoPath.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (the video stream has "eng" language, and the audio stream has "fre" language):
-        var (outputModified, errorModified, returnCodeModified) = await RunFFtoolProcess(
+        var (outputModified, _, returnCodeModified) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", videoPath.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
@@ -330,14 +330,15 @@ partial class Tests
         var videoPath = await repo.GetAsync(fileId);
         videoPath.Exists.ShouldBeTrue();
 
-        var (outputOriginal, errorOriginal, returnCodeOriginal) = await RunFFtoolProcess(
+        var (outputOriginal, _, returnCodeOriginal) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", origFile.PathExport, "-hide_banner", "-print_format", "json", "-show_format", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
-        var (outputModified, errorModified, returnCodeModified) = await RunFFtoolProcess(
+        var (outputModified, _, returnCodeModified) = await RunFFtoolProcess(
             "ffprobe",
             ["-i", videoPath.PathExport, "-hide_banner", "-print_format", "json", "-show_format", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
+        returnCodeOriginal.ShouldBe(0);
         returnCodeModified.ShouldBe(0);
 
         outputOriginal.Contains("\"artist\": \"Test Artist\"", StringComparison.Ordinal).ShouldBeTrue();
