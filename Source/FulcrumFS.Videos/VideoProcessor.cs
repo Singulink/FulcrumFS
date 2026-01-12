@@ -199,8 +199,10 @@ public sealed class VideoProcessor : FileProcessor
         bool hasChangedExtension = false;
 
         // Check file name is not going to be potentially problematic for ffmpeg (e.g., contains special characters):
-        // Note: we assume that paths given by 'GetNewWorkFile' are safe if the original is, so we only check the original source file here.
+        // Note: we assume that paths given by 'GetNewWorkFile' are safe if at least one is, so we only check the original source and an unused GetNewWorkFile
+        // file here.
         FilePath.ParseAbsolute(tempOutputFile.PathExport, PathOptions.NoUnfriendlyNames);
+        FilePath.ParseAbsolute(context.GetNewWorkFile(string.Empty).PathExport, PathOptions.NoUnfriendlyNames);
 
         // Read info of source video:
         FFprobeUtils.VideoFileInfo sourceInfo;
