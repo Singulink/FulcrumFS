@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 
 namespace FulcrumFS;
@@ -93,7 +94,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
         extension = FileExtension.Normalize(extension);
-        return _workRootDirectory.CombineFile(GetNextWorkId() + extension, PathOptions.None);
+        return _workRootDirectory.CombineFile(GetNextWorkId().ToString(CultureInfo.InvariantCulture) + extension, PathOptions.None);
     }
 
     /// <summary>
@@ -104,7 +105,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
     public IAbsoluteDirectoryPath GetNewWorkDirectory()
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
-        return _workRootDirectory.CombineDirectory(GetNextWorkId().ToString(), PathOptions.None);
+        return _workRootDirectory.CombineDirectory(GetNextWorkId().ToString(CultureInfo.InvariantCulture), PathOptions.None);
     }
 
     /// <summary>

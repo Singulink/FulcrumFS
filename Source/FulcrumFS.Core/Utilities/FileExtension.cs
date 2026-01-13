@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace FulcrumFS.Utilities;
 
@@ -27,7 +28,7 @@ public static class FileExtension
     /// <summary>
     /// Checks if the given file extension is valid and normalized.
     /// </summary>
-    public static bool IsNormalized(string extension) => IsValidAndNormalized(extension.AsSpan());
+    public static bool IsValidAndNormalized(string extension) => IsValidAndNormalized(extension.AsSpan());
 
     /// <summary>
     /// Checks if the given file extension is valid and normalized.
