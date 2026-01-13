@@ -167,7 +167,7 @@ public sealed partial class FileRepo : IDisposable
                         return;
 
                     if (Stopwatch.GetElapsedTime(initStartTimestamp) > Options.MaxAccessWaitOrRetryTime)
-                        throw new TimeoutException("The operation timed out attempting to get I/O access the repository.", elc.ResultException);
+                        throw new TimeoutException("The operation timed out attempting to get I/O access to the repository.", elc.ResultException);
 
                     await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
                 }
