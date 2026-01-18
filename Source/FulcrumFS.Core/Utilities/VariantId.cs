@@ -23,10 +23,16 @@ public static class VariantId
     public static string Normalize(string variantId)
     {
         if (variantId.Length is 0)
-            throw new ArgumentException("Variant ID cannot be empty.", nameof(variantId));
+        {
+            static void Throw() => throw new ArgumentException("Variant ID cannot be empty.", nameof(variantId));
+            Throw();
+        }
 
         if (variantId.ContainsAnyExcept(_validVariantIdChars))
-            throw new ArgumentException("Variant ID must contain only ASCII letters, digits, hyphens and underscores.", nameof(variantId));
+        {
+            static void Throw() => throw new ArgumentException("Variant ID must contain only ASCII letters, digits, hyphens and underscores.", nameof(variantId));
+            Throw();
+        }
 
         return variantId.ToLowerInvariant();
     }
