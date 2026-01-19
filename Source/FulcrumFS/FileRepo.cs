@@ -19,6 +19,7 @@ public sealed partial class FileRepo : IDisposable
 
     private IAbsoluteFilePath _lockFile;
     private FileStream? _lockStream;
+    private int _lockStreamSize;
 
     private readonly IAbsoluteDirectoryPath _filesDirectory;
     private readonly IAbsoluteDirectoryPath _tempDirectory;
@@ -166,7 +167,7 @@ public sealed partial class FileRepo : IDisposable
                         return;
 
                     if (Stopwatch.GetElapsedTime(initStartTimestamp) > Options.MaxAccessWaitOrRetryTime)
-                        throw new TimeoutException("The operation timed out attempting to get I/O access the repository.", elc.ResultException);
+                        throw new TimeoutException("The operation timed out attempting to get I/O access to the repository.", elc.ResultException);
 
                     await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
                 }
@@ -175,10 +176,11 @@ public sealed partial class FileRepo : IDisposable
 
         void CheckHealth()
         {
-            if (_lockStream.Length > 10)
-                _lockStream.SetLength(0);
-            else
-                _lockStream.SetLength(_lockStream.Length + 1);
+            // Use a variable to store our size rather than querying it, as querying it is an extra syscall - we use SetLength rather than just reading Length
+            // as a "write" API could be more likely to fail if the file system is in a bad state than a "read" API.
+            int newSize;
+            lock (_lockStream) newSize = _lockStreamSize = (_lockStreamSize + 1) % 10;
+            _lockStream.SetLength(newSize);
 
             _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
         }
@@ -301,7 +303,7 @@ public sealed partial class FileRepo : IDisposable
         if (separatorIndex < 0)
         {
             variantId = null;
-            return FileId.TryParse(entryName, out fileId);
+            return FileId.TryParseUnsafe(entryName, out fileId);
         }
 
         var fileIdChars = entryName.AsSpan()[..separatorIndex];

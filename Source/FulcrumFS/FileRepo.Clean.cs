@@ -61,7 +61,7 @@ partial class FileRepo
 
             if (marker.Extension is FileRepoPaths.IndeterminateMarkerExtension)
             {
-                if (FileId.TryParse(marker.NameWithoutExtension, out var fileId) && !IsFilePendingTxnOutcome(fileId))
+                if (FileId.TryParseUnsafe(marker.NameWithoutExtension, out var fileId) && !IsFilePendingTxnOutcome(fileId))
                     indeterminateFiles.Add((fileId, markerInfo.Path));
             }
             else if (marker.Extension is FileRepoPaths.DeleteMarkerExtension)
@@ -116,8 +116,7 @@ partial class FileRepo
                 throw new ArgumentOutOfRangeException(nameof(resolveIndeterminateCallback), "The provided callback returned an invalid resolution value.");
         }
 
-        if (elc.HasExceptions)
-            throw elc.ResultException;
+        elc.ThrowIfHasExceptions();
     }
 
     private async Task DeleteIndeterminateMarkerAsync(FileId fileId)

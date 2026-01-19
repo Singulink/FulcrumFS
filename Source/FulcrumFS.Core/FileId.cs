@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
 namespace FulcrumFS;
@@ -124,11 +125,17 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     /// <summary>
     /// Parses the specified string representation of a file identifier.
     /// </summary>
-    public static bool TryParse([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out FileId fileId)
+    public static bool TryParse([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out FileId fileId) => TryParse(s.AsSpan(), out fileId);
+
+    /// <summary>
+    /// NOTE!!! For internal use only - only validates the case, does not validate the string is of the correct format beyond D.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool TryParseUnsafe([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out FileId fileId)
     {
         if (Guid.TryParseExact(s, "D", out var guid) && IsValidGuidForFileId(guid))
         {
-            fileId = new(guid, s);
+            fileId = new(guid, s.ToLowerInvariant());
             return true;
         }
 

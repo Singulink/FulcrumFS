@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Microsoft.CodeAnalysis;
 
 namespace FulcrumFS.Utilities;
@@ -62,5 +63,11 @@ internal struct ExceptionListCapture(Func<Exception, bool>? catchExceptionFilter
             Debug.Assert(HasExceptions, "Should have exception");
             return false;
         }
+    }
+
+    public void ThrowIfHasExceptions()
+    {
+        if (HasExceptions)
+            ExceptionDispatchInfo.Capture(ResultException).Throw();
     }
 }
