@@ -10,6 +10,7 @@ jobs:
   debug-windows:
 
     runs-on: windows-latest
+    environment: test-windows-x64
 
     steps:
     - uses: actions/checkout@v6
@@ -27,9 +28,52 @@ jobs:
     - name: Test
       run: dotnet test --configuration Debug --no-build --verbosity normal
 
+  debug-linux:
+
+    runs-on: ubuntu-latest
+    environment: test-linux-x64
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Clean
+      run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --configuration Debug --no-restore
+    - name: Test
+      run: dotnet test --configuration Debug --no-build --verbosity normal
+      
   release-windows:
 
     runs-on: windows-latest
+    environment: test-windows-x64
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Clean
+      run: dotnet clean --configuration Release && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+    - name: Test
+      run: dotnet test --configuration Release --no-build --verbosity normal
+
+  release-linux:
+
+    runs-on: ubuntu-latest
+    environment: test-linux-x64
 
     steps:
     - uses: actions/checkout@v6
