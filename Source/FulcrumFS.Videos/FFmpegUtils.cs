@@ -454,9 +454,13 @@ internal static class FFmpegUtils
             args.Add("-progress");
             args.Add(progressFilePath);
 
-            // Update stats every 16ms
+            // Update stats every 1s (or 16ms in debug mode, so we can test progress reading properly):
             args.Add("-stats_period");
+#if !DEBUG
+            args.Add("1.0");
+#else
             args.Add("0.016");
+#endif
         }
 
         // Unrecognized stream handling, error handling, and stdout handling:
@@ -526,9 +530,10 @@ internal static class FFmpegUtils
                 byte[] buffer = new byte[32];
                 int bytesRead;
                 bool justRead = false;
-                bool skipOne = false;
-#if DEBUG
-                int iter = 0;
+#if !DEBUG
+                const int WaitTimeMs = 900;
+#else
+                const int WaitTimeMs = 5;
 #endif
 
                 // This loop is for ensuring we read all progress (even post-exit) if requested.
@@ -551,7 +556,7 @@ internal static class FFmpegUtils
                                     // Check if line begins with out_time_us=, and send the seconds to the progress callback if so.
                                     ReadOnlySpan<byte> lineSpan = CollectionsMarshal.AsSpan(lineBuffer);
                                     if (lineSpan is [.., (byte)'\r']) lineSpan = lineSpan[..^1];
-                                    if (!skipOne && lineSpan.StartsWith("out_time_us="u8))
+                                    if (lineSpan.StartsWith("out_time_us="u8))
                                     {
                                         ReadOnlySpan<byte> timeSpan = lineSpan["out_time_us="u8.Length..];
                                         if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
@@ -562,30 +567,12 @@ internal static class FFmpegUtils
                                     }
 
                                     lineBuffer.Clear();
-                                    skipOne = false;
                                 }
                                 else
                                 {
                                     lineBuffer.AddRange(buffer.AsSpan()[beginIdx..bytesRead]);
                                     break;
                                 }
-                            }
-
-                            // Check if progress file is large (>1MB), and if so, truncate it to avoid it growing indefinitely (note: we can lose some progress
-                            // info here, but it's better than the file growing indefinitely & we will get a new lot in ~16ms anyway):
-                            // Note: we do this every 5th time in debug mode instead to test the logic in CI (note: only ever change to a suitably large prime
-                            // number, that way it is unlikely to be equal to the number of lines from ffmpeg, which would make this testing useless).
-                            // Note: we disable this debug feature when ensureAllProgressRead is set, as we want to ensure the final progress is read in that
-                            // case, and 5 is far too small for suitably consistent behaviour for our tests (and other massive values would be too large to be
-                            // useful).
-#if !DEBUG
-                            if (fs.Length > 1 << 20)
-#else
-                            if (!ensureAllProgressRead && ++iter % 5 == 0)
-#endif
-                            {
-                                fs.SetLength(0);
-                                skipOne = true;
                             }
                         }
 
@@ -606,7 +593,7 @@ internal static class FFmpegUtils
                             // the outer loop from being able to run its second iteration.
                             try
                             {
-                                await Task.Delay(5, progressCallbackCt).ConfigureAwait(false);
+                                await Task.Delay(WaitTimeMs, progressCallbackCt).ConfigureAwait(false);
                             }
                             catch (OperationCanceledException)
                             {
@@ -617,7 +604,7 @@ internal static class FFmpegUtils
                         else
                         {
                             // If we didn't read anything twice in a row, wait a bit before trying again.
-                            await Task.Delay(5, progressCallbackCt).ConfigureAwait(false);
+                            await Task.Delay(WaitTimeMs, progressCallbackCt).ConfigureAwait(false);
                         }
                     }
                     while (!progressCallbackCt.IsCancellationRequested);
