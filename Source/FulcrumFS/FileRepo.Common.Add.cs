@@ -33,7 +33,9 @@ partial class FileRepo
 
             // If the result file is not in the temp directory then we need to copy it there first.
 
-            if (!resultFile.PathDisplay.StartsWith(tempWorkingDir.PathDisplay, StringComparison.Ordinal))
+            if (resultFile.PathDisplay.Length <= tempWorkingDir.PathDisplay.Length ||
+                !resultFile.PathDisplay.StartsWith(tempWorkingDir.PathDisplay, StringComparison.Ordinal) ||
+                resultFile.PathDisplay[tempWorkingDir.PathDisplay.Length] != resultFile.PathFormat.Separator)
             {
                 var workFile = context.GetNewWorkFile(context.Extension);
                 workFile.ParentDirectory.Create();

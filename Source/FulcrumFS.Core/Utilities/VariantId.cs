@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace FulcrumFS.Utilities;
 
 /// <summary>
@@ -6,17 +8,30 @@ namespace FulcrumFS.Utilities;
 public static class VariantId
 {
     /// <summary>
+    /// The set of valid characters for a variant ID.
+    /// </summary>
+    private static readonly SearchValues<char> _validVariantIdChars = SearchValues.Create("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_");
+
+    /// <summary>
+    /// The set of valid characters for a normalized variant ID.
+    /// </summary>
+    private static readonly SearchValues<char> _validNormalizedVariantIdChars = SearchValues.Create("abcdefghijklmnopqrstuvwxyz0123456789-_");
+
+    /// <summary>
     /// Normalizes a variant ID by converting it to lowercase while ensuring it contains only valid characters.
     /// </summary>
     public static string Normalize(string variantId)
     {
         if (variantId.Length is 0)
-            throw new ArgumentException("Variant ID cannot be empty.", nameof(variantId));
-
-        foreach (char c in variantId)
         {
-            if (!char.IsAsciiDigit(c) && !char.IsAsciiLetter(c) && c is not ('-' or '_'))
-                throw new ArgumentException("Variant ID must contain only ASCII letters, digits, hyphens and underscores.", nameof(variantId));
+            static void Throw() => throw new ArgumentException("Variant ID cannot be empty.", nameof(variantId));
+            Throw();
+        }
+
+        if (variantId.ContainsAnyExcept(_validVariantIdChars))
+        {
+            static void Throw() => throw new ArgumentException("Variant ID must contain only ASCII letters, digits, hyphens and underscores.", nameof(variantId));
+            Throw();
         }
 
         return variantId.ToLowerInvariant();
@@ -30,12 +45,6 @@ public static class VariantId
         if (variantId.Length is 0)
             return false;
 
-        foreach (char c in variantId)
-        {
-            if (!char.IsAsciiLetterLower(c) && !char.IsAsciiDigit(c) && c is not ('-' or '_'))
-                return false;
-        }
-
-        return true;
+        return !variantId.ContainsAnyExcept(_validNormalizedVariantIdChars);
     }
 }

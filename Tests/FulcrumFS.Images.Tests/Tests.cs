@@ -8,6 +8,8 @@ namespace FulcrumFS.Images;
 [PrefixTestClass]
 public sealed class Tests
 {
+    public required TestContext TestContext { get; set; }
+
     private static readonly IAbsoluteDirectoryPath _appDir = DirectoryPath.GetAppBase();
     private static readonly IAbsoluteFilePath _imageFile = _appDir.CombineDirectory("Images").CombineFile("test-1024x768.jpg");
     private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot");
@@ -35,7 +37,7 @@ public sealed class Tests
 
         var ex = await Should.ThrowAsync<FileProcessingException>(async () => {
             await using var txn = await _repo.BeginTransactionAsync();
-            await txn.AddAsync(stream, true, pipeline);
+            await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         });
 
         ex.Message.ShouldBe("The image is too large.");
@@ -52,7 +54,7 @@ public sealed class Tests
 
         ex = await Should.ThrowAsync<FileProcessingException>(async () => {
             await using var tx = await _repo.BeginTransactionAsync();
-            await tx.AddAsync(stream, true, pipeline);
+            await tx.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         });
 
         ex.Message.ShouldBe("The image is too large. Maximum size is 500x500.");
@@ -69,14 +71,14 @@ public sealed class Tests
 
         await using (var txn = await _repo.BeginTransactionAsync())
         {
-            var added = await txn.AddAsync(stream, leaveOpen: false, new ImageProcessor(ImageProcessingOptions.Preserve).ToPipeline());
+            var added = await txn.AddAsync(stream, leaveOpen: false, new ImageProcessor(ImageProcessingOptions.Preserve).ToPipeline(), TestContext.CancellationToken);
             fileId = added.FileId;
 
             await _repo.AddVariantAsync(added.FileId, "thumbnail", new ImageProcessor(ImageProcessingOptions.Preserve with {
                 Resize = new(ImageResizeMode.FitDown, 100, 100),
-            }).ToPipeline());
+            }).ToPipeline(), TestContext.CancellationToken);
 
-            await txn.CommitAsync();
+            await txn.CommitAsync(TestContext.CancellationToken);
         }
 
         var imagePath = await _repo.GetAsync(fileId);
@@ -87,8 +89,8 @@ public sealed class Tests
 
         await using (var txn = await _repo.BeginTransactionAsync())
         {
-            await txn.DeleteAsync(fileId);
-            await txn.CommitAsync();
+            await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+            await txn.CommitAsync(TestContext.CancellationToken);
         }
 
         imagePath.Exists.ShouldBeFalse();
@@ -109,15 +111,15 @@ public sealed class Tests
         {
             await using (var stream = _imageFile.OpenAsyncStream())
             {
-                var added = await txn.AddAsync(stream, true, GetPipeline(ImageQuality.Highest));
+                var added = await txn.AddAsync(stream, true, GetPipeline(ImageQuality.Highest), TestContext.CancellationToken);
                 fileId = added.FileId;
             }
 
-            await _repo.AddVariantAsync(fileId, "high", GetPipeline(ImageQuality.High));
-            await _repo.AddVariantAsync(fileId, "medium", GetPipeline(ImageQuality.Medium));
-            await _repo.AddVariantAsync(fileId, "low", GetPipeline(ImageQuality.Low));
+            await _repo.AddVariantAsync(fileId, "high", GetPipeline(ImageQuality.High), TestContext.CancellationToken);
+            await _repo.AddVariantAsync(fileId, "medium", GetPipeline(ImageQuality.Medium), TestContext.CancellationToken);
+            await _repo.AddVariantAsync(fileId, "low", GetPipeline(ImageQuality.Low), TestContext.CancellationToken);
 
-            await txn.CommitAsync();
+            await txn.CommitAsync(TestContext.CancellationToken);
         }
 
         var highest = await _repo.GetAsync(fileId);
@@ -152,24 +154,24 @@ public sealed class Tests
 
             await _repo.AddVariantAsync(fileId, "max", new ImageProcessor(ImageProcessingOptions.Preserve with {
                 Resize = new(ImageResizeMode.FitDown, 2000, 2000),
-            }).ToPipeline());
+            }).ToPipeline(), TestContext.CancellationToken);
 
             await _repo.AddVariantAsync(fileId, "crop", new ImageProcessor(ImageProcessingOptions.Preserve with {
                 Resize = new(ImageResizeMode.CropDown, 2000, 2000),
-            }).ToPipeline());
+            }).ToPipeline(), TestContext.CancellationToken);
 
             await _repo.AddVariantAsync(fileId, "pad1", new ImageProcessor(ImageProcessingOptions.Preserve with {
                 Resize = new(ImageResizeMode.PadDown, 800, 800),
                 BackgroundColor = ImageBackgroundColor.FromRgb(0, 255, 0, true),
-            }).ToPipeline());
+            }).ToPipeline(), TestContext.CancellationToken);
 
             await _repo.AddVariantAsync(fileId, "pad2", new ImageProcessor(ImageProcessingOptions.Preserve with {
                 Resize = new(ImageResizeMode.PadDown, 2000, 2000) {
                     PadColor = ImageBackgroundColor.FromRgb(255, 0, 0, true),
                 },
-            }).ToPipeline());
+            }).ToPipeline(), TestContext.CancellationToken);
 
-            await txn.CommitAsync();
+            await txn.CommitAsync(TestContext.CancellationToken);
         }
 
         using (var image = Image.Load((await _repo.GetAsync(fileId)).PathExport))
@@ -218,7 +220,7 @@ public sealed class Tests
 
         var ex = await Should.ThrowAsync<FileSourceUnchangedException>(async () => {
             await using var txn = await _repo.BeginTransactionAsync();
-            await txn.AddAsync(stream, true, pipeline);
+            await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         });
 
         ex.Message.ShouldBe("File processing did not result in any changes to the source file.");
@@ -237,7 +239,7 @@ public sealed class Tests
 
         var ex = await Should.ThrowAsync<FileProcessingException>(async () => {
             await using var txn = await _repo.BeginTransactionAsync();
-            await txn.AddAsync(stream, true, pipeline);
+            await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         });
 
         ex.Message.ShouldBe("Extension '.jpg' is not allowed. Allowed extensions: .png, .apng");
@@ -255,7 +257,7 @@ public sealed class Tests
 
         var ex = await Should.ThrowAsync<FileProcessingException>(async () => {
             await using var txn = await _repo.BeginTransactionAsync();
-            await txn.AddAsync(stream, ".png", true, pipeline);
+            await txn.AddAsync(stream, ".png", true, pipeline, TestContext.CancellationToken);
         });
 
         ex.Message.ShouldBe("Image format 'JPEG' is not allowed. Allowed formats: PNG");

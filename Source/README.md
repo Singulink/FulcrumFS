@@ -14,7 +14,7 @@ Details of each component are provided below:
 | **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
 
-**Supported Runtimes**: .NET 9.0+
+**Supported Runtimes**: .NET 10.0+
 
 Libraries may be in the following states:
 - Internal: Source code (and possibly a nuget package) is available but the library is intended for internal use at this time.
