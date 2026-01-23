@@ -3,90 +3,62 @@ name: build and test
 on:
   push:
     branches: [ main ]
-  pull_request:
+  pull_request_target:
     branches: [ main ]
 
 jobs:
-  debug-windows:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        configuration: [Debug, Release]
 
-    runs-on: windows-latest
-    environment: test-windows-x64
+    runs-on: ${{ matrix.os }}
+    environment: ${{ matrix.os == 'windows-latest' && 'test-windows-x64' || 'test-linux-x64' }}
 
     steps:
-    - uses: actions/checkout@v6
+    - name: Checkout (push)
+      if: github.event_name == 'push'
+      uses: actions/checkout@v6
+    - name: Checkout base branch (pull_request_target)
+      if: github.event_name == 'pull_request_target'
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.base.ref }}
+    - name: Download ffmpeg binaries
+      run: |
+        curl -L "${{ secrets.FFMPEG_BINARIES_URL }}" -o file.zip
+    - name: Unzip ffmpeg binaries on Linux
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y unzip
+        unzip file.zip -d Binaries
+        rm file.zip
+    - name: Unzip ffmpeg binaries on Windows
+      if: runner.os == 'Windows'
+      run: |
+        Expand-Archive -Path file.zip -DestinationPath Binaries
+        Remove-Item file.zip
+    - name: Checkout PR head (pull_request_target)
+      if: github.event_name == 'pull_request_target'
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        clean: false
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: |
           10.0.x
     - name: Clean
-      run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
+      run: dotnet clean --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
     - name: Install dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --configuration Debug --no-restore
+      run: dotnet build --configuration ${{ matrix.configuration }} --no-restore
     - name: Test
-      run: dotnet test --configuration Debug --no-build --verbosity normal
-
-  debug-linux:
-
-    runs-on: ubuntu-latest
-    environment: test-linux-x64
-
-    steps:
-    - uses: actions/checkout@v6
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: |
-          10.0.x
-    - name: Clean
-      run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
-    - name: Install dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --configuration Debug --no-restore
-    - name: Test
-      run: dotnet test --configuration Debug --no-build --verbosity normal
-      
-  release-windows:
-
-    runs-on: windows-latest
-    environment: test-windows-x64
-
-    steps:
-    - uses: actions/checkout@v6
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: |
-          10.0.x
-    - name: Clean
-      run: dotnet clean --configuration Release && dotnet nuget locals all --clear
-    - name: Install dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --configuration Release --no-restore
-    - name: Test
-      run: dotnet test --configuration Release --no-build --verbosity normal
-
-  release-linux:
-
-    runs-on: ubuntu-latest
-    environment: test-linux-x64
-
-    steps:
-    - uses: actions/checkout@v6
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: |
-          10.0.x
-    - name: Clean
-      run: dotnet clean --configuration Release && dotnet nuget locals all --clear
-    - name: Install dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --configuration Release --no-restore
-    - name: Test
-      run: dotnet test --configuration Release --no-build --verbosity normal
+      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
