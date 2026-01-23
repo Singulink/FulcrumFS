@@ -2,19 +2,11 @@ using System.Buffers;
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Globalization;
-#if !DEBUG
-using System.Linq.Expressions;
-using System.Reflection;
-#endif
 using Shouldly;
 using Singulink.IO;
 using Singulink.Threading;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-
-#if !DEBUG
-#pragma warning disable SA1310 // Field names should not contain underscore
-#endif
 
 namespace FulcrumFS.Videos;
 
@@ -115,74 +107,6 @@ partial class Tests
         }
     }
 
-#if !DEBUG
-    // Helper class that caches reflection types and methods for calling internal APIs in release builds.
-    private static class ReflectionHelper
-    {
-        private static readonly Assembly FulcrumFSVideosAssembly = typeof(VideoProcessor).Assembly;
-
-        // FFmpegProcessUtils delegates:
-        private static readonly Type ProcessUtilsType = FulcrumFSVideosAssembly.GetType("FulcrumFS.Videos.ProcessUtils", throwOnError: true)!;
-
-        public static readonly Func<IAbsoluteFilePath, IEnumerable<string>, bool, CancellationToken, bool, ValueTask<string>>
-            ProcessUtils_RunProcessToStringWithErrorHandlingAsync =
-                ProcessUtilsType.GetMethod("RunProcessToStringWithErrorHandlingAsync", BindingFlags.Static | BindingFlags.Public)!
-                    .CreateDelegate<Func<IAbsoluteFilePath, IEnumerable<string>, bool, CancellationToken, bool, ValueTask<string>>>();
-
-        public static readonly
-            Func<IAbsoluteFilePath, IEnumerable<string>, bool, CancellationToken, bool, ValueTask<(string Output, string Error, int ReturnCode)>>
-            ProcessUtils_RunProcessToStringAsync =
-                ProcessUtilsType.GetMethod("RunProcessToStringAsync", BindingFlags.Static | BindingFlags.Public)!
-                    .CreateDelegate<Func<
-                        IAbsoluteFilePath,
-                        IEnumerable<string>,
-                        bool,
-                        CancellationToken,
-                        bool,
-                        ValueTask<(string Output, string Error, int ReturnCode)>>>();
-
-        // FFprobeUtils types and delegates:
-        private static readonly Type FFprobeUtilsType = FulcrumFSVideosAssembly.GetType("FulcrumFS.Videos.FFprobeUtils", throwOnError: true)!;
-        private static readonly Type VideoFileInfoType = FFprobeUtilsType.GetNestedType("VideoFileInfo")!;
-        private static readonly Type StreamInfoType = FFprobeUtilsType.GetNestedType("StreamInfo")!;
-
-        public static readonly Func<IAbsoluteFilePath, CancellationToken, object> FFprobeUtils_GetVideoFileAsync =
-            FFprobeUtilsType.GetMethod("GetVideoFileAsync", BindingFlags.Static | BindingFlags.Public)!
-                .CreateDelegate<Func<IAbsoluteFilePath, CancellationToken, object>>();
-
-        // Delegate for getting the Streams property from a VideoFileInfo (returns boxed ImmutableArray<StreamInfo>):
-        private static readonly ParameterExpression VideoFileInfo_GetStreams_Param = Expression.Parameter(typeof(object), "instance");
-
-        public static readonly Func<object, object> VideoFileInfo_GetStreams =
-            Expression.Lambda<Func<object, object>>(
-                Expression.Convert(
-                    Expression.Property(
-                        Expression.Convert(VideoFileInfo_GetStreams_Param, VideoFileInfoType),
-                        VideoFileInfoType.GetProperty("Streams")!),
-                    typeof(object)),
-                VideoFileInfo_GetStreams_Param).Compile();
-
-        // Delegate for getting the Length property from an ImmutableArray<StreamInfo>:
-        public static readonly Func<object, int> ImmutableArrayOfStreamInfo_GetLength =
-            typeof(ReflectionHelper).GetMethod(nameof(GetImmutableArrayLength), BindingFlags.Static | BindingFlags.NonPublic)!
-                .MakeGenericMethod(StreamInfoType)
-                .CreateDelegate<Func<object, int>>();
-
-        private static int GetImmutableArrayLength<T>(object array) => ((ImmutableArray<T>)array).Length;
-
-        // Delegate for awaiting Task<VideoFileInfo> as Task<object>:
-        public static readonly Func<object, Task<object>> DowncastTaskOfVideoFileInfo =
-            typeof(ReflectionHelper).GetMethod(nameof(DowncastTaskAsync), BindingFlags.Static | BindingFlags.NonPublic)!
-                .MakeGenericMethod(VideoFileInfoType)
-                .CreateDelegate<Func<object, Task<object>>>();
-
-        private static async Task<object> DowncastTaskAsync<T>(object task) where T : notnull
-        {
-            return await (Task<T>)task;
-        }
-    }
-#endif
-
     private static void ResetRepository(IAbsoluteDirectoryPath repoDir, bool clearOnly)
     {
         // Deletes the repo directory (with retries) and recreates it unless clearOnly is true.
@@ -253,16 +177,10 @@ partial class Tests
             DirectoryPath.ParseAbsolute(FFmpegPathInitializer.BinariesDirectoryPath)
             .CombineFile(toolName + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
 
-#if DEBUG
-        // In debug builds we can call the internal method directly:
         return await ProcessUtils.RunProcessToStringWithErrorHandlingAsync(
             toolPath,
             arguments,
             cancellationToken: cancellationToken);
-#else
-        // Use cached reflection delegate to call the internal method - we use reflection here to avoid having to duplicate the error handling code here:
-        return await ReflectionHelper.ProcessUtils_RunProcessToStringWithErrorHandlingAsync(toolPath, arguments, false, cancellationToken, true);
-#endif
     }
 
     private async Task<(string Output, string Error, int ReturnCode)> RunFFtoolProcess(
@@ -275,16 +193,10 @@ partial class Tests
             DirectoryPath.ParseAbsolute(FFmpegPathInitializer.BinariesDirectoryPath)
             .CombineFile(toolName + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
 
-#if DEBUG
-        // In debug builds we can call the internal method directly:
         return await ProcessUtils.RunProcessToStringAsync(
             toolPath,
             arguments,
             cancellationToken: cancellationToken);
-#else
-        // Use cached reflection delegate to call the internal method - we use reflection here to avoid having to duplicate the error handling code here:
-        return await ReflectionHelper.ProcessUtils_RunProcessToStringAsync(toolPath, arguments, false, cancellationToken, true);
-#endif
     }
 
     private static int _tempFileCount;
@@ -366,17 +278,8 @@ partial class Tests
 
     private async Task<int> GetStreamCount(string fileName, CancellationToken cancellationToken)
     {
-        // Returns the number of streams in a media file using ffprobe (direct or via reflection).
-#if DEBUG
-        // In debug builds we can call the internal method directly:
+        // Returns the number of streams in a media file using ffprobe:
         return (await FFprobeUtils.GetVideoFileAsync(FilePath.ParseAbsolute(fileName), cancellationToken)).Streams.Length;
-#else
-        // Use cached delegates to call the internal methods - we use reflection to avoid having to duplicate the ffprobe handling code here:
-        object task = ReflectionHelper.FFprobeUtils_GetVideoFileAsync(FilePath.ParseAbsolute(fileName), cancellationToken);
-        object videoFileInfo = await ReflectionHelper.DowncastTaskOfVideoFileInfo(task);
-        object streams = ReflectionHelper.VideoFileInfo_GetStreams(videoFileInfo);
-        return ReflectionHelper.ImmutableArrayOfStreamInfo_GetLength(streams);
-#endif
     }
 
     // Note: if expectedChanges is null, no changes are expected so the file will be compared byte-for-byte; otherwise, the file is expected to have been

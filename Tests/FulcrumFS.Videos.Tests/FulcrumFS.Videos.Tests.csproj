@@ -29,7 +29,6 @@
     <None Update="Videos\Y0__auYqGXY-5s.mp4" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Videos\Y0__auYqGXY-20s.mp4" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Videos\test_image_1.png" CopyToOutputDirectory="PreserveNewest" />
-    <Compile Remove="FFprobeUtilsTests.cs" Condition=" '$(Configuration)' != 'Debug' " />
   </ItemGroup>
 
   <ItemGroup>
