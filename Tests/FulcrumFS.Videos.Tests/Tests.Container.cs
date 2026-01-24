@@ -53,30 +53,35 @@ partial class Tests
     }
 
     [TestMethod]
+    [DoNotParallelize] // See the comment in the function body halfway about why - we don't want any potential deadlocks on Linux due to using '-v trace'.
     public async Task TestForceProgressiveDownload()
     {
         // Tests that ForceProgressiveDownload correctly moves the moov atom before mdat for streaming compatibility.
         // Verifies the original file has moov after mdat, and the processed file has moov before mdat - this provides improved streaming performance, but does
         // not make it seekable.
 
-        using var repoCtx = GetRepo(out var repo);
-
-        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        // Put all of our 'using' resources to ensure we close everything asap (on Linux, using '-v trace' requires them to be disposed first for some reason):
+        IAbsoluteFilePath videoPath;
         {
-            ForceValidateAllStreams = DefaultForceValidateAllStreams,
-            ForceProgressiveDownload = true,
-        }).ToPipeline();
+            using var repoCtx = GetRepo(out var repo);
 
-        await using var stream = _videoFilesDir.CombineFile("video1.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+            var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                ForceProgressiveDownload = true,
+            }).ToPipeline();
 
-        FileId fileId;
+            await using var stream = _videoFilesDir.CombineFile("video1.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-        await using var txn = await repo.BeginTransactionAsync();
-        fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
-        await txn.CommitAsync(TestContext.CancellationToken);
+            FileId fileId;
 
-        var videoPath = await repo.GetAsync(fileId);
-        videoPath.Exists.ShouldBeTrue();
+            await using var txn = await repo.BeginTransactionAsync();
+            fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+            await txn.CommitAsync(TestContext.CancellationToken);
+
+            videoPath = await repo.GetAsync(fileId);
+            videoPath.Exists.ShouldBeTrue();
+        }
 
         // Check that the original file was not progressive download, and the new one is (note: the check is very basic & could be fooled, but is sufficient
         // for test purposes):
