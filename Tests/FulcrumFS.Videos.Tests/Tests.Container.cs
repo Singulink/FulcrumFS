@@ -53,58 +53,48 @@ partial class Tests
     }
 
     [TestMethod]
-    [DoNotParallelize] // See the comment in the function body halfway about why - we don't want any potential deadlocks on Linux due to using '-v trace'.
     public async Task TestForceProgressiveDownload()
     {
         // Tests that ForceProgressiveDownload correctly moves the moov atom before mdat for streaming compatibility.
         // Verifies the original file has moov after mdat, and the processed file has moov before mdat - this provides improved streaming performance, but does
         // not make it seekable.
 
-        // Put all of our 'using' resources to ensure we close everything asap (on Linux, using '-v trace' requires them to be disposed first for some reason):
-        IAbsoluteFilePath videoPath;
+        using var repoCtx = GetRepo(out var repo);
+
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
         {
-            using var repoCtx = GetRepo(out var repo);
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ForceProgressiveDownload = true,
+        }).ToPipeline();
 
-            var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
-            {
-                ForceValidateAllStreams = DefaultForceValidateAllStreams,
-                ForceProgressiveDownload = true,
-            }).ToPipeline();
+        await using var stream = _videoFilesDir.CombineFile("video1.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
-            await using var stream = _videoFilesDir.CombineFile("video1.mp4").OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+        FileId fileId;
 
-            FileId fileId;
+        await using var txn = await repo.BeginTransactionAsync();
+        fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
 
-            await using var txn = await repo.BeginTransactionAsync();
-            fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
-            await txn.CommitAsync(TestContext.CancellationToken);
-
-            var tmpVideoPath = await repo.GetAsync(fileId);
-            tmpVideoPath.Exists.ShouldBeTrue();
-            videoPath = FilePath.ParseAbsolute(GetUniqueTempFilePath(".mp4"));
-            tmpVideoPath.CopyTo(videoPath, overwrite: true);
-        }
+        var videoPath = await repo.GetAsync(fileId);
+        videoPath.Exists.ShouldBeTrue();
 
         // Check that the original file was not progressive download, and the new one is (note: the check is very basic & could be fooled, but is sufficient
         // for test purposes):
-        var (_, errorOriginal, returnCodeOriginal) = await RunFFtoolProcess(
-            "ffprobe",
-            ["-i", _videoFilesDir.CombineFile("video1.mp4").PathExport, "-v", "trace"],
-            TestContext.CancellationToken);
-        var (_, errorModified, returnCodeModified) = await RunFFtoolProcess(
-            "ffprobe",
-            ["-i", videoPath.PathExport, "-v", "trace"],
-            TestContext.CancellationToken);
-        returnCodeOriginal.ShouldBe(0);
-        returnCodeModified.ShouldBe(0);
-        int idxMoovOriginal = errorOriginal.IndexOf("moov", StringComparison.Ordinal);
-        int idxMoovModified = errorModified.IndexOf("moov", StringComparison.Ordinal);
-        int idxMdatOriginal = errorOriginal.IndexOf("mdat", StringComparison.Ordinal);
-        int idxMdatModified = errorModified.IndexOf("mdat", StringComparison.Ordinal);
+        // Note: we would use ffprobe -v trace, but it seems to get frozen on Linux, so we just "parse" it ourselves:
+        byte[] originalFile = await File.ReadAllBytesAsync(_videoFilesDir.CombineFile("video1.mp4").PathExport, TestContext.CancellationToken);
+        byte[] modifiedFile = await File.ReadAllBytesAsync(videoPath.PathExport, TestContext.CancellationToken);
+        int idxMoovOriginal = originalFile.IndexOf("moov"u8);
+        int idxMoovModified = modifiedFile.IndexOf("moov"u8);
+        int idxMdatOriginal = originalFile.IndexOf("mdat"u8);
+        int idxMdatModified = modifiedFile.IndexOf("mdat"u8);
         idxMoovOriginal.ShouldBeGreaterThanOrEqualTo(0);
         idxMoovModified.ShouldBeGreaterThanOrEqualTo(0);
         idxMdatOriginal.ShouldBeGreaterThanOrEqualTo(0);
         idxMdatModified.ShouldBeGreaterThanOrEqualTo(0);
+        originalFile.LastIndexOf("moov"u8).ShouldBe(idxMoovOriginal);
+        modifiedFile.LastIndexOf("moov"u8).ShouldBe(idxMoovModified);
+        originalFile.LastIndexOf("mdat"u8).ShouldBe(idxMdatOriginal);
+        modifiedFile.LastIndexOf("mdat"u8).ShouldBe(idxMdatModified);
         idxMoovOriginal.ShouldBeGreaterThan(idxMdatOriginal);
         idxMoovModified.ShouldBeLessThan(idxMdatModified);
     }
