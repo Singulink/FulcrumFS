@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.1" />
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
 
+    <PackageReference Include="Singulink.Collections" Version="3.3.3" />
     <PackageReference Include="Singulink.Collections.Weak" Version="2.2.0" />
     <PackageReference Include="Singulink.Enums" Version="2.3.1" />
     <PackageReference Include="Singulink.IO.FileSystem" Version="2.5.0" />
