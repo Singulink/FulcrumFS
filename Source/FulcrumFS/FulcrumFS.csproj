@@ -21,7 +21,7 @@
     <PackageReference Include="Nito.AsyncEx.Coordination" Version="5.1.2" />
 
     <!-- Analyzers -->
-    <PackageReference Include="hamarb123.Analyzers" Version="1.2.2" PrivateAssets="All" />
+    <PackageReference Include="hamarb123.Analyzers" Version="1.3.3" PrivateAssets="All" />
     <PackageReference Include="Roslyn.Diagnostics.Analyzers" Version="5.0.0-1.25277.114" PrivateAssets="All" />
   </ItemGroup>
 
