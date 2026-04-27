@@ -80,21 +80,24 @@ partial class Tests
 
         // Check that the original file was not progressive download, and the new one is (note: the check is very basic & could be fooled, but is sufficient
         // for test purposes):
-        // Note: we would use ffprobe -v trace, but it seems to get frozen on Linux, so we just "parse" it ourselves:
-        byte[] originalFile = await File.ReadAllBytesAsync(_videoFilesDir.CombineFile("video1.mp4").PathExport, TestContext.CancellationToken);
-        byte[] modifiedFile = await File.ReadAllBytesAsync(videoPath.PathExport, TestContext.CancellationToken);
-        int idxMoovOriginal = originalFile.IndexOf("moov"u8);
-        int idxMoovModified = modifiedFile.IndexOf("moov"u8);
-        int idxMdatOriginal = originalFile.IndexOf("mdat"u8);
-        int idxMdatModified = modifiedFile.IndexOf("mdat"u8);
+        var (_, errorOriginal, returnCodeOriginal) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", _videoFilesDir.CombineFile("video1.mp4").PathExport, "-v", "trace"],
+            TestContext.CancellationToken);
+        var (_, errorModified, returnCodeModified) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", videoPath.PathExport, "-v", "trace"],
+            TestContext.CancellationToken);
+        returnCodeOriginal.ShouldBe(0);
+        returnCodeModified.ShouldBe(0);
+        int idxMoovOriginal = errorOriginal.IndexOf("moov", StringComparison.Ordinal);
+        int idxMoovModified = errorModified.IndexOf("moov", StringComparison.Ordinal);
+        int idxMdatOriginal = errorOriginal.IndexOf("mdat", StringComparison.Ordinal);
+        int idxMdatModified = errorModified.IndexOf("mdat", StringComparison.Ordinal);
         idxMoovOriginal.ShouldBeGreaterThanOrEqualTo(0);
         idxMoovModified.ShouldBeGreaterThanOrEqualTo(0);
         idxMdatOriginal.ShouldBeGreaterThanOrEqualTo(0);
         idxMdatModified.ShouldBeGreaterThanOrEqualTo(0);
-        originalFile.LastIndexOf("moov"u8).ShouldBe(idxMoovOriginal);
-        modifiedFile.LastIndexOf("moov"u8).ShouldBe(idxMoovModified);
-        originalFile.LastIndexOf("mdat"u8).ShouldBe(idxMdatOriginal);
-        modifiedFile.LastIndexOf("mdat"u8).ShouldBe(idxMdatModified);
         idxMoovOriginal.ShouldBeGreaterThan(idxMdatOriginal);
         idxMoovModified.ShouldBeLessThan(idxMdatModified);
     }
