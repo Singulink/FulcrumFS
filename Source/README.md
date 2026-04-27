@@ -13,6 +13,7 @@ Details of each component are provided below:
 | **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
 | **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| **Singulink.FulcrumFS.Videos** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
 **Supported Runtimes**: .NET 10.0+
 
@@ -59,6 +60,12 @@ Core library that is mostly useful for access to the `FileId` type and repositor
 Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
 Image processing is provided by the fantastic [`ImageSharp`](https://github.com/SixLabors/ImageSharp) library.
+
+### FulcrumFS.Videos
+
+Optional extension that adds customizable video processing capabilities, including validation, thumbnail generation, resizing, format conversion, metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.
+
+Video processing is provided by `FFmpeg` and `FFprobe`.
 
 ## Further Reading
 
