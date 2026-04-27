@@ -20,7 +20,12 @@ public abstract partial class ImageFormat
     /// </summary>
     public static ImageFormat Png { get; } = new PngFormat();
 
-    internal static ImmutableArray<ImageFormat> AllFormats { get; } = [Jpeg, Png];
+    /// <summary>
+    /// Gets the BMP image format.
+    /// </summary>
+    public static ImageFormat Bmp { get; } = new BmpFormat();
+
+    internal static ImmutableArray<ImageFormat> AllFormats { get; } = [Jpeg, Png, Bmp];
 
     /// <summary>
     /// Gets the file extensions associated with this image format.
