@@ -12,6 +12,9 @@ public sealed record VideoFpsOptions
     /// </summary>
     public VideoFpsOptions(VideoFpsMode mode, int targetFps)
     {
+        mode.ThrowIfNotDefined();
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targetFps);
+
         Mode = mode;
         TargetFps = targetFps;
     }
@@ -24,7 +27,7 @@ public sealed record VideoFpsOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(Mode));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -37,7 +40,7 @@ public sealed record VideoFpsOptions
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value, nameof(TargetFps));
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
             field = value;
         }
     }

@@ -13,31 +13,70 @@ public sealed record ImageResizeOptions
     /// <param name="mode">The resize mode to apply.</param>
     /// <param name="width">The target width in pixels. Must be greater than or equal to 1.</param>
     /// <param name="height">The target height in pixels. Must be greater than or equal to 1.</param>
-    public ImageResizeOptions(ImageResizeMode mode, int width, int height)
+    /// <param name="matchSourceOrientation">
+    /// If <see langword="true"/>, the target <paramref name="width"/> and <paramref name="height"/> are swapped prior to resizing when needed so that the
+    /// longest target dimension matches the longest source dimension (i.e. portrait targets are applied to portrait sources and landscape targets to
+    /// landscape sources). Default is <see langword="false"/>.
+    /// </param>
+    public ImageResizeOptions(ImageResizeMode mode, int width, int height, bool matchSourceOrientation = false)
     {
-        mode.ThrowIfNotDefined(nameof(mode));
+        mode.ThrowIfNotDefined();
         ArgumentOutOfRangeException.ThrowIfLessThan(width, 1, nameof(width));
         ArgumentOutOfRangeException.ThrowIfLessThan(height, 1, nameof(height));
 
         Mode = mode;
         Width = width;
         Height = height;
+        MatchSourceOrientation = matchSourceOrientation;
     }
 
     /// <summary>
-    /// Gets the resize mode, which determines how the image is scaled to fit within the target width and height.
+    /// Gets or initializes the resize mode, which determines how the image is scaled to fit within the target width and height.
     /// </summary>
-    public ImageResizeMode Mode { get; }
+    public ImageResizeMode Mode
+    {
+        get;
+        init
+        {
+            value.ThrowIfNotDefined();
+            field = value;
+        }
+    }
 
     /// <summary>
-    /// Gets the target width in pixels.
+    /// Gets or initializes the target width in pixels.
     /// </summary>
-    public int Width { get; }
+    public int Width
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            field = value;
+        }
+    }
 
     /// <summary>
-    /// Gets the target height in pixels.
+    /// Gets or initializes the target height in pixels.
     /// </summary>
-    public int Height { get; }
+    public int Height
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            field = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether the target <see cref="Width"/> and <see cref="Height"/> should be swapped prior to resizing when needed so that the
+    /// longest target dimension matches the longest source dimension (i.e. portrait targets are applied to portrait sources and landscape targets to
+    /// landscape sources).
+    /// </summary>
+#pragma warning disable SA1623 // Property summary documentation should match accessors
+    public bool MatchSourceOrientation { get; init; }
+#pragma warning restore SA1623
 
     /// <summary>
     /// Gets or initializes the padding color to use when <see cref="Mode"/> is set to a padding mode. If the value is <see langword="null"/>, padding

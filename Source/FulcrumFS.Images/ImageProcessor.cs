@@ -289,6 +289,9 @@ public sealed class ImageProcessor : FileProcessor
     {
         (int resizeWidth, int resizeHeight) = swapDimensions ? (options.Height, options.Width) : (options.Width, options.Height);
 
+        if (options.MatchSourceOrientation && (image.Width >= image.Height) != (resizeWidth >= resizeHeight))
+            (resizeWidth, resizeHeight) = (resizeHeight, resizeWidth);
+
         ResizeMode mode;
 
         if (options.Mode is ImageResizeMode.FitDown)

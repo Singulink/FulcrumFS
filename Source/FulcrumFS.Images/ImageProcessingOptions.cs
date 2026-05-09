@@ -78,7 +78,7 @@ public sealed record ImageProcessingOptions
     {
         get;
         init {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     } = ImageMetadataStrippingMode.ThumbnailOnly;
@@ -104,7 +104,7 @@ public sealed record ImageProcessingOptions
     {
         get;
         init {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     } = ImageCompressionLevel.High;
@@ -118,7 +118,7 @@ public sealed record ImageProcessingOptions
     {
         get;
         init {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     } = ImageQuality.High;
@@ -130,7 +130,7 @@ public sealed record ImageProcessingOptions
     {
         get;
         init {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     } = ImageReencodeMode.SelectSmallest;

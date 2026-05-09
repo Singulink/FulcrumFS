@@ -17,11 +17,24 @@ public sealed record VideoResizeOptions
     /// padded up to block sizes, etc.; if the size you specify is too small for the video to be possible, an exception will be thrown during processing.
     /// </para>
     /// </summary>
-    public VideoResizeOptions(VideoResizeMode mode, int width, int height)
+    /// <param name="mode">The resize mode to apply.</param>
+    /// <param name="width">The target width in pixels. Must be greater than zero.</param>
+    /// <param name="height">The target height in pixels. Must be greater than zero.</param>
+    /// <param name="matchSourceOrientation">
+    /// If <see langword="true"/>, the target <paramref name="width"/> and <paramref name="height"/> are swapped prior to resizing when needed so that the
+    /// longest target dimension matches the longest source dimension (i.e. portrait targets are applied to portrait sources and landscape targets to
+    /// landscape sources). Default is <see langword="false"/>.
+    /// </param>
+    public VideoResizeOptions(VideoResizeMode mode, int width, int height, bool matchSourceOrientation = false)
     {
+        mode.ThrowIfNotDefined();
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width, nameof(width));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height, nameof(height));
+
         Mode = mode;
         Width = width;
         Height = height;
+        MatchSourceOrientation = matchSourceOrientation;
     }
 
     /// <summary>
@@ -32,34 +45,43 @@ public sealed record VideoResizeOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(Mode));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
 
     /// <summary>
-    /// Gets the target width in pixels.
+    /// Gets or initializes the target width in pixels.
     /// </summary>
     public int Width
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value, nameof(Width));
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
             field = value;
         }
     }
 
     /// <summary>
-    /// Gets the target height in pixels.
+    /// Gets or initializes the target height in pixels.
     /// </summary>
     public int Height
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value, nameof(Height));
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
             field = value;
         }
     }
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether the target <see cref="Width"/> and <see cref="Height"/> should be swapped prior to resizing when needed
+    /// so that the longest target dimension matches the longest source dimension (i.e. portrait targets are applied to portrait sources and landscape targets
+    /// to landscape sources).
+    /// </summary>
+#pragma warning disable SA1623 // Property summary documentation should match accessors
+    public bool MatchSourceOrientation { get; init; }
+#pragma warning restore SA1623
 }

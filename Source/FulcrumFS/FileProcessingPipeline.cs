@@ -26,7 +26,7 @@ public class FileProcessingPipeline
     {
         get;
         init {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }

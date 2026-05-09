@@ -752,7 +752,7 @@ public sealed class VideoProcessor : FileProcessor
                         videoStream.Height,
                         Options.ForceSquarePixels ? videoStream.SarNum : -1,
                         Options.ForceSquarePixels ? videoStream.SarDen : -1,
-                        Options.ResizeOptions is null ? null : (Options.ResizeOptions.Width, Options.ResizeOptions.Height),
+                        GetResizeMaxDimensions(Options.ResizeOptions, videoStream.Width, videoStream.Height),
                         !changingFps && videoStream.FpsNum > 0 && videoStream.FpsDen > 0 ? (videoStream.FpsNum, videoStream.FpsDen) : null,
                         roundW,
                         roundH,
@@ -1381,7 +1381,7 @@ public sealed class VideoProcessor : FileProcessor
                         videoStream.Height,
                         Options.ForceSquarePixels ? videoStream.SarNum : -1,
                         Options.ForceSquarePixels ? videoStream.SarDen : -1,
-                        Options.ResizeOptions is null ? null : (Options.ResizeOptions.Width, Options.ResizeOptions.Height),
+                        GetResizeMaxDimensions(Options.ResizeOptions, videoStream.Width, videoStream.Height),
                         fpsValue,
                         roundW,
                         roundH,
@@ -2379,6 +2379,21 @@ public sealed class VideoProcessor : FileProcessor
         // Currently we just check for potentially valid 3-letter lowercase code, rather than checking against the precise ISO 639-2/T list:
         if (language is not { Length: 3 }) return false;
         return !language.AsSpan().ContainsAnyExceptInRange('a', 'z');
+    }
+
+    // Helper to derive the (Width, Height) target tuple, honoring the MatchSourceOrientation option by swapping
+    // the target dimensions when the source's portrait/landscape orientation differs from the target's.
+    private static (int Width, int Height)? GetResizeMaxDimensions(VideoResizeOptions? resizeOptions, int sourceWidth, int sourceHeight)
+    {
+        if (resizeOptions is null)
+            return null;
+
+        (int width, int height) = (resizeOptions.Width, resizeOptions.Height);
+
+        if (resizeOptions.MatchSourceOrientation && (sourceWidth >= sourceHeight) != (width >= height))
+            (width, height) = (height, width);
+
+        return (width, height);
     }
 
     // Helper to share the logic for resizing a video.

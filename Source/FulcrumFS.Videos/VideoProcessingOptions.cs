@@ -326,7 +326,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -439,7 +439,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -453,7 +453,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -469,7 +469,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -485,7 +485,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -501,7 +501,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -517,7 +517,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -535,7 +535,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -579,7 +579,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }
@@ -593,7 +593,7 @@ public sealed record VideoProcessingOptions
         get;
         init
         {
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     }

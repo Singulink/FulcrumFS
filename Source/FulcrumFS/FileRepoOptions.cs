@@ -74,7 +74,7 @@ public class FileRepoOptions
         get;
         set {
             EnsureNotFrozen();
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1), nameof(value));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1));
             field = value;
         }
     } = TimeSpan.FromSeconds(15);
@@ -87,7 +87,7 @@ public class FileRepoOptions
         get;
         set {
             EnsureNotFrozen();
-            value.ThrowIfNotDefined(nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
     } = LoggingMode.HumanReadable;
@@ -100,8 +100,8 @@ public class FileRepoOptions
         get;
         set {
             EnsureNotFrozen();
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1), nameof(value));
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, TimeSpan.FromMilliseconds(int.MaxValue), nameof(value));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, TimeSpan.FromMilliseconds(int.MaxValue));
 
             field = value;
         }
