@@ -65,8 +65,16 @@ public class FileRepoOptions
     /// Gets or sets the mode used to generate file IDs in the repository. Default is <see cref="FileIdMode.Sequential"/>.
     /// </summary>
     /// <remarks>
-    /// Use <see cref="FileIdMode.Sequential"/> for better locality and indexing performance when file IDs are not exposed to untrusted parties. Use <see
-    /// cref="FileIdMode.Secure"/> when file IDs may be exposed to untrusted parties and must be unpredictable.
+    /// <para>
+    /// Use <see cref="FileIdMode.Sequential"/> for improved locality and indexing performance when file IDs are not exposed to untrusted parties or are only
+    /// used for publicly accessible resources. Use <see cref="FileIdMode.Secure"/> when file IDs are used for private resources or otherwise exposed to
+    /// untrusted parties and must be unpredictable.</para>
+    /// <para>
+    /// This setting can be safely changed between deployments and only affects file IDs generated after the change takes effect. Existing file IDs are not
+    /// affected and continue to function as expected.</para>
+    /// <para>
+    /// If you have a mix of public and private resources, it is good practice to use separate repositories with different <see cref="FileIdMode"/> settings to
+    /// avoid the security risks of using sequential IDs for private resources or the performance costs of using secure IDs for public resources.</para>
     /// </remarks>
     public FileIdMode FileIdMode {
         get;
