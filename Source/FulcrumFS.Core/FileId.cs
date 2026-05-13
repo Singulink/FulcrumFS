@@ -68,7 +68,7 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     public static FileId Create(Guid guid) => new(guid);
 
     /// <summary>
-    /// Creates a new sequential file ID.
+    /// Creates a new sequential file ID backed by a version 7 GUID.
     /// </summary>
     public static FileId CreateSequential()
     {
@@ -85,6 +85,11 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
             return new(Guid.CreateVersion7(currentTimeStamp));
         }
     }
+
+    /// <summary>
+    /// Creates a new cryptographically random file ID backed by a version 4 GUID.
+    /// </summary>
+    public static FileId CreateSecure() => new(Guid.NewGuid());
 
     /// <summary>
     /// Determines whether two <see cref="FileId"/> instances are equal.
@@ -184,7 +189,7 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public override string ToString() => FileIdString;
 
-    private static bool IsValidGuidForFileId(Guid guid) => guid.Version is 7;
+    private static bool IsValidGuidForFileId(Guid guid) => guid.Version is 4 or 7;
 
     private IRelativeDirectoryPath GetRelativeDirectory()
     {

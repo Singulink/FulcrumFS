@@ -62,6 +62,22 @@ public class FileRepoOptions
     } = TimeSpan.FromHours(1);
 
     /// <summary>
+    /// Gets or sets the mode used to generate file IDs in the repository. Default is <see cref="FileIdMode.Sequential"/>.
+    /// </summary>
+    /// <remarks>
+    /// Use <see cref="FileIdMode.Sequential"/> for better locality and indexing performance when file IDs are not exposed to untrusted parties. Use <see
+    /// cref="FileIdMode.Secure"/> when file IDs may be exposed to untrusted parties and must be unpredictable.
+    /// </remarks>
+    public FileIdMode FileIdMode {
+        get;
+        set {
+            EnsureNotFrozen();
+            value.ThrowIfNotDefined();
+            field = value;
+        }
+    } = FileIdMode.Sequential;
+
+    /// <summary>
     /// Gets or sets the interval at which health checks on the repo volume/directory are performed. Minimum value is 1 second. Default is 15 seconds.
     /// </summary>
     /// <remarks>

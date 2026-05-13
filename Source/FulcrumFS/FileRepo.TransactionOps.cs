@@ -54,7 +54,7 @@ partial class FileRepo
 
         while (true)
         {
-            fileId = FileId.CreateSequential();
+            fileId = Options.FileIdMode is FileIdMode.Secure ? FileId.CreateSecure() : FileId.CreateSequential();
 
             using (await _fileSync.LockAsync((fileId, null), cancellationToken).ConfigureAwait(false))
             {
