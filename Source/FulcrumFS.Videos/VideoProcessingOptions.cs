@@ -222,7 +222,7 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets the source media container format for this mapping (it matches any of these).</para>
+    /// Gets the source media container formats that the video processor can process.</para>
     /// <para>
     /// Default is <see cref="MediaContainerFormat.AllSourceFormats" />.</para>
     /// </summary>
@@ -248,11 +248,11 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets the result media container format for this mapping, or null to use the same as the input.</para>
+    /// Gets the result media container formats that the video processor can output.</para>
     /// <para>
     /// If re-encoding is required, or other modifications (e.g., metadata changes) are requested, and the source format does not support writing, the first
     /// format in the list is used, so it must be writable as per <see cref="MediaContainerFormat.SupportsWriting" /> - otherwise, non-writable formats will
-    /// only be emitted when copying the file in full.</para>
+    /// only be emitted when copying the file in full with no modifications.</para>
     /// </summary>
     public required IReadOnlyList<MediaContainerFormat> ResultFormats
     {

@@ -9,7 +9,7 @@ namespace FulcrumFS;
 /// </summary>
 public sealed class FileProcessingContext : IAsyncDisposable
 {
-    private readonly IAbsoluteDirectoryPath _workRootDirectory;
+    private readonly IAbsoluteDirectoryPath _tempWorkingDir;
 
     private object? _source;
     private bool _leaveOpen;
@@ -52,13 +52,13 @@ public sealed class FileProcessingContext : IAsyncDisposable
     internal FileProcessingContext(
         FileId fileId,
         string? variantId,
-        IAbsoluteDirectoryPath workRootDirectory,
+        IAbsoluteDirectoryPath tempWorkingDir,
         IAbsoluteFilePath sourceFile,
         CancellationToken cancellationToken)
     {
         FileId = fileId;
         VariantId = variantId;
-        _workRootDirectory = workRootDirectory;
+        _tempWorkingDir = tempWorkingDir;
 
         _source = sourceFile;
         Extension = FileExtension.Normalize(sourceFile.Extension);
@@ -68,7 +68,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
     internal FileProcessingContext(
         FileId fileId,
         string? variantId,
-        IAbsoluteDirectoryPath workRootDirectory,
+        IAbsoluteDirectoryPath tempWorkingDir,
         Stream stream,
         string extension,
         bool leaveOpen,
@@ -76,7 +76,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
     {
         FileId = fileId;
         VariantId = variantId;
-        _workRootDirectory = workRootDirectory;
+        _tempWorkingDir = tempWorkingDir;
 
         _source = stream;
         Extension = FileExtension.Normalize(extension);
@@ -94,7 +94,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
         extension = FileExtension.Normalize(extension);
-        return _workRootDirectory.CombineFile(GetNextWorkId().ToString(CultureInfo.InvariantCulture) + extension, PathOptions.None);
+        return _tempWorkingDir.CombineFile(GetNextWorkId().ToString(CultureInfo.InvariantCulture) + extension, PathOptions.None);
     }
 
     /// <summary>
@@ -105,7 +105,19 @@ public sealed class FileProcessingContext : IAsyncDisposable
     public IAbsoluteDirectoryPath GetNewWorkDirectory()
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
-        return _workRootDirectory.CombineDirectory(GetNextWorkId().ToString(CultureInfo.InvariantCulture), PathOptions.None);
+        return _tempWorkingDir.CombineDirectory(GetNextWorkId().ToString(CultureInfo.InvariantCulture), PathOptions.None);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the specified file is located within the temporary working directory for this processing context.
+    /// </summary>
+    public bool IsTempWorkingFile(IAbsoluteFilePath file)
+    {
+        ObjectDisposedException.ThrowIf(_source is null, this);
+
+        return file.PathDisplay.Length > _tempWorkingDir.PathDisplay.Length &&
+            file.PathDisplay.StartsWith(_tempWorkingDir.PathDisplay, StringComparison.Ordinal) &&
+            file.PathDisplay[_tempWorkingDir.PathDisplay.Length] == file.PathFormat.Separator;
     }
 
     /// <summary>

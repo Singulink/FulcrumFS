@@ -515,7 +515,7 @@ partial class Tests
                 SourceFormats = [MediaContainerFormat.MP4],
             },
             "video2.mkv",
-            exceptionMessage: "Extension '.mkv' is not allowed. Allowed extensions: .mp4, .mov, .m4a, .3gp, .3g2, .mj2",
+            exceptionMessage: "Extension '.mkv' is not allowed. Allowed extensions: .mp4",
             expectedChanges: null);
     }
 
@@ -535,7 +535,7 @@ partial class Tests
                 SourceFormats = [MediaContainerFormat.MP4],
             },
             "video2.mkv",
-            exceptionMessage: "The source video format 'matroska,webm' is not supported by this processor.",
+            exceptionMessage: "The video format is inconsistent with its file extension.",
             expectedChanges: null,
             addAsyncExtensionOverride: ".mp4");
     }
@@ -922,33 +922,39 @@ partial class Tests
     }
 
     [TestMethod]
-    [DataRow("video1.mp4", "mov,mp4,m4a,3gp,3g2,mj2")]
-    [DataRow("video2.mkv", "matroska,webm")]
-    [DataRow("video3.mov", "mov,mp4,m4a,3gp,3g2,mj2")]
-    [DataRow("video4.webm", "matroska,webm")]
-    [DataRow("video5.avi", "avi")]
-    [DataRow("video6.ts", "mpegts")]
-    [DataRow("video7.mpeg", "mpeg")]
-    [DataRow("video8.3gp", "mov,mp4,m4a,3gp,3g2,mj2")]
-    public async Task TestSourceFormatDetection(string fileName, string expectedFormatName)
+    [DataRow("video1.mp4", ".mp4")]
+    [DataRow("video2.mkv", ".mkv")]
+    [DataRow("video3.mov", ".mov")]
+    [DataRow("video4.webm", ".webm")]
+    [DataRow("video5.avi", ".avi")]
+    [DataRow("video6.ts", ".ts")]
+    [DataRow("video7.mpeg", ".mpeg")]
+    [DataRow("video8.3gp", ".3gp")]
+    public async Task TestSourceFormatDetection(string fileName, string expectedFormatPrimaryExtension)
     {
         // Tests that SourceFormats correctly identifies container formats by iterating through all known formats.
-        // Each test file should only match its expected format and reject all others.
+        // Each test file should only match its expected format singleton (identified by primary extension) and reject all others.
 
         using var repoCtx = GetRepo(out var repo);
 
         foreach (var format in MediaContainerFormat.AllSourceFormats)
         {
-            bool isCorrect = format.Name == expectedFormatName;
+            bool isCorrect = format.PrimaryExtension == expectedFormatPrimaryExtension;
 
             if (isCorrect)
             {
+                // ResultFormats must start with a writable format; include the source format so that no remuxing is triggered.
+                IReadOnlyList<MediaContainerFormat> resultFormats = format == MediaContainerFormat.MP4
+                    ? [MediaContainerFormat.MP4]
+                    : [MediaContainerFormat.MP4, format];
+
                 await CheckProcessing(
                     repo,
                     VideoProcessingOptions.Preserve with
                     {
                         ForceValidateAllStreams = DefaultForceValidateAllStreams,
                         SourceFormats = [format],
+                        ResultFormats = resultFormats,
                     },
                     fileName,
                     exceptionMessage: null,
@@ -964,9 +970,9 @@ partial class Tests
                         SourceFormats = [format],
                     },
                     fileName,
-                    exceptionMessage: $"The source video format '{expectedFormatName}' is not supported by this processor.",
+                    exceptionMessage: "The video format is inconsistent with its file extension.",
                     expectedChanges: null,
-                    addAsyncExtensionOverride: format.CommonExtensions.First());
+                    addAsyncExtensionOverride: format.PrimaryExtension);
             }
         }
     }

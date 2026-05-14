@@ -8,11 +8,11 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Provides functionality to extract thumbnails from video files with specified options.
 /// </summary>
-public sealed class ThumbnailProcessor : FileProcessor
+public sealed class VideoThumbnailProcessor : FileProcessor
 {
     /// <summary>
     /// <para>
-    /// Initializes a new instance of the <see cref="ThumbnailProcessor"/> class with the specified options.</para>
+    /// Initializes a new instance of the <see cref="VideoThumbnailProcessor"/> class with the specified options.</para>
     /// <para>
     /// Note: you must configure the ffmpeg executable paths by calling <see cref="VideoProcessor.ConfigureWithFFmpegExecutables"/> before creating an instance
     /// of this class.</para>
@@ -20,7 +20,7 @@ public sealed class ThumbnailProcessor : FileProcessor
     /// Note: if you want to do source video validation, you need to use <see cref="VideoProcessor" /> first and chain this after it, as this class does not
     /// perform any validation itself, it just extracts a thumbnail from the provided video.</para>
     /// </summary>
-    public ThumbnailProcessor(ThumbnailProcessingOptions options)
+    public VideoThumbnailProcessor(VideoThumbnailProcessingOptions options)
     {
         Options = options;
 
@@ -35,9 +35,9 @@ public sealed class ThumbnailProcessor : FileProcessor
     }
 
     /// <summary>
-    /// Gets the options used to configure this <see cref="ThumbnailProcessor" />.
+    /// Gets the options used to configure this <see cref="VideoThumbnailProcessor" />.
     /// </summary>
-    public ThumbnailProcessingOptions Options { get; }
+    public VideoThumbnailProcessingOptions Options { get; }
 
     /// <inheritdoc/>
     public override IReadOnlyList<string> AllowedFileExtensions => [];

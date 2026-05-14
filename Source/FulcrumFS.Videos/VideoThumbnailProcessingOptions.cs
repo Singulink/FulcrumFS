@@ -4,7 +4,7 @@ namespace FulcrumFS.Videos;
 
 /// <summary>
 /// <para>
-/// Specifies the options for processing videos to create a thumbnail with a <see cref="ThumbnailProcessor" />.</para>
+/// Specifies the options for processing videos to create a thumbnail with a <see cref="VideoThumbnailProcessor" />.</para>
 /// <para>
 /// If <see cref="IncludeThumbnailVideoStreams" /> is <see langword="true" /> and there is a video stream marked as a thumbnail stream, the thumbnail image is
 /// taken from that stream.</para>
@@ -19,18 +19,18 @@ namespace FulcrumFS.Videos;
 /// <para>
 /// The default options result in no thumbnail extraction options being applied.</para>
 /// <para>
-/// Note: if no thumbnail is able to be extracted, then a <see cref="ThumbnailSelectingException" /> will be thrown when processing.</para>
+/// Note: If no thumbnail is able to be extracted, then a <see cref="FileProcessingException" /> will be thrown when processing.</para>
 /// <para>
-/// Note: does not attempt to remove alpha channels, nor attempt to reduce bit depth to 8; callers can utilize additional image processing if needed for these.
+/// Note: Does not attempt to remove alpha channels, nor attempt to reduce bit depth to 8; callers can utilize additional image processing if needed for these.
 /// </para>
 /// </summary>
-public sealed record ThumbnailProcessingOptions
+public sealed record VideoThumbnailProcessingOptions
 {
     /// <summary>
     /// Gets an options instance with standard thumbnail extraction settings - ignores thumbnail streams, and selects from the lesser of 5 seconds and 30% of
     /// the video duration.
     /// </summary>
-    public static ThumbnailProcessingOptions Standard { get; } = new()
+    public static VideoThumbnailProcessingOptions Standard { get; } = new()
     {
         ImageTimestamp = TimeSpan.FromSeconds(5),
         ImageTimestampFraction = 0.3,

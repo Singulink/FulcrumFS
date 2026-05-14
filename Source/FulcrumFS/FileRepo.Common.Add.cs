@@ -31,11 +31,9 @@ partial class FileRepo
             var dataFile = GetDataFile(fileId, context.Extension, variantId);
             var dataFileDir = dataFile.ParentDirectory;
 
-            // If the result file is not in the temp directory then we need to copy it there first.
+            // If the result file is not in the temp working directory then we need to copy it there first.
 
-            if (resultFile.PathDisplay.Length <= tempWorkingDir.PathDisplay.Length ||
-                !resultFile.PathDisplay.StartsWith(tempWorkingDir.PathDisplay, StringComparison.Ordinal) ||
-                resultFile.PathDisplay[tempWorkingDir.PathDisplay.Length] != resultFile.PathFormat.Separator)
+            if (!context.IsTempWorkingFile(resultFile))
             {
                 var workFile = context.GetNewWorkFile(context.Extension);
                 workFile.ParentDirectory.Create();

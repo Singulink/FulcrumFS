@@ -28,9 +28,17 @@ public abstract partial class ImageFormat
     internal static ImmutableArray<ImageFormat> AllFormats { get; } = [Jpeg, Png, Bmp];
 
     /// <summary>
-    /// Gets the file extensions associated with this image format.
+    /// Gets the file extensions associated with this image format (including the leading '.').
     /// </summary>
-    public IEnumerable<string> Extensions => field ??= LibFormat.FileExtensions.Select(ext => FileExtension.Normalize("." + ext));
+    public IReadOnlyList<string> Extensions => field ??= [.. LibFormat.FileExtensions.Select(ext => FileExtension.Normalize("." + ext))];
+
+    /// <summary>
+    /// Gets the primary file extension associated with this image format (including the leading '.').
+    /// </summary>
+    /// <remarks>
+    /// The primary extension is the first extension in <see cref="Extensions"/> and all files of this format will be written with this extension.
+    /// </remarks>
+    public string PrimaryExtension => Extensions[0];
 
     /// <summary>
     /// Gets the name of the image format (e.g., "JPEG", "PNG", "GIF").

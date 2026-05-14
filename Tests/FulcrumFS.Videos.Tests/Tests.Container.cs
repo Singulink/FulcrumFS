@@ -106,7 +106,7 @@ partial class Tests
     public async Task TestMP4FileWithMkvExtensionWithCopying()
     {
         // Tests handling of an MP4 file masquerading with .mkv extension when file is unchanged (direct copy).
-        // Verifies the output gets the correct .mp4 extension based on actual container format, but doesn't cause remuxing.
+        // The processor should reject the file because its content does not match the declared extension.
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -117,17 +117,16 @@ partial class Tests
                 ForceValidateAllStreams = DefaultForceValidateAllStreams,
             },
             "video1.mp4",
-            exceptionMessage: null,
+            exceptionMessage: "The video format is inconsistent with its file extension.",
             expectedChanges: null,
-            addAsyncExtensionOverride: ".mkv",
-            afterFinishedAction: async (newPath) => FilePath.ParseAbsolute(newPath).Extension.ShouldBe(".mp4"));
+            addAsyncExtensionOverride: ".mkv");
     }
 
     [TestMethod]
     public async Task TestMP4FileWithMkvExtensionWithRemuxing()
     {
         // Tests handling of an MP4 file masquerading with .mkv extension when remuxing (via ForceProgressiveDownload).
-        // Verifies the output gets the correct .mp4 extension based on actual container format.
+        // The processor should reject the file because its content does not match the declared extension.
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -139,21 +138,16 @@ partial class Tests
                 ForceProgressiveDownload = true,
             },
             "video1.mp4",
-            exceptionMessage: null,
-            expectedChanges: (NewStreamCount: 2, StreamMapping:
-            [
-                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: true),
-                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true),
-            ]),
-            addAsyncExtensionOverride: ".mkv",
-            afterFinishedAction: async (newPath) => FilePath.ParseAbsolute(newPath).Extension.ShouldBe(".mp4"));
+            exceptionMessage: "The video format is inconsistent with its file extension.",
+            expectedChanges: null,
+            addAsyncExtensionOverride: ".mkv");
     }
 
     [TestMethod]
     public async Task TestMP4FileWithMkvExtensionWithReencoding()
     {
         // Tests handling of an MP4 file masquerading with .mkv extension when re-encoding.
-        // Verifies the output gets the correct .mp4 extension based on actual container format.
+        // The processor should reject the file because its content does not match the declared extension.
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -166,13 +160,8 @@ partial class Tests
                 AudioReencodeMode = StreamReencodeMode.Always,
             },
             "video1.mp4",
-            exceptionMessage: null,
-            expectedChanges: (NewStreamCount: 2, StreamMapping:
-            [
-                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: false),
-                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: false),
-            ]),
-            addAsyncExtensionOverride: ".mkv",
-            afterFinishedAction: async (newPath) => FilePath.ParseAbsolute(newPath).Extension.ShouldBe(".mp4"));
+            exceptionMessage: "The video format is inconsistent with its file extension.",
+            expectedChanges: null,
+            addAsyncExtensionOverride: ".mkv");
     }
 }

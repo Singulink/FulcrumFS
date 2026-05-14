@@ -14,6 +14,8 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public sealed class VideoProcessor : FileProcessor
 {
+    private static InterlockedFlag _ffmpegPathInitialized;
+
     /// <summary>
     /// <para>
     /// Initializes a new instance of the <see cref="VideoProcessor"/> class with the specified options.</para>
@@ -123,6 +125,27 @@ public sealed class VideoProcessor : FileProcessor
     /// </summary>
     public VideoProcessingOptions Options { get; }
 
+    internal static IAbsoluteFilePath FFmpegExePath
+    {
+        get => field ?? throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        private set;
+    }
+
+    internal static IAbsoluteFilePath FFprobeExePath
+    {
+        get => field ?? throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        private set;
+    }
+
+    internal static int MaxConcurrentProcesses
+    {
+        get => field > 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        private set;
+    }
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.SourceFormats.SelectMany(f => f.Extensions).Distinct()];
+
     /// <summary>
     /// <para>
     /// Configures the directory containing ffmpeg binaries to use for processing.</para>
@@ -160,95 +183,44 @@ public sealed class VideoProcessor : FileProcessor
         MaxConcurrentProcesses = maxConcurrentProcesses;
     }
 
-    private static InterlockedFlag _ffmpegPathInitialized;
-
-    internal static IAbsoluteFilePath FFmpegExePath
-    {
-        get => field ?? throw new InvalidOperationException(
-            "Cannot access ffmpeg executable path before it has been initialized. Call ConfigureWithFFmpegExecutables first.");
-        private set;
-    }
-
-    internal static IAbsoluteFilePath FFprobeExePath
-    {
-        get => field ?? throw new InvalidOperationException(
-            "Cannot access ffprobe executable path before it has been initialized. Call ConfigureWithFFmpegExecutables first.");
-        private set;
-    }
-
-    internal static int MaxConcurrentProcesses
-    {
-        get => field switch
-        {
-            0 => throw new InvalidOperationException(
-                "Cannot access MaxConcurrentProcesses before it has been initialized. Call ConfigureWithFFmpegExecutables first."),
-            var v => v,
-        };
-        private set;
-    }
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.SourceFormats.SelectMany(f => f.CommonExtensions).Distinct()];
-
     /// <inheritdoc/>
     protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
     {
-        // Get temp file for video:
-        var tempOutputFile = await context.GetSourceAsFileAsync().ConfigureAwait(false);
-        var sourceFileWithCorrectExtension = tempOutputFile;
-        bool hasChangedExtension = false;
+        // Get the source video file:
+        var sourceFile = await context.GetSourceAsFileAsync().ConfigureAwait(false);
 
         // Check file name is not going to be potentially problematic for ffmpeg (e.g., contains special characters):
         // Note: we assume that paths given by 'GetNewWorkFile' are safe if at least one is, so we only check the original source and an unused GetNewWorkFile
         // file here.
-        FilePath.ParseAbsolute(tempOutputFile.PathExport, PathOptions.NoUnfriendlyNames);
+        FilePath.ParseAbsolute(sourceFile.PathExport, PathOptions.NoUnfriendlyNames);
         FilePath.ParseAbsolute(context.GetNewWorkFile(string.Empty).PathExport, PathOptions.NoUnfriendlyNames);
 
         // Read info of source video:
         FFprobeUtils.VideoFileInfo sourceInfo;
         try
         {
-            sourceInfo = await FFprobeUtils.GetVideoFileAsync(tempOutputFile, context.CancellationToken).ConfigureAwait(false);
+            sourceInfo = await FFprobeUtils.GetVideoFileAsync(sourceFile, context.CancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             throw new FileProcessingException("Failed to read source video file information.", ex);
         }
 
-        // Figure out which source format it supposedly is & check if we support it & that it matches the file extension:
+        // Identify the source format strictly by file extension (do not trust the extension blindly: the content must also match).
         var sourceFormat = Options.SourceFormats
-            .FirstOrDefault((x) => x.NameMatches(sourceInfo.FormatName))
-                ?? throw new FileProcessingException($"The source video format '{sourceInfo.FormatName}' is not supported by this processor.");
+            .FirstOrDefault((x) => x.Extensions.Contains(context.Extension, StringComparer.OrdinalIgnoreCase));
 
-        // If file extension does not match the source format, ensure we still detect the same format after copying to the correct extension:
-        if (!sourceFormat.CommonExtensions.Contains(context.Extension, StringComparer.OrdinalIgnoreCase))
+        if (sourceFormat is null)
         {
-            hasChangedExtension = true;
-            var tempOutputFile2 = context.GetNewWorkFile(sourceFormat.PrimaryExtension);
-            sourceFileWithCorrectExtension = tempOutputFile2;
-            var sourceStream = tempOutputFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read);
-            await using (sourceStream.ConfigureAwait(false))
-            {
-                tempOutputFile2.ParentDirectory.Create();
-                var destStream = tempOutputFile2.OpenAsyncStream(FileMode.Create, FileAccess.Write);
-                await using (destStream.ConfigureAwait(false))
-                {
-                    await sourceStream.CopyToAsync(destStream, context.CancellationToken).ConfigureAwait(false);
-                }
-            }
+            string allowedExtensions = string.Join(", ", Options.SourceFormats.SelectMany((x) => x.Extensions).Distinct(StringComparer.OrdinalIgnoreCase));
+            throw new FileProcessingException($"Extension '{context.Extension}' is not allowed. Allowed extensions: {allowedExtensions}");
+        }
 
-            FFprobeUtils.VideoFileInfo sourceInfo2;
-            try
-            {
-                sourceInfo2 = await FFprobeUtils.GetVideoFileAsync(tempOutputFile2, context.CancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                throw new FileProcessingException("Failed to read source video file information after correcting the file extension.", ex);
-            }
-
-            if (sourceInfo2.FormatName != sourceInfo.FormatName)
-                throw new FileProcessingException("The video format is inconsistent with its file extension in a potentially malicious way.");
+        // Verify the ffprobe-reported format name is compatible with the configured source format, and verify the file's content matches.
+        if (!sourceFormat.NameMatches(sourceInfo.FormatName) ||
+            !await sourceFormat.MatchesContentAsync(sourceInfo, sourceFile, context.CancellationToken).ConfigureAwait(false))
+        {
+            throw new FileProcessingException("The video format is inconsistent with its file extension.");
         }
 
         // Validate source streams:
@@ -441,7 +413,7 @@ public sealed class VideoProcessor : FileProcessor
 
             var (exceededMaxLength, actualMaxDuration, progressTempFile2, progressUsed2) = await FullyValidateStreamsAsync(
                 context,
-                sourceFileWithCorrectExtension,
+                sourceFile,
                 sourceInfo,
                 Options.ProgressCallback,
                 maxLength,
@@ -888,7 +860,7 @@ public sealed class VideoProcessor : FileProcessor
                 FinishedValidation();
             }
 
-            return FileProcessingResult.File(sourceFileWithCorrectExtension, hasChanges: hasChangedExtension);
+            return FileProcessingResult.File(sourceFile, hasChanges: false);
         }
 
         // We want to figure out which streams cannot be copied to the output container directly first - including unrecognised streams.
@@ -953,7 +925,7 @@ public sealed class VideoProcessor : FileProcessor
                 // Set up command to test copying this stream:
                 IEnumerable<string> testCommand =
                 [
-                    "-i", sourceFileWithCorrectExtension.PathExport,
+                    "-i", sourceFile.PathExport,
                     "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
                     "-c", "copy",
                     "-copy_unknown", "-xerror", "-hide_banner", "-y", "-nostdin",
@@ -975,7 +947,7 @@ public sealed class VideoProcessor : FileProcessor
                     // Set up command to test copying this stream:
                     testCommand =
                     [
-                        "-i", sourceFileWithCorrectExtension.PathExport,
+                        "-i", sourceFile.PathExport,
                         "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
                         "-c", "mov_text",
                         "-t", "1", // Only need a short segment to test (1 second)
@@ -998,7 +970,7 @@ public sealed class VideoProcessor : FileProcessor
                         // Set up command to test copying this stream:
                         testCommand =
                         [
-                            "-i", sourceFileWithCorrectExtension.PathExport,
+                            "-i", sourceFile.PathExport,
                             "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
                             "-c", "dvd_subtitle",
                             "-t", "1", // Only need a short segment to test (1 second)
@@ -1437,7 +1409,7 @@ public sealed class VideoProcessor : FileProcessor
                     streamsToCheckSize.Add((
                         StreamMappingIndex: streamMapping.Count,
                         SourceValidFileExtension: requiresReencodeForMP4FromSize
-                            ? sourceFileWithCorrectExtension.Extension
+                            ? sourceFile.Extension
                             : videoCodec!.WritableFileExtension,
                         RequiresReencodeForMP4: requiresReencodeForMP4FromSize || !isCompatibleStream[inputStreamIndex]));
                 }
@@ -1892,10 +1864,10 @@ public sealed class VideoProcessor : FileProcessor
         FinishedValidation();
 
         // Finish setting up & running the main FFmpeg command:
-        var resultTempFile = context.GetNewWorkFile(".mp4"); // currently this is our only supported output format when remuxing, so just use it
+        var resultTempFile = context.GetNewWorkFile(Options.ResultFormats[0].PrimaryExtension);
         resultTempFile.ParentDirectory.Create();
         FFmpegUtils.FFmpegCommand command = new(
-            inputFiles: [(File: sourceFileWithCorrectExtension, Seek: null)],
+            inputFiles: [(File: sourceFile, Seek: null)],
             outputFile: resultTempFile,
             perInputStreamOverrides: [.. perInputStreamOverrides],
             perOutputStreamOverrides: [.. perOutputStreamOverrides],
@@ -1949,7 +1921,7 @@ public sealed class VideoProcessor : FileProcessor
                     : null;
                 await FullyValidateStreamsAsync(
                     context,
-                    sourceFileWithCorrectExtension,
+                    sourceFile,
                     sourceInfo,
                     progressCallback,
                     maxLength: null,
@@ -1981,9 +1953,9 @@ public sealed class VideoProcessor : FileProcessor
         {
             // Determine which are actually smaller & which are actually smaller, but would still need to be re-encoded if remuxed:
             List<(int Index, bool NeedsReencode, bool StrictlySmaller)> wasSmaller = [];
-            var reencodedTempFile = context.GetNewWorkFile(".mp4");
+            var reencodedTempFile = context.GetNewWorkFile(Options.ResultFormats[0].PrimaryExtension);
             reencodedTempFile.ParentDirectory.Create();
-            var fromOriginalTempFileMp4 = context.GetNewWorkFile(".mp4");
+            var fromOriginalTempFileMp4 = context.GetNewWorkFile(Options.ResultFormats[0].PrimaryExtension);
             fromOriginalTempFileMp4.ParentDirectory.Create();
             bool mustRemux = remuxGuaranteedRequired;
             for (int i = 0; i < streamsToCheckSize.Count; i++)
@@ -2041,12 +2013,12 @@ public sealed class VideoProcessor : FileProcessor
                 reencodedTempFile.Delete();
 
                 // Now do the same for the original file:
-                var fromOriginalTempFile = streamToCheck.SourceValidFileExtension != ".mp4"
+                var fromOriginalTempFile = streamToCheck.SourceValidFileExtension != Options.ResultFormats[0].PrimaryExtension
                     ? context.GetNewWorkFile(streamToCheck.SourceValidFileExtension)
                     : fromOriginalTempFileMp4;
                 fromOriginalTempFile.ParentDirectory.Create();
                 FFmpegUtils.FFmpegCommand extractCommandOriginal = new(
-                    inputFiles: [(File: sourceFileWithCorrectExtension, Seek: null)],
+                    inputFiles: [(File: sourceFile, Seek: null)],
                     outputFile: fromOriginalTempFile,
                     perInputStreamOverrides:
                     [
@@ -2110,14 +2082,14 @@ public sealed class VideoProcessor : FileProcessor
             {
                 // All streams were smaller, and we do not otherwise require remuxing, so just return the original file:
                 resultTempFile.Delete();
-                return FileProcessingResult.File(sourceFileWithCorrectExtension, hasChanges: hasChangedExtension);
+                return FileProcessingResult.File(sourceFile, hasChanges: false);
             }
 
             // Check if any were better in the original file:
             if (wasSmaller.Count > 0)
             {
-                // Get a new temp file to write the mixed result to (note: we only support .mp4 currently, so just use that):
-                var newResultTempFile = context.GetNewWorkFile(".mp4");
+                // Get a new temp file to write the mixed result to:
+                var newResultTempFile = context.GetNewWorkFile(Options.ResultFormats[0].PrimaryExtension);
                 newResultTempFile.ParentDirectory.Create();
 
                 // Prepare the command:
@@ -2190,7 +2162,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 FFmpegUtils.FFmpegCommand mixCommand = new(
-                    inputFiles: [(File: sourceFileWithCorrectExtension, Seek: null), (File: resultTempFile, Seek: null)],
+                    inputFiles: [(File: sourceFile, Seek: null), (File: resultTempFile, Seek: null)],
                     outputFile: newResultTempFile,
                     perInputStreamOverrides: [.. perInputStreamOverrides],
                     perOutputStreamOverrides: [.. perOutputStreamOverrides],
@@ -2521,6 +2493,38 @@ public sealed class VideoProcessor : FileProcessor
                 continue;
             }
 
+            // Apply the per-codec maximum encodable frame area. Both H.264 and H.265 are limited to Level 6.2's max frame size of 35,651,584 pixels
+            // (139,264 macroblocks for H.264, or equivalent luma samples for HEVC). Frames larger than this cannot be encoded by libx264 / libx265
+            // (the encoders reject the allocation internally, surfacing as AVERROR_EXTERNAL), so we scale down here to fit within the codec limit.
+            const long maxFrameArea = 35_651_584L;
+            if ((long)resultWidth * resultHeight > maxFrameArea)
+            {
+                // If one dimension is equal to the min, we can't reduce further, so throw an error:
+                if (maxW == minDimension || maxH == minDimension)
+                {
+                    return (1, -1, -1);
+                }
+
+                // Set max dimensions to current size first:
+                maxW = resultWidth;
+                maxH = resultHeight;
+
+                // Now, reduce the max dimensions to what should be correct approximately, and ensure at least 1 dimension is reduced:
+                double areaScaleFactor = double.Sqrt(maxFrameArea / ((double)resultWidth * resultHeight));
+                int newAreaMaxW = int.Min((int)double.Ceiling(resultWidth * areaScaleFactor), maxW);
+                int newAreaMaxH = int.Min((int)double.Ceiling(resultHeight * areaScaleFactor), maxH);
+                if (newAreaMaxW == maxW && newAreaMaxH == maxH)
+                {
+                    if (newAreaMaxW > newAreaMaxH) newAreaMaxW--;
+                    else newAreaMaxH--;
+                }
+
+                // Update our max dimensions and try again:
+                maxW = newAreaMaxW;
+                maxH = newAreaMaxH;
+                continue;
+            }
+
             // The absolute maximum number of pixels is limited by ffmpeg, which sets a limit of (width + 128) * (height + 128) * 8 <= 2^31 - 1.
             // Note: currently all supported pixel formats used for output use 8 for the bytes per pixel value; if this changes we'd need to update this.
             // Note: if the limit changed, here is what would happen: either videos would be being resized down more than necessary, or ffmpeg would fail to
@@ -2675,7 +2679,7 @@ public sealed class VideoProcessor : FileProcessor
     private async ValueTask<(bool ExceededMaxLength, double? ActualMaxDuration, IAbsoluteFilePath? ProgressTempFile, double ProgressUsed)>
         FullyValidateStreamsAsync(
             FileProcessingContext context,
-            IAbsoluteFilePath sourceFileWithCorrectExtension,
+            IAbsoluteFilePath sourceFile,
             FFprobeUtils.VideoFileInfo sourceInfo,
             Func<(FileId FileId, string? VariantId), double, ValueTask>? progressCallback,
             double? maxLength,
@@ -2745,7 +2749,7 @@ public sealed class VideoProcessor : FileProcessor
                 await FFmpegUtils.RunRawFFmpegCommandAsync(
                     [
                         "-i",
-                        sourceFileWithCorrectExtension.PathExport,
+                        sourceFile.PathExport,
                         .. validateProgressCallback is null ? [] : (IEnumerable<string>)["-progress", progressTempFile!.PathExport],
                         "-ignore_unknown",
                         "-xerror",
@@ -2785,7 +2789,7 @@ public sealed class VideoProcessor : FileProcessor
                 await FFmpegUtils.RunRawFFmpegCommandAsync(
                     [
                         "-i",
-                        sourceFileWithCorrectExtension.PathExport,
+                        sourceFile.PathExport,
                         .. validateProgressCallback is null ? [] : (IEnumerable<string>)["-progress", progressTempFile!.PathExport],
                         "-ignore_unknown",
                         "-xerror",

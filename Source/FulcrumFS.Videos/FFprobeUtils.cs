@@ -15,6 +15,15 @@ internal static class FFprobeUtils
         public string FormatName { get; } = formatName;
         public double? Duration { get; } = duration;
         public ImmutableArray<StreamInfo> Streams { get; } = streams;
+
+        /// <summary>Gets the ISO BMFF major_brand from the file's ftyp box, if present (only set for mov/mp4/m4a/3gp/3g2/mj2 family files).</summary>
+        public string? MajorBrand { get; init; }
+
+        /// <summary>Gets the ISO BMFF compatible_brands from the file's ftyp box, if present.</summary>
+        public ImmutableArray<string> CompatibleBrands { get; init; } = [];
+
+        /// <summary>Gets the MPEG-TS packet size, if reported by ffprobe (188 for .ts, 192 for .mts/.m2ts).</summary>
+        public int? PacketSize { get; init; }
     }
 
     public abstract record StreamInfo;
@@ -266,9 +275,38 @@ internal static class FFprobeUtils
         var formatElement = document.RootElement.GetProperty("format");
         string? formatName = ReadStringProperty(formatElement, "format_name");
         duration = ReadStringPropertyAsDouble(formatElement, "duration");
+        int? packetSize = ReadStringPropertyAsInt32(formatElement, "packet_size");
+
+        string? majorBrand = null;
+        ImmutableArray<string> compatibleBrands = [];
+        if (formatElement.TryGetProperty("tags", out var formatTagsProp) && formatTagsProp.ValueKind == JsonValueKind.Object)
+        {
+            // Brands are exactly 4 bytes; do not trim because some valid brands (e.g., "qt  ", "M4A ") contain trailing spaces.
+            majorBrand = ReadStringProperty(formatTagsProp, "major_brand");
+
+            string? compatibleBrandsStr = ReadStringProperty(formatTagsProp, "compatible_brands");
+            if (compatibleBrandsStr != null)
+            {
+                // compatible_brands is a sequence of 4-byte brand codes concatenated together (with no separator).
+                var brands = ImmutableArray.CreateBuilder<string>(compatibleBrandsStr.Length / 4);
+                for (int i = 0; i + 4 <= compatibleBrandsStr.Length; i += 4)
+                {
+                    string brand = compatibleBrandsStr.Substring(i, 4);
+                    if (brand.Length > 0)
+                        brands.Add(brand);
+                }
+
+                compatibleBrands = brands.DrainToImmutable();
+            }
+        }
 
         // Return the result:
-        return new(formatName!, duration, builder.DrainToImmutable());
+        return new(formatName!, duration, builder.DrainToImmutable())
+        {
+            MajorBrand = majorBrand,
+            CompatibleBrands = compatibleBrands,
+            PacketSize = packetSize,
+        };
     }
 
     public struct ConfigurationInfo

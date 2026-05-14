@@ -23,7 +23,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new ThumbnailProcessor(ThumbnailProcessingOptions.Standard with
+        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard with
         {
             RemapHDRToSDR = remapHDRToSDR,
         }).ToPipeline();
@@ -53,9 +53,9 @@ partial class Tests
         using var repoCtx = GetRepo(out var repo);
 
         // Helper to extract thumbnail with given options and return the image path:
-        async Task<IAbsoluteFilePath> ExtractThumbnail(ThumbnailProcessingOptions options)
+        async Task<IAbsoluteFilePath> ExtractThumbnail(VideoThumbnailProcessingOptions options)
         {
-            var pipeline = new ThumbnailProcessor(options).ToPipeline();
+            var pipeline = new VideoThumbnailProcessor(options).ToPipeline();
             var origFile = _videoFilesDir.CombineFile(fileName);
             await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -67,7 +67,7 @@ partial class Tests
         }
 
         // Extract with both options set
-        var bothOptionsPath = await ExtractThumbnail(new ThumbnailProcessingOptions
+        var bothOptionsPath = await ExtractThumbnail(new VideoThumbnailProcessingOptions
         {
             ImageTimestamp = TimeSpan.FromSeconds(seconds),
             ImageTimestampFraction = fraction,
@@ -75,14 +75,14 @@ partial class Tests
         });
 
         // Extract with only absolute timestamp:
-        var absoluteOnlyPath = await ExtractThumbnail(new ThumbnailProcessingOptions
+        var absoluteOnlyPath = await ExtractThumbnail(new VideoThumbnailProcessingOptions
         {
             ImageTimestamp = TimeSpan.FromSeconds(seconds),
             RemapHDRToSDR = true,
         });
 
         // Extract with only fraction:
-        var fractionOnlyPath = await ExtractThumbnail(new ThumbnailProcessingOptions
+        var fractionOnlyPath = await ExtractThumbnail(new VideoThumbnailProcessingOptions
         {
             ImageTimestampFraction = fraction,
             RemapHDRToSDR = true,
@@ -106,9 +106,9 @@ partial class Tests
         var expectedThumbnailPath = _videoFilesDir.CombineFile("test_image_1.png");
 
         // Helper to extract thumbnail with given options and return the image path:
-        async Task<IAbsoluteFilePath> ExtractThumbnail(ThumbnailProcessingOptions options)
+        async Task<IAbsoluteFilePath> ExtractThumbnail(VideoThumbnailProcessingOptions options)
         {
-            var pipeline = new ThumbnailProcessor(options).ToPipeline();
+            var pipeline = new VideoThumbnailProcessor(options).ToPipeline();
             var origFile = _videoFilesDir.CombineFile("video53.mp4");
             await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -120,13 +120,13 @@ partial class Tests
         }
 
         // Extract with IncludeThumbnailVideoStreams = true - should use embedded thumbnail stream:
-        var withThumbnailStreamPath = await ExtractThumbnail(ThumbnailProcessingOptions.Standard with
+        var withThumbnailStreamPath = await ExtractThumbnail(VideoThumbnailProcessingOptions.Standard with
         {
             IncludeThumbnailVideoStreams = true,
         });
 
         // Extract with IncludeThumbnailVideoStreams = false - should use main video stream:
-        var withoutThumbnailStreamPath = await ExtractThumbnail(ThumbnailProcessingOptions.Standard with
+        var withoutThumbnailStreamPath = await ExtractThumbnail(VideoThumbnailProcessingOptions.Standard with
         {
             IncludeThumbnailVideoStreams = false,
         });
@@ -160,7 +160,7 @@ partial class Tests
             {
                 foreach (bool forceSquarePixels in forceSquarePixelsValues)
                 {
-                    var options = ThumbnailProcessingOptions.Standard with
+                    var options = VideoThumbnailProcessingOptions.Standard with
                     {
                         IncludeThumbnailVideoStreams = includeThumbnailVideoStreams,
                         RemapHDRToSDR = remapHDRToSDR,
@@ -169,7 +169,7 @@ partial class Tests
 
                     try
                     {
-                        var pipeline = new ThumbnailProcessor(options).ToPipeline();
+                        var pipeline = new VideoThumbnailProcessor(options).ToPipeline();
                         var origFile = _videoFilesDir.CombineFile(fileName);
                         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -207,7 +207,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new ThumbnailProcessor(new ThumbnailProcessingOptions
+        var pipeline = new VideoThumbnailProcessor(new VideoThumbnailProcessingOptions
         {
             ImageTimestampFraction = 0.3,
             RemapHDRToSDR = remapHDRToSDR,
@@ -252,7 +252,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new ThumbnailProcessor(new ThumbnailProcessingOptions
+        var pipeline = new VideoThumbnailProcessor(new VideoThumbnailProcessingOptions
         {
             ImageTimestampFraction = 0.5,
         }).ToPipeline();
@@ -277,7 +277,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new ThumbnailProcessor(new ThumbnailProcessingOptions
+        var pipeline = new VideoThumbnailProcessor(new VideoThumbnailProcessingOptions
         {
             ImageTimestamp = TimeSpan.FromSeconds(2),
         }).ToPipeline();
@@ -304,7 +304,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new ThumbnailProcessor(ThumbnailProcessingOptions.Standard).ToPipeline();
+        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard).ToPipeline();
 
         var origFile = _videoFilesDir.CombineFile(videoFileName);
         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
@@ -359,7 +359,7 @@ partial class Tests
             TestContext.CancellationToken);
 
         // Extract thumbnail from the combined video:
-        var pipeline = new ThumbnailProcessor(ThumbnailProcessingOptions.Standard).ToPipeline();
+        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard).ToPipeline();
 
         await using var stream = FilePath.ParseAbsolute(combinedVideoPath).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -401,7 +401,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new ThumbnailProcessor(ThumbnailProcessingOptions.Standard with
+        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard with
         {
             ForceSquarePixels = forceSquarePixels,
         }).ToPipeline();
@@ -429,7 +429,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new ThumbnailProcessor(ThumbnailProcessingOptions.Standard).ToPipeline();
+        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard).ToPipeline();
 
         // video143.mp4 has a resolution of 64x65534, which exceeds the max height.
         var videoPath = _videoFilesDir.CombineFile("video143.mp4");
