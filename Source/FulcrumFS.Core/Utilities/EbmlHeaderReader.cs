@@ -1,32 +1,16 @@
-using Singulink.IO;
-
-namespace FulcrumFS.Videos;
+namespace FulcrumFS.Utilities;
 
 /// <summary>
-/// Reads the EBML DocType element from a Matroska/WebM file. Returns a value such as "matroska" or "webm".
+/// Reads the EBML DocType element from a Matroska/WebM stream. Returns a value such as "matroska" or "webm".
 /// </summary>
 internal static class EbmlHeaderReader
 {
     private const int HeaderReadSize = 64;
 
-    public static async Task<string?> ReadDocTypeAsync(IAbsoluteFilePath filePath, CancellationToken cancellationToken)
+    public static async ValueTask<string?> ReadDocTypeAsync(Stream stream, CancellationToken cancellationToken)
     {
-        byte[] buffer = new byte[HeaderReadSize];
-        int totalRead = 0;
-        var stream = filePath.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read);
-        await using (stream.ConfigureAwait(false))
-        {
-            while (totalRead < buffer.Length)
-            {
-                int read = await stream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead), cancellationToken).ConfigureAwait(false);
-                if (read == 0)
-                    break;
-
-                totalRead += read;
-            }
-        }
-
-        return TryReadDocType(buffer.AsSpan(0, totalRead));
+        byte[] buffer = await StreamSignatureUtils.ReadHeaderAsync(stream, HeaderReadSize, cancellationToken).ConfigureAwait(false);
+        return TryReadDocType(buffer);
     }
 
     private static string? TryReadDocType(ReadOnlySpan<byte> data)
@@ -38,7 +22,8 @@ internal static class EbmlHeaderReader
             if (data[i] != 0x42 || data[i + 1] != 0x82)
                 continue;
 
-            // The element data length follows as a VINT. For DocType strings ("matroska", "webm") the length is small, so a 1-byte VINT (0x81-0x8F) is expected.
+            // The element data length follows as a VINT. For DocType strings ("matroska", "webm") the length is small,
+            // so a 1-byte VINT (0x81-0x8F) is expected.
             byte lenByte = data[i + 2];
             if (lenByte < 0x81 || lenByte > 0x8F)
                 continue;
@@ -58,7 +43,7 @@ internal static class EbmlHeaderReader
                 }
 
                 // DocType is restricted to printable ASCII.
-                if (b < 0x20 || b > 0x7E)
+                if (b is < 0x20 or > 0x7E)
                     return null;
             }
 

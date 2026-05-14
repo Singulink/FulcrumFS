@@ -11,6 +11,8 @@ public abstract partial class ImageFormat
     {
         public BmpFormat() : base(LibFormats.Bmp.BmpFormat.Instance) { }
 
+        public override FulcrumFS.FileFormat FileFormat => FulcrumFS.FileFormat.Bmp;
+
         public override string Name => "BMP";
 
         public override bool SupportsTransparency => true;

@@ -7,4 +7,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="SampleFiles\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

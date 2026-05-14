@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 <picture>
     <source media="(prefers-color-scheme: dark)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Dark.png">
     <source media="(prefers-color-scheme: light)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Light.png">
@@ -22,6 +22,7 @@ Details of each component are provided below:
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Videos** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
 **Supported Runtimes**: .NET 10.0+
 
@@ -44,7 +45,7 @@ This package is part of our **Singulink Libraries** collection. Visit https://gi
 
 ### FulcrumFS
 
-Core library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system.
+Main library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system.
 
 **Features**:
 
@@ -59,15 +60,25 @@ Core library that enables transactional file storage and processing, providing a
 ✔️ Fully compatible with file system features like encryption and compression  
 ✔️ Designed to work seamlessly with existing backup, redundancy, replication, and storage tools  
 
-### FulcrumFS.Core
+#### FulcrumFS.Core
 
-Core library that is mostly useful for access to the `FileId` type and repository paths from projects that do not need the full file processing capabilities of the main `FulcrumFS` library (e.g. in a client application that needs to convert file IDs received from a service to resulting path).
+A lightweight library that exposes the `FileId` type, repository paths, and the standalone **`FileFormat`** content validation API. It can be used independently of the main `FulcrumFS` library; for example, in a client application that needs to convert file IDs received from a service to a resulting path, or to pre-validate user-selected files in a front-end **before** uploading them to a service that hosts a FulcrumFS repository.
 
-### FulcrumFS.Images
+The `FileFormat` API ships with built-in singletons for common formats (`Jpeg`, `Png`, `Pdf`, `Mp4`, `Mkv`, `Docx`, `Zip`, and many more), factory methods for text formats (`TextAscii`, `TextUnicode`, `TextEncoding`) and content-agnostic types (`AnyContent`), and is extensible so you can derive your own `FileFormat` for custom formats. Validation returns a `FileFormatValidationResult` (valid or invalid with an error message) rather than throwing, so callers can handle outcomes however they prefer.
+
+The main `FulcrumFS` library uses `FileFormat` via the `FileFormatValidationProcessor`, which integrates validation into a processing pipeline and converts invalid results to `FileProcessingException`s.
+
+#### FulcrumFS.Images
 
 Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
-Image processing is provided by the fantastic [`ImageSharp`](https://github.com/SixLabors/ImageSharp) library.
+Image processing is provided by the fantastic [ImageSharp](https://github.com/SixLabors/ImageSharp) library.
+
+#### FulcrumFS.Videos
+
+Optional extension that adds customizable video processing capabilities, including validation, thumbnail generation, resizing, format conversion, metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.
+
+Video processing is provided by `FFmpeg` and `FFprobe`.
 
 ## Further Reading
 

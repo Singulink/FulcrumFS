@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Singulink.IO;
 
 namespace FulcrumFS.Videos;
@@ -10,20 +11,23 @@ namespace FulcrumFS.Videos;
 /// </summary>
 internal static class FFprobeUtils
 {
+    private static ConfigurationInfo _configInfo;
+    private static volatile bool _configInfoInitialized;
+
+    public static ref readonly ConfigurationInfo Configuration
+    {
+        get
+        {
+            EnsureConfigurationInfoInitialized();
+            return ref _configInfo;
+        }
+    }
+
     public sealed class VideoFileInfo(string formatName, double? duration, ImmutableArray<StreamInfo> streams)
     {
         public string FormatName { get; } = formatName;
         public double? Duration { get; } = duration;
         public ImmutableArray<StreamInfo> Streams { get; } = streams;
-
-        /// <summary>Gets the ISO BMFF major_brand from the file's ftyp box, if present (only set for mov/mp4/m4a/3gp/3g2/mj2 family files).</summary>
-        public string? MajorBrand { get; init; }
-
-        /// <summary>Gets the ISO BMFF compatible_brands from the file's ftyp box, if present.</summary>
-        public ImmutableArray<string> CompatibleBrands { get; init; } = [];
-
-        /// <summary>Gets the MPEG-TS packet size, if reported by ffprobe (188 for .ts, 192 for .mts/.m2ts).</summary>
-        public int? PacketSize { get; init; }
     }
 
     public abstract record StreamInfo;
@@ -80,40 +84,6 @@ internal static class FFprobeUtils
         bool IsTimedThumbnails)
     : StreamInfo;
 
-    private static int? ReadInt32Property(JsonElement element, string propertyName)
-    {
-        if (element.TryGetProperty(propertyName, out var propElement) &&
-            propElement.ValueKind == JsonValueKind.Number &&
-            propElement.TryGetInt32(out int value))
-        {
-            return value;
-        }
-
-        return null;
-    }
-
-    private static string? ReadStringProperty(JsonElement element, string propertyName)
-    {
-        if (element.TryGetProperty(propertyName, out var propElement) && propElement.ValueKind == JsonValueKind.String)
-        {
-            return propElement.GetString();
-        }
-
-        return null;
-    }
-
-    private static double? ReadStringPropertyAsDouble(JsonElement element, string propertyName)
-    {
-        string? strValue = ReadStringProperty(element, propertyName);
-        return (strValue != null && double.TryParse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)) ? value : null;
-    }
-
-    private static int? ReadStringPropertyAsInt32(JsonElement element, string propertyName)
-    {
-        string? strValue = ReadStringProperty(element, propertyName);
-        return (strValue != null && int.TryParse(strValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)) ? value : null;
-    }
-
     public static async Task<VideoFileInfo> GetVideoFileAsync(IAbsoluteFilePath filePath, CancellationToken cancellationToken = default)
     {
         // Get the ffprobe JSON output for the file:
@@ -123,190 +93,95 @@ internal static class FFprobeUtils
             isShortLived: true,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        // Parse the JSON output:
         cancellationToken.ThrowIfCancellationRequested();
-        using var document = JsonDocument.Parse(json);
-        var (streams, streamsCount) = document.RootElement.TryGetProperty("streams", out var streamsElement) && streamsElement.ValueKind == JsonValueKind.Array
-            ? (streamsElement.EnumerateArray(), streamsElement.GetArrayLength())
-            : (default, 0);
-        cancellationToken.ThrowIfCancellationRequested();
+        var dto = JsonSerializer.Deserialize(json, FFprobeJsonContext.Default.FFprobeOutputData)
+            ?? throw new InvalidOperationException("ffprobe returned empty JSON output.");
 
-        // Read each stream's info:
-        double? duration;
-        var builder = ImmutableArray.CreateBuilder<StreamInfo>(streamsCount);
-        foreach (var stream in streams)
+        var streamDtos = dto.Streams ?? [];
+        var builder = ImmutableArray.CreateBuilder<StreamInfo>(streamDtos.Count);
+        foreach (var s in streamDtos)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string? codecName = ReadStringProperty(stream, "codec_name");
-            string? codecType = ReadStringProperty(stream, "codec_type");
-            string? codecTagString = ReadStringProperty(stream, "codec_tag_string");
-            string? profile = ReadStringProperty(stream, "profile");
-            int width = ReadInt32Property(stream, "width") ?? -1;
-            int height = ReadInt32Property(stream, "height") ?? -1;
-            string? rFrameRate = ReadStringProperty(stream, "r_frame_rate");
-            duration = ReadStringPropertyAsDouble(stream, "duration");
-            string? pixelFormat = ReadStringProperty(stream, "pix_fmt");
-            string? colorRange = ReadStringProperty(stream, "color_range");
-            string? colorSpace = ReadStringProperty(stream, "color_space");
-            string? colorTransfer = ReadStringProperty(stream, "color_transfer");
-            string? colorPrimaries = ReadStringProperty(stream, "color_primaries");
-            int bitsPerSample = ReadStringPropertyAsInt32(stream, "bits_per_raw_sample") ?? -1;
-            int channels = ReadInt32Property(stream, "channels") ?? -1;
-            int? sampleRate = ReadStringPropertyAsInt32(stream, "sample_rate");
-            string? sar = ReadStringProperty(stream, "sample_aspect_ratio");
-            string? fieldOrder = ReadStringProperty(stream, "field_order");
-            string? channelLayout = ReadStringProperty(stream, "channel_layout");
-
-            int attachedPicValue = 0, timedThumbnailsValue = 0, stillImageValue = 0, defaultStreamValue = 0, badCandidateForThumbnailValue = 0;
-            if (stream.TryGetProperty("disposition", out var dispositionsProp) && dispositionsProp.ValueKind == JsonValueKind.Object)
-            {
-                attachedPicValue = ReadInt32Property(dispositionsProp, "attached_pic") ?? 0;
-                timedThumbnailsValue = ReadInt32Property(dispositionsProp, "timed_thumbnails") ?? 0;
-                stillImageValue = ReadInt32Property(dispositionsProp, "still_image") ?? 0;
-                defaultStreamValue = ReadInt32Property(dispositionsProp, "default") ?? 0;
-                badCandidateForThumbnailValue =
-                    (ReadInt32Property(dispositionsProp, "dub") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "comment") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "lyrics") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "karaoke") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "forced") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "hearing_impaired") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "visual_impaired") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "clean_effects") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "non_diegetic") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "captions") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "descriptions") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "metadata") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "dependent") ?? 0) |
-                    (ReadInt32Property(dispositionsProp, "multilayer") ?? 0);
-            }
-
-            string? language = null, title = null, alphaMode = null;
-            if (stream.TryGetProperty("tags", out var tagsProp) && tagsProp.ValueKind == JsonValueKind.Object)
-            {
-                language = ReadStringProperty(tagsProp, "language");
-                title = ReadStringProperty(tagsProp, "title");
-                alphaMode = ReadStringProperty(tagsProp, "alpha_mode");
-            }
-
-            switch (codecType)
-            {
-                case "video":
-                    int fpsNum = 0, fpsDen = 0;
-                    if (rFrameRate != null)
-                    {
-                        int idx = rFrameRate.IndexOf('/');
-                        if (idx > 0 &&
-                            int.TryParse(rFrameRate.AsSpan(0, idx), CultureInfo.InvariantCulture, out int num) &&
-                            int.TryParse(rFrameRate.AsSpan(idx + 1), CultureInfo.InvariantCulture, out int den) &&
-                            num > 0 &&
-                            den > 0)
-                        {
-                            fpsNum = num;
-                            fpsDen = den;
-                        }
-                    }
-
-                    int sarNum = 1, sarDen = 1;
-                    if (sar != null)
-                    {
-                        sarNum = -1;
-                        sarDen = -1;
-                        int idx = sar.IndexOf(':');
-                        if (idx > 0 &&
-                            int.TryParse(sar.AsSpan(0, idx), CultureInfo.InvariantCulture, out int num) &&
-                            int.TryParse(sar.AsSpan(idx + 1), CultureInfo.InvariantCulture, out int den) &&
-                            num > 0 &&
-                            den > 0)
-                        {
-                            sarNum = num;
-                            sarDen = den;
-                        }
-                    }
-
-                    builder.Add(new VideoStreamInfo(
-                        codecName!,
-                        codecTagString!,
-                        profile,
-                        language,
-                        attachedPicValue != 0,
-                        timedThumbnailsValue != 0,
-                        stillImageValue != 0,
-                        defaultStreamValue != 0,
-                        badCandidateForThumbnailValue != 0,
-                        width,
-                        height,
-                        duration,
-                        fpsNum,
-                        fpsDen,
-                        sarNum,
-                        sarDen,
-                        pixelFormat,
-                        colorRange,
-                        colorSpace,
-                        colorTransfer,
-                        colorPrimaries,
-                        fieldOrder,
-                        bitsPerSample,
-                        alphaMode == "1"));
-                    break;
-
-                case "audio":
-                    builder.Add(new AudioStreamInfo(codecName!, profile, language, duration, channels, sampleRate, channelLayout));
-                    break;
-
-                case "subtitle":
-                    builder.Add(new SubtitleStreamInfo(codecName!, language, title));
-                    break;
-
-                default:
-                    char codecChar = codecType switch
-                    {
-                        "data" => 'd',
-                        "attachment" => 't',
-                        _ => '\0',
-                    };
-                    builder.Add(new UnrecognizedStreamInfo(codecType!, codecName, language, codecChar, attachedPicValue != 0, timedThumbnailsValue != 0));
-                    break;
-            }
+            builder.Add(ConvertStream(s));
         }
 
-        // Read format-level info:
-        var formatElement = document.RootElement.GetProperty("format");
-        string? formatName = ReadStringProperty(formatElement, "format_name");
-        duration = ReadStringPropertyAsDouble(formatElement, "duration");
-        int? packetSize = ReadStringPropertyAsInt32(formatElement, "packet_size");
+        return new VideoFileInfo(dto.Format?.FormatName ?? string.Empty, dto.Format?.Duration, builder.DrainToImmutable());
+    }
 
-        string? majorBrand = null;
-        ImmutableArray<string> compatibleBrands = [];
-        if (formatElement.TryGetProperty("tags", out var formatTagsProp) && formatTagsProp.ValueKind == JsonValueKind.Object)
+    private static StreamInfo ConvertStream(FFprobeStreamData s)
+    {
+        var d = s.Disposition;
+        var t = s.Tags;
+
+        bool attachedPic = (d?.AttachedPic ?? 0) != 0;
+        bool timedThumbnails = (d?.TimedThumbnails ?? 0) != 0;
+        string? language = t?.Language;
+
+        switch (s.CodecType)
         {
-            // Brands are exactly 4 bytes; do not trim because some valid brands (e.g., "qt  ", "M4A ") contain trailing spaces.
-            majorBrand = ReadStringProperty(formatTagsProp, "major_brand");
+            case "video":
+                (int fpsNum, int fpsDen) = ParseFraction(s.RFrameRate, '/', defaultIfMissing: (0, 0));
+                (int sarNum, int sarDen) = ParseFraction(s.SampleAspectRatio, ':', defaultIfMissing: (1, 1));
 
-            string? compatibleBrandsStr = ReadStringProperty(formatTagsProp, "compatible_brands");
-            if (compatibleBrandsStr != null)
-            {
-                // compatible_brands is a sequence of 4-byte brand codes concatenated together (with no separator).
-                var brands = ImmutableArray.CreateBuilder<string>(compatibleBrandsStr.Length / 4);
-                for (int i = 0; i + 4 <= compatibleBrandsStr.Length; i += 4)
+                return new VideoStreamInfo(
+                    s.CodecName!,
+                    s.CodecTagString!,
+                    s.Profile,
+                    language,
+                    attachedPic,
+                    timedThumbnails,
+                    (d?.StillImage ?? 0) != 0,
+                    (d?.Default ?? 0) != 0,
+                    d?.IsBadThumbnailCandidate ?? false,
+                    s.Width ?? -1,
+                    s.Height ?? -1,
+                    s.Duration,
+                    fpsNum,
+                    fpsDen,
+                    sarNum,
+                    sarDen,
+                    s.PixFmt,
+                    s.ColorRange,
+                    s.ColorSpace,
+                    s.ColorTransfer,
+                    s.ColorPrimaries,
+                    s.FieldOrder,
+                    s.BitsPerRawSample ?? -1,
+                    t?.IsAlphaMode ?? false);
+
+            case "audio":
+                return new AudioStreamInfo(s.CodecName!, s.Profile, language, s.Duration, s.Channels ?? -1, s.SampleRate, s.ChannelLayout);
+
+            case "subtitle":
+                return new SubtitleStreamInfo(s.CodecName!, language, t?.Title);
+
+            default:
+                char codecChar = s.CodecType switch
                 {
-                    string brand = compatibleBrandsStr.Substring(i, 4);
-                    if (brand.Length > 0)
-                        brands.Add(brand);
-                }
+                    "data" => 'd',
+                    "attachment" => 't',
+                    _ => '\0',
+                };
+                return new UnrecognizedStreamInfo(s.CodecType!, s.CodecName, language, codecChar, attachedPic, timedThumbnails);
+        }
+    }
 
-                compatibleBrands = brands.DrainToImmutable();
-            }
+    private static (int Num, int Den) ParseFraction(string? value, char separator, (int Num, int Den) defaultIfMissing)
+    {
+        if (value is null)
+            return defaultIfMissing;
+
+        int idx = value.IndexOf(separator);
+        if (idx > 0 &&
+            int.TryParse(value.AsSpan(0, idx), CultureInfo.InvariantCulture, out int num) &&
+            int.TryParse(value.AsSpan(idx + 1), CultureInfo.InvariantCulture, out int den) &&
+            num > 0 &&
+            den > 0)
+        {
+            return (num, den);
         }
 
-        // Return the result:
-        return new(formatName!, duration, builder.DrainToImmutable())
-        {
-            MajorBrand = majorBrand,
-            CompatibleBrands = compatibleBrands,
-            PacketSize = packetSize,
-        };
+        return (-1, -1);
     }
 
     public struct ConfigurationInfo
@@ -358,9 +233,6 @@ internal static class FFprobeUtils
         public bool SupportsBwdifFilter { get; set; }
         public bool SupportsSetsarFilter { get; set; }
     }
-
-    private static ConfigurationInfo _configInfo;
-    private static volatile bool _configInfoInitialized;
 
     private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(
         string command,
@@ -541,13 +413,71 @@ internal static class FFprobeUtils
             _configInfoInitialized = true;
         }
     }
-
-    public static ref readonly ConfigurationInfo Configuration
-    {
-        get
-        {
-            EnsureConfigurationInfoInitialized();
-            return ref _configInfo;
-        }
-    }
 }
+
+internal sealed record FFprobeOutputData(FFprobeFormatData? Format, List<FFprobeStreamData>? Streams);
+
+internal sealed record FFprobeFormatData(string? FormatName, double? Duration);
+
+internal sealed record FFprobeStreamData(
+    string? CodecName,
+    string? CodecType,
+    string? CodecTagString,
+    string? Profile,
+    int? Width,
+    int? Height,
+    [property: JsonPropertyName("r_frame_rate")] string? RFrameRate,
+    double? Duration,
+    string? PixFmt,
+    string? ColorRange,
+    string? ColorSpace,
+    string? ColorTransfer,
+    string? ColorPrimaries,
+    int? BitsPerRawSample,
+    int? Channels,
+    int? SampleRate,
+    string? SampleAspectRatio,
+    string? FieldOrder,
+    string? ChannelLayout,
+    FFprobeDispositionData? Disposition,
+    FFprobeTagsData? Tags);
+
+internal sealed record FFprobeDispositionData(
+    int? AttachedPic,
+    int? TimedThumbnails,
+    int? StillImage,
+    int? Default,
+    int? Dub,
+    int? Comment,
+    int? Lyrics,
+    int? Karaoke,
+    int? Forced,
+    int? HearingImpaired,
+    int? VisualImpaired,
+    int? CleanEffects,
+    int? NonDiegetic,
+    int? Captions,
+    int? Descriptions,
+    int? Metadata,
+    int? Dependent,
+    int? Multilayer)
+{
+    /// <summary>Gets a value indicating whether this stream's disposition flags mark it as a poor thumbnail candidate.</summary>
+    [JsonIgnore]
+    public bool IsBadThumbnailCandidate =>
+        Dub is 1 || Comment is 1 || Lyrics is 1 || Karaoke is 1 || Forced is 1 || HearingImpaired is 1 || VisualImpaired is 1 || CleanEffects is 1 ||
+        NonDiegetic is 1 || Captions is 1 || Descriptions is 1 || Metadata is 1 || Dependent is 1 || Multilayer is 1;
+}
+
+internal sealed record FFprobeTagsData(string? Language, string? Title, string? AlphaMode)
+{
+    /// <summary>Gets a value indicating whether the alpha_mode tag is set (value "1"); ffprobe emits all tag values as strings.</summary>
+    [JsonIgnore]
+    public bool IsAlphaMode => AlphaMode == "1";
+}
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
+    NumberHandling = JsonNumberHandling.AllowReadingFromString)]
+[JsonSerializable(typeof(FFprobeOutputData))]
+internal sealed partial class FFprobeJsonContext : JsonSerializerContext;

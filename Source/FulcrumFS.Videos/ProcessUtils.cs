@@ -53,6 +53,19 @@ internal static class ProcessUtils
         return semaphore;
     }
 
+    private static void KillProcessSafely(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+            // Ignore exceptions from killing the process.
+        }
+    }
+
     private static async ValueTask RedirectStreamAsync(StreamReader reader, TextWriter writer, bool runAsynchronously, CancellationToken cancellationToken)
     {
         // Rent a buffer that we can use for reading/writing:
@@ -155,38 +168,14 @@ internal static class ProcessUtils
                     }
                     else
                     {
-                        using var registration = cancellationToken.Register(() =>
-                        {
-                            try
-                            {
-                                if (!process.HasExited)
-                                {
-                                    process.Kill(entireProcessTree: true);
-                                }
-                            }
-                            catch
-                            {
-                                // Ignore exceptions from killing the process.
-                            }
-                        });
+                        using var registration = cancellationToken.Register(() => KillProcessSafely(process));
                         process.WaitForExit();
                         cancellationToken.ThrowIfCancellationRequested(); // In case we exited due to cancellation.
                     }
                 }
                 catch (OperationCanceledException)
                 {
-                    try
-                    {
-                        if (!process.HasExited)
-                        {
-                            process.Kill(entireProcessTree: true);
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore exceptions from killing the process.
-                    }
-
+                    KillProcessSafely(process);
                     throw;
                 }
             }

@@ -159,44 +159,37 @@ public sealed class VideoThumbnailProcessor : FileProcessor
         {
             try
             {
-                try
-                {
-                    await FFmpegUtils.RunFFmpegCommandAsync(
-                        new FFmpegUtils.FFmpegCommand(
-                            inputFiles: [(inputFile, Seek: seek)],
-                            outputFile: outputImageFile,
-                            perInputStreamOverrides:
-                            [
-                                new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: '\0', streamIndexWithinKind: idx, mapToOutput: true),
-                            ],
-                            perOutputStreamOverrides:
-                            [
-                                new FFmpegUtils.PerStreamCodecOverride(streamKind: 'v', streamIndexWithinKind: 0, codec: "png"),
-                                new FFmpegUtils.PerStreamFramesOverride(streamKind: 'v', streamIndexWithinKind: 0, frames: 1),
-                                .. additionalOutputStreamOverrides,
-                            ],
-                            mapChaptersFrom: -1,
-                            forceProgressiveDownloadSupport: false,
-                            isToMov: false),
-                        null,
-                        null,
-                        context.CancellationToken)
-                    .ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    throw new FileProcessingException("Failed to extract thumbnail image from video.", ex);
-                }
-
-                if (!outputImageFile.Exists || outputImageFile.Length == 0)
-                    throw new FileProcessingException("Failed to extract thumbnail image from video (result file was not written).");
-
-                return null;
+                await FFmpegUtils.RunFFmpegCommandAsync(
+                    new FFmpegUtils.FFmpegCommand(
+                        inputFiles: [(inputFile, Seek: seek)],
+                        outputFile: outputImageFile,
+                        perInputStreamOverrides:
+                        [
+                            new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: '\0', streamIndexWithinKind: idx, mapToOutput: true),
+                        ],
+                        perOutputStreamOverrides:
+                        [
+                            new FFmpegUtils.PerStreamCodecOverride(streamKind: 'v', streamIndexWithinKind: 0, codec: "png"),
+                            new FFmpegUtils.PerStreamFramesOverride(streamKind: 'v', streamIndexWithinKind: 0, frames: 1),
+                            .. additionalOutputStreamOverrides,
+                        ],
+                        mapChaptersFrom: -1,
+                        forceProgressiveDownloadSupport: false,
+                        isToMov: false),
+                    null,
+                    null,
+                    context.CancellationToken)
+                .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return ex;
+                return new FileProcessingException("Failed to extract thumbnail image from video.", ex);
             }
+
+            if (!outputImageFile.Exists || outputImageFile.Length == 0)
+                return new FileProcessingException("Failed to extract thumbnail image from video (result file was not written).");
+
+            return null;
         }
 
         // Run ffmpeg to extract thumbnail:

@@ -134,7 +134,7 @@ public sealed class ImageProcessor : FileProcessor
         if (formatMapping.SourceFormat != formatMapping.ResultFormat)
             hasRequiredChange = true;
 
-        string resultExtension = formatMapping.ResultFormat.Extensions.First();
+        string resultExtension = formatMapping.ResultFormat.PrimaryExtension;
 
         int sourceQuality = formatMapping.SourceFormat.GetJpegEquivalentQuality(info.Metadata);
         int resultQuality = Math.Min(sourceQuality, Options.Quality.ToJpegEquivalentQuality());

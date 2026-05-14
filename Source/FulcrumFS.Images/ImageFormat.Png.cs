@@ -15,6 +15,8 @@ public abstract partial class ImageFormat
     {
         public PngFormat() : base(SixLabors.ImageSharp.Formats.Png.PngFormat.Instance) { }
 
+        public override FulcrumFS.FileFormat FileFormat => FulcrumFS.FileFormat.Png;
+
         public override string Name => "PNG";
 
         public override bool SupportsTransparency => true;

@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using FulcrumFS.Utilities;
 using LibFormats = SixLabors.ImageSharp.Formats;
 using LibMetadata = SixLabors.ImageSharp.Metadata;
 
@@ -11,26 +10,31 @@ namespace FulcrumFS.Images;
 public abstract partial class ImageFormat
 {
     /// <summary>
-    /// Gets the JPEG image format.
+    /// Gets the JPEG image format. Extensions: <c>.jpg</c> (primary), <c>.jpeg</c>, <c>.jfif</c>.
     /// </summary>
     public static ImageFormat Jpeg { get; } = new JpegFormat();
 
     /// <summary>
-    /// Gets the PNG image format.
+    /// Gets the PNG image format. Extensions: <c>.png</c> (primary), <c>.apng</c>.
     /// </summary>
     public static ImageFormat Png { get; } = new PngFormat();
 
     /// <summary>
-    /// Gets the BMP image format.
+    /// Gets the BMP image format. Extensions: <c>.bmp</c> (primary), <c>.bm</c>, <c>.dip</c>.
     /// </summary>
     public static ImageFormat Bmp { get; } = new BmpFormat();
 
     internal static ImmutableArray<ImageFormat> AllFormats { get; } = [Jpeg, Png, Bmp];
 
     /// <summary>
+    /// Gets the corresponding <see cref="FulcrumFS.FileFormat"/> used for content validation and extension mapping.
+    /// </summary>
+    public abstract FileFormat FileFormat { get; }
+
+    /// <summary>
     /// Gets the file extensions associated with this image format (including the leading '.').
     /// </summary>
-    public IReadOnlyList<string> Extensions => field ??= [.. LibFormat.FileExtensions.Select(ext => FileExtension.Normalize("." + ext))];
+    public IReadOnlyList<string> Extensions => FileFormat.Extensions;
 
     /// <summary>
     /// Gets the primary file extension associated with this image format (including the leading '.').
@@ -38,7 +42,7 @@ public abstract partial class ImageFormat
     /// <remarks>
     /// The primary extension is the first extension in <see cref="Extensions"/> and all files of this format will be written with this extension.
     /// </remarks>
-    public string PrimaryExtension => Extensions[0];
+    public string PrimaryExtension => FileFormat.PrimaryExtension;
 
     /// <summary>
     /// Gets the name of the image format (e.g., "JPEG", "PNG", "GIF").

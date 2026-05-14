@@ -5,69 +5,106 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public abstract class VideoCodec
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="VideoCodec"/> class.
-    /// Private constructor to prevent external inheritance.
-    /// </summary>
     private VideoCodec()
     {
     }
 
     /// <summary>
-    /// Gets the H.262 (MPEG-2 Part 2) video codec, does not support encoding.
+    /// Gets the H.262 (MPEG-2 Part 2) video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec H262 { get; } = new H262Impl();
+    public static VideoCodec H262 { get; } = new Impl(
+        name: "mpeg2video",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsMpeg2VideoDecoder);
 
     /// <summary>
-    /// Gets the H.263 video codec, does not support encoding.
+    /// Gets the H.263 video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec H263 { get; } = new H263Impl();
+    public static VideoCodec H263 { get; } = new Impl(
+        name: "h263",
+        writableFileExtension: ".3gp",
+        supportsMP4Muxing: false,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsH263Decoder);
 
     /// <summary>
-    /// Gets the H.264 (AVC) video codec, supports encoding.
+    /// Gets the H.264 (AVC) video codec. Supports encoding.
     /// </summary>
-    public static VideoCodec H264 { get; } = new H264Impl();
+    public static VideoCodec H264 { get; } = new Impl(
+        name: "h264",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: true,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsH264Decoder);
 
     /// <summary>
     /// <para>
-    /// Gets the H.265 (HEVC) video codec, supports encoding.</para>
+    /// Gets the H.265 (HEVC) video codec. Supports encoding.</para>
     /// <para>
-    /// Note: this instance corresponds only to the 'hvc1' tag (which is more compatible), to refer to the 'hev1' tag / others, use <see cref="H265AnyTag" />.
+    /// Note: this instance corresponds only to the 'hvc1' tag (which is more compatible); to refer to the 'hev1' tag or others, use <see cref="H265AnyTag" />.
     /// </para><para>
-    /// Note: a video file can be lossly converted between to this tag without re-encoding, but would require remuxing.</para>
+    /// Note: a video file can be losslessly converted to this tag without re-encoding, but would require remuxing.</para>
     /// <para>
     /// Note: these tags are only relevant when muxing into MP4 container formats - this instance won't correspond to any stream outside of an mp4 container.
     /// </para>
     /// </summary>
-    public static VideoCodec H265 { get; } = new H265Impl();
+    public static VideoCodec H265 { get; } = new Impl(
+        name: "hevc",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: true,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsHEVCDecoder,
+        tagName: "hvc1");
 
     /// <summary>
     /// <para>
-    /// Gets the H.265 (HEVC) video codec, supports encoding.</para>
+    /// Gets the H.265 (HEVC) video codec. Supports encoding.</para>
     /// <para>
     /// Note: this instance corresponds to any hevc tag (e.g., 'hev1' or 'hvc1'), and does not change tag when used as output.</para>
     /// <para>
     /// Note: these tags are only relevant when muxing into MP4 container formats - this instance will match all H.265 streams in any container.</para>
     /// </summary>
-    public static VideoCodec H265AnyTag { get; } = new H265AnyTagImpl();
+    public static VideoCodec H265AnyTag { get; } = new Impl(
+        name: "hevc",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: true,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsHEVCDecoder);
 
     /// <summary>
-    /// Gets the H.266 (VVC) video codec, does not support encoding.
+    /// Gets the H.266 (VVC) video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec H266 { get; } = new H266Impl();
+    public static VideoCodec H266 { get; } = new Impl(
+        name: "vvc",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsVVCDecoder);
 
     /// <summary>
-    /// Gets the MPEG-1 (Part 2) video codec, does not support encoding.
+    /// Gets the MPEG-1 (Part 2) video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec Mpeg1 { get; } = new Mpeg1Impl();
+    public static VideoCodec Mpeg1 { get; } = new Impl(
+        name: "mpeg1video",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsMpeg1VideoDecoder);
 
     /// <inheritdoc cref="H262" />
     public static VideoCodec Mpeg2 => H262;
 
     /// <summary>
-    /// Gets the MPEG-4 (Part 2) video codec, does not support encoding.
+    /// Gets the MPEG-4 (Part 2) video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec Mpeg4 { get; } = new Mpeg4Impl();
+    public static VideoCodec Mpeg4 { get; } = new Impl(
+        name: "mpeg4",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsMpeg4Decoder);
 
     /// <inheritdoc cref="H264" />
     public static VideoCodec AVC => H264;
@@ -82,19 +119,34 @@ public abstract class VideoCodec
     public static VideoCodec VVC => H266;
 
     /// <summary>
-    /// Gets the VP8 video codec, does not support encoding.
+    /// Gets the VP8 video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec VP8 { get; } = new VP8Impl();
+    public static VideoCodec VP8 { get; } = new Impl(
+        name: "vp8",
+        writableFileExtension: ".webm",
+        supportsMP4Muxing: false,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsVP8Decoder);
 
     /// <summary>
-    /// Gets the VP9 video codec, does not support encoding.
+    /// Gets the VP9 video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec VP9 { get; } = new VP9Impl();
+    public static VideoCodec VP9 { get; } = new Impl(
+        name: "vp9",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsVP9Decoder);
 
     /// <summary>
-    /// Gets the AV1 video codec, does not support encoding.
+    /// Gets the AV1 video codec. Does not support encoding.
     /// </summary>
-    public static VideoCodec AV1 { get; } = new AV1Impl();
+    public static VideoCodec AV1 { get; } = new Impl(
+        name: "av1",
+        writableFileExtension: ".mp4",
+        supportsMP4Muxing: true,
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsAV1Decoder);
 
     /// <summary>
     /// Gets a list of all supported video codecs (with encodable ones first).
@@ -127,7 +179,7 @@ public abstract class VideoCodec
     /// <summary>
     /// Gets a value indicating whether this codec supports encoding, as some codecs only support decoding.
     /// </summary>
-    public virtual bool SupportsEncoding => false;
+    public abstract bool SupportsEncoding { get; }
 
     /// <summary>
     /// Gets the name of the codec as used in ffprobe output (codec_name).
@@ -145,97 +197,26 @@ public abstract class VideoCodec
     internal abstract bool HasSupportedDecoder { get; }
 
     // Internal helper to get the supported tag names that this codec can correspond to:
-    internal virtual string? TagName => null;
+    internal abstract string? TagName { get; }
 
-    private sealed class H262Impl : VideoCodec
+    private sealed class Impl(
+        string name,
+        string writableFileExtension,
+        bool supportsMP4Muxing,
+        bool supportsEncoding,
+        Func<bool> hasSupportedDecoder,
+        string? tagName = null) : VideoCodec
     {
-        public override string Name => "mpeg2video";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMpeg2VideoDecoder;
-    }
+        public override bool SupportsEncoding { get; } = supportsEncoding;
 
-    private sealed class H263Impl : VideoCodec
-    {
-        public override string Name => "h263";
-        internal override string WritableFileExtension => ".3gp";
-        internal override bool SupportsMP4Muxing => false;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsH263Decoder;
-    }
+        public override string Name { get; } = name;
 
-    private sealed class H264Impl : VideoCodec
-    {
-        public override bool SupportsEncoding => true;
-        public override string Name => "h264";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsH264Decoder;
-    }
+        internal override string WritableFileExtension { get; } = writableFileExtension;
 
-    private sealed class H265Impl : VideoCodec
-    {
-        public override bool SupportsEncoding => true;
-        public override string Name => "hevc";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsHEVCDecoder;
-        internal override string? TagName => "hvc1";
-    }
+        internal override bool SupportsMP4Muxing { get; } = supportsMP4Muxing;
 
-    private sealed class H265AnyTagImpl : VideoCodec
-    {
-        public override bool SupportsEncoding => true;
-        public override string Name => "hevc";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsHEVCDecoder;
-    }
+        internal override bool HasSupportedDecoder => hasSupportedDecoder();
 
-    private sealed class H266Impl : VideoCodec
-    {
-        public override string Name => "vvc";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVVCDecoder;
-    }
-
-    private sealed class Mpeg1Impl : VideoCodec
-    {
-        public override string Name => "mpeg1video";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMpeg1VideoDecoder;
-    }
-
-    private sealed class Mpeg4Impl : VideoCodec
-    {
-        public override string Name => "mpeg4";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsMpeg4Decoder;
-    }
-
-    private sealed class VP8Impl : VideoCodec
-    {
-        public override string Name => "vp8";
-        internal override string WritableFileExtension => ".webm";
-        internal override bool SupportsMP4Muxing => false;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVP8Decoder;
-    }
-
-    private sealed class VP9Impl : VideoCodec
-    {
-        public override string Name => "vp9";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsVP9Decoder;
-    }
-
-    private sealed class AV1Impl : VideoCodec
-    {
-        public override string Name => "av1";
-        internal override string WritableFileExtension => ".mp4";
-        internal override bool SupportsMP4Muxing => true;
-        internal override bool HasSupportedDecoder => FFprobeUtils.Configuration.SupportsAV1Decoder;
+        internal override string? TagName { get; } = tagName;
     }
 }

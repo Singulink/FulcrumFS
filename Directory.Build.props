@@ -9,6 +9,8 @@
     <DebugSymbols>True</DebugSymbols>
 
     <DefaultLanguage>en</DefaultLanguage>
+    
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
     <WeaverConfiguration>
       <Weavers>
