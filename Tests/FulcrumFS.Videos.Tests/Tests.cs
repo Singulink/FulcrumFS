@@ -40,10 +40,10 @@ public sealed partial class Tests
             await txn.CommitAsync(TestContext.CancellationToken);
         }
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
-        var scaledDownPath = await repo.GetVariantAsync(fileId, "scaled_down");
+        var scaledDownPath = (await repo.GetVariantAsync(fileId, "scaled_down")).Path;
         scaledDownPath.Exists.ShouldBeTrue();
 
         await using (var txn = await repo.BeginTransactionAsync())

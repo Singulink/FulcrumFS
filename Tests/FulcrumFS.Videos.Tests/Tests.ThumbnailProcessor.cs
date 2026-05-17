@@ -35,7 +35,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var imagePath = await repo.GetAsync(fileId);
+        var imagePath = (await repo.GetAsync(fileId)).Path;
         imagePath.Exists.ShouldBeTrue();
 
         File.Copy(imagePath.PathExport, resultFile.PathExport);
@@ -63,7 +63,7 @@ partial class Tests
             var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
             await txn.CommitAsync(TestContext.CancellationToken);
 
-            return await repo.GetAsync(fileId);
+            return (await repo.GetAsync(fileId)).Path;
         }
 
         // Extract with both options set
@@ -116,7 +116,7 @@ partial class Tests
             var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
             await txn.CommitAsync(TestContext.CancellationToken);
 
-            return await repo.GetAsync(fileId);
+            return (await repo.GetAsync(fileId)).Path;
         }
 
         // Extract with IncludeThumbnailVideoStreams = true - should use embedded thumbnail stream:
@@ -177,7 +177,7 @@ partial class Tests
                         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
                         await txn.CommitAsync(TestContext.CancellationToken);
 
-                        var imagePath = await repo.GetAsync(fileId);
+                        var imagePath = (await repo.GetAsync(fileId)).Path;
                         imagePath.Exists.ShouldBeTrue();
 
                         // Verify it's a valid image by loading it:
@@ -220,7 +220,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var imagePath = await repo.GetAsync(fileId);
+        var imagePath = (await repo.GetAsync(fileId)).Path;
         imagePath.Exists.ShouldBeTrue();
 
         // Use ffprobe to check color properties of the resulting image:
@@ -313,7 +313,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var imagePath = await repo.GetAsync(fileId);
+        var imagePath = (await repo.GetAsync(fileId)).Path;
         imagePath.Exists.ShouldBeTrue();
 
         // Use ffprobe to get pix_fmt from the PNG:
@@ -367,7 +367,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, ".mp4", true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var thumbnailPath = await repo.GetAsync(fileId);
+        var thumbnailPath = (await repo.GetAsync(fileId)).Path;
         thumbnailPath.Exists.ShouldBeTrue();
 
         // Also extract thumbnails from the individual source videos for comparison:
@@ -375,13 +375,13 @@ partial class Tests
         await using var txn1 = await repo.BeginTransactionAsync();
         var fileId1 = (await txn1.AddAsync(stream1, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn1.CommitAsync(TestContext.CancellationToken);
-        var thumbnail1Path = await repo.GetAsync(fileId1);
+        var thumbnail1Path = (await repo.GetAsync(fileId1)).Path;
 
         await using var stream2 = file2.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
         await using var txn2 = await repo.BeginTransactionAsync();
         var fileId2 = (await txn2.AddAsync(stream2, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn2.CommitAsync(TestContext.CancellationToken);
-        var thumbnail2Path = await repo.GetAsync(fileId2);
+        var thumbnail2Path = (await repo.GetAsync(fileId2)).Path;
 
         // The thumbnail from the combined video should match video2 (the default stream), not video1:
         AreImagePixelsEqual(thumbnailPath.PathExport, thumbnail2Path.PathExport).ShouldBeTrue();
@@ -413,7 +413,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var imagePath = await repo.GetAsync(fileId);
+        var imagePath = (await repo.GetAsync(fileId)).Path;
         imagePath.Exists.ShouldBeTrue();
 
         // Verify the output dimensions:
@@ -439,7 +439,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, ".mp4", true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var imagePath = await repo.GetAsync(fileId);
+        var imagePath = (await repo.GetAsync(fileId)).Path;
         imagePath.Exists.ShouldBeTrue();
 
         // Verify the output dimensions are capped:

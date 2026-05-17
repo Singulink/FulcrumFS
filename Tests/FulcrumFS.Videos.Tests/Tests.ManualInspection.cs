@@ -89,7 +89,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -133,7 +133,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -212,7 +212,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, cancellationToken)).FileId;
         await txn.CommitAsync(cancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -323,7 +323,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, cancellationToken)).FileId;
         await txn.CommitAsync(cancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -382,7 +382,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, cancellationToken)).FileId;
         await txn.CommitAsync(cancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -428,7 +428,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -468,7 +468,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -509,7 +509,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -591,7 +591,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         // Copy the de-interlaced file to the results directory:
@@ -636,7 +636,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId!);
+        var videoPath = (await repo.GetAsync(fileId!)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
@@ -704,7 +704,7 @@ partial class Tests
         var fileId1 = (await txn1.AddAsync(stream1, true, pipeline1, TestContext.CancellationToken)).FileId;
         await txn1.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath1 = await repo.GetAsync(fileId1);
+        var videoPath1 = (await repo.GetAsync(fileId1)).Path;
         videoPath1.Exists.ShouldBeTrue();
         File.Copy(videoPath1.PathExport, outputPreserveMetadataReencoded.PathExport);
 
@@ -722,7 +722,7 @@ partial class Tests
         var fileId2 = (await txn2.AddAsync(stream2, true, pipeline2, TestContext.CancellationToken)).FileId;
         await txn2.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath2 = await repo.GetAsync(fileId2);
+        var videoPath2 = (await repo.GetAsync(fileId2)).Path;
         videoPath2.Exists.ShouldBeTrue();
         File.Copy(videoPath2.PathExport, outputPreserveMetadataRemuxed.PathExport);
 
@@ -739,7 +739,7 @@ partial class Tests
         var fileId3 = (await txn3.AddAsync(stream3, true, pipeline3, TestContext.CancellationToken)).FileId;
         await txn3.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath3 = await repo.GetAsync(fileId3);
+        var videoPath3 = (await repo.GetAsync(fileId3)).Path;
         videoPath3.Exists.ShouldBeTrue();
         File.Copy(videoPath3.PathExport, outputStripMetadata.PathExport);
     }
@@ -778,7 +778,7 @@ partial class Tests
         var fileIdH264 = (await txnH264.AddAsync(stream, true, pipelineH264, TestContext.CancellationToken)).FileId;
         await txnH264.CommitAsync(TestContext.CancellationToken);
 
-        var videoPathH264 = await repo.GetAsync(fileIdH264);
+        var videoPathH264 = (await repo.GetAsync(fileIdH264)).Path;
         videoPathH264.Exists.ShouldBeTrue();
 
         File.Copy(videoPathH264.PathExport, resultFileH264.PathExport);
@@ -794,7 +794,7 @@ partial class Tests
         var fileIdHEVC = (await txnHEVC.AddAsync(stream, true, pipelineHEVC, TestContext.CancellationToken)).FileId;
         await txnHEVC.CommitAsync(TestContext.CancellationToken);
 
-        var videoPathHEVC = await repo.GetAsync(fileIdHEVC);
+        var videoPathHEVC = (await repo.GetAsync(fileIdHEVC)).Path;
         videoPathHEVC.Exists.ShouldBeTrue();
 
         File.Copy(videoPathHEVC.PathExport, resultFileHEVC.PathExport);
@@ -874,7 +874,7 @@ partial class Tests
         var fileId1 = (await txn1.AddAsync(stream, true, pipeline1, TestContext.CancellationToken)).FileId;
         await txn1.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath1 = await repo.GetAsync(fileId1);
+        var videoPath1 = (await repo.GetAsync(fileId1)).Path;
         videoPath1.Exists.ShouldBeTrue();
         File.Copy(videoPath1.PathExport, outputPreserveMetadataReencoded.PathExport);
         await ValidateMetadata(outputPreserveMetadataReencoded, shouldHaveStartTime: true);
@@ -892,7 +892,7 @@ partial class Tests
         var fileId2 = (await txn2.AddAsync(stream, true, pipeline2, TestContext.CancellationToken)).FileId;
         await txn2.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath2 = await repo.GetAsync(fileId2);
+        var videoPath2 = (await repo.GetAsync(fileId2)).Path;
         videoPath2.Exists.ShouldBeTrue();
         File.Copy(videoPath2.PathExport, outputPreserveMetadataRemuxed.PathExport);
         await ValidateMetadata(outputPreserveMetadataRemuxed, shouldHaveStartTime: true);
@@ -909,7 +909,7 @@ partial class Tests
         var fileId3 = (await txn3.AddAsync(stream, true, pipeline3, TestContext.CancellationToken)).FileId;
         await txn3.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath3 = await repo.GetAsync(fileId3);
+        var videoPath3 = (await repo.GetAsync(fileId3)).Path;
         videoPath3.Exists.ShouldBeTrue();
         File.Copy(videoPath3.PathExport, outputStripMetadata.PathExport);
         await ValidateMetadata(outputStripMetadata, shouldHaveStartTime: false);
@@ -926,7 +926,7 @@ partial class Tests
         var fileId4 = (await txn4.AddAsync(stream, true, pipeline4, TestContext.CancellationToken)).FileId;
         await txn4.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath4 = await repo.GetAsync(fileId4);
+        var videoPath4 = (await repo.GetAsync(fileId4)).Path;
         videoPath4.Exists.ShouldBeTrue();
         File.Copy(videoPath4.PathExport, outputStripUnrecognizedStreams.PathExport);
         await ValidateMetadata(outputStripUnrecognizedStreams, shouldHaveStartTime: true);

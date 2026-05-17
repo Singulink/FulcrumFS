@@ -50,6 +50,22 @@ internal struct ExceptionListCapture(Func<Exception, bool>? catchExceptionFilter
     }
 
     [MemberNotNullWhen(false, nameof(ResultException))]
+    public async Task<bool> TryRunAsync(ValueTask task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (_catchExceptionFilter?.Invoke(ex) is not false)
+        {
+            (_exceptions ??= []).Add(ex);
+            Debug.Assert(HasExceptions, "Should have exception");
+            return false;
+        }
+    }
+
+    [MemberNotNullWhen(false, nameof(ResultException))]
     public async Task<bool> TryRunAsync(Task task)
     {
         try

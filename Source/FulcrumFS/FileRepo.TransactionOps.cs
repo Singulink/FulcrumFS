@@ -11,40 +11,14 @@ partial class FileRepo
     public async ValueTask<FileRepoTransaction> BeginTransactionAsync()
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
-        var txn = new FileRepoTransaction(this);
-
-        lock (_activeTransactions)
-            _activeTransactions.Add(txn);
-
-        return txn;
+        return new FileRepoTransaction(this);
     }
 
-    internal void UnregisterTransaction(FileRepoTransaction fileRepoTransaction)
-    {
-        lock (_activeTransactions)
-            _activeTransactions.Remove(fileRepoTransaction);
-    }
-
-    internal bool IsFilePendingTxnOutcome(FileId fileId)
-    {
-        lock (_activeTransactions)
-        {
-            foreach (var txn in _activeTransactions)
-            {
-                if (txn.IsFilePendingOutcome(fileId))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    internal async Task<AddFileResult> TxnAddAsync(
+    internal async Task<(RepoFileInfo Result, IAsyncDisposable IndeterminateMarker)> TxnAddAsync(
         Stream stream,
         string extension,
         bool leaveOpen,
         FileProcessingPipeline pipeline,
-        Action<FileId> onFileIdCreated,
         CancellationToken cancellationToken = default)
     {
         extension = FileExtension.Normalize(extension);
@@ -58,10 +32,10 @@ partial class FileRepo
 
             using (await _fileSync.LockAsync((fileId, null), cancellationToken).ConfigureAwait(false))
             {
-                var fileDir = GetFileDirectory(fileId);
+                var fileDir = GetFileDirectory(_filesDirectory, fileId);
                 var fileDirState = fileDir.State;
 
-                var deleteMarker = GetDeleteMarker(fileId, null);
+                var deleteMarker = GetDeleteMarker(_cleanupDirectory, fileId, null);
                 var deleteMarkerState = deleteMarker.State;
 
                 if (fileDirState is EntryState.Exists || deleteMarkerState is EntryState.Exists)
@@ -80,14 +54,12 @@ partial class FileRepo
             }
         }
 
-        onFileIdCreated.Invoke(fileId);
-
         try
         {
-            var result = await AddCommonAsyncCore(
-                fileId, variantId: null, stream, extension, sourceInRepo: false, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
+            var (dataFile, indeterminateMarkerHandle) = await AddAsyncCore(
+                fileId, stream, extension, sourceInRepo: false, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
 
-            return new(fileId, result);
+            return (new RepoFileInfo(fileId, variantId: null, dataFile), indeterminateMarkerHandle);
         }
         finally
         {
@@ -96,7 +68,7 @@ partial class FileRepo
         }
     }
 
-    internal async Task TxnDeleteAsync(FileId fileId)
+    internal async Task<IAsyncDisposable> TxnDeleteAsync(FileId fileId)
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
@@ -108,8 +80,8 @@ partial class FileRepo
                     throw new InvalidOperationException($"File ID '{fileId}' is currently being processed and cannot be deleted.");
             }
 
-            var fileDir = GetFileDirectory(fileId);
-            var deleteMarker = GetDeleteMarker(fileId, null);
+            var fileDir = GetFileDirectory(_filesDirectory, fileId);
+            var deleteMarker = GetDeleteMarker(_cleanupDirectory, fileId, null);
 
             switch (fileDir.State, deleteMarker.State)
             {
@@ -119,25 +91,37 @@ partial class FileRepo
                     throw new IOException("Repository directories are not accessible.");
             }
 
-            // Write an indeterminate marker file to mark the file as potentially deleted.
+            // Write an indeterminate marker to mark the file as potentially deleted and keep it open with a non-exclusive (shared) handle. Multiple
+            // concurrent transactions are allowed to share the marker, but cleanup operations probing it with an exclusive (FileShare.None) handle will be
+            // blocked while any transaction is still holding it.
 
-            var indeterminateMarker = GetIndeterminateMarker(fileId);
+            var indeterminateMarker = GetIndeterminateMarker(_cleanupDirectory, fileId);
             const string message = "A transaction tentatively has marked this file for deletion.";
-            await LogToMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message, markerRequired: true).ConfigureAwait(false);
+            return await OpenOrCreateSharedMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message, Options.MarkerFileLogging).ConfigureAwait(false);
         }
     }
 
-    internal async Task TxnCommitAddAsync(FileId fileId) =>
-        await DeleteIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
+    internal async ValueTask TxnCommitAddAsync(FileId fileId)
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
 
-    internal async Task TxnCommitDeleteAsync(FileId fileId) =>
-        await DeleteAsync(fileId, immediateDelete: false).ConfigureAwait(false);
+        using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
+            await ClearIndeterminateStateAsync(_cleanupDirectory, fileId, Options.MarkerFileLogging).ConfigureAwait(false);
+    }
 
-    internal async Task TxnRollbackAddAsync(FileId fileId) =>
+    internal async ValueTask TxnCommitDeleteAsync(FileId fileId) =>
+        await DeleteAsync(fileId, immediateDelete: Options.DeleteMode is DeleteMode.Immediate).ConfigureAwait(false);
+
+    internal async ValueTask TxnRollbackAddAsync(FileId fileId) =>
         await DeleteAsync(fileId, immediateDelete: true).ConfigureAwait(false);
 
-    internal async Task TxnRollbackDeleteAsync(FileId fileId) =>
-        await DeleteIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
+    internal async ValueTask TxnRollbackDeleteAsync(FileId fileId)
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
+            await ClearIndeterminateStateAsync(_cleanupDirectory, fileId, Options.MarkerFileLogging).ConfigureAwait(false);
+    }
 
     internal async Task OnTxnCommitErrorAsync(Exception ex)
     {

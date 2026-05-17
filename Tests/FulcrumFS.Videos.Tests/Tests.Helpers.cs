@@ -46,10 +46,11 @@ partial class Tests
         var repoDir = _appDir.CombineDirectory("RepoRoot" + Interlocked.Increment(ref _count).ToString(CultureInfo.InvariantCulture));
         repo = new(repoDir, options =>
         {
-            options.DeleteDelay = TimeSpan.Zero;
-            options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(120);
+            options.DeleteMode = DeleteMode.Immediate;
+            options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });
         ResetRepository(repoDir, clearOnly: false);
+        repo.EnsureCreated();
         var repoCopy = repo;
         return new DisposeHelper(() =>
         {
@@ -344,7 +345,7 @@ partial class Tests
         }
 
         // Get the processed video path:
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         if (expectedChanges is null)

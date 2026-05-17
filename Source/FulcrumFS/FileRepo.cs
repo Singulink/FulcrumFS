@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
 using Microsoft.IO;
-using Singulink.Collections;
 
 namespace FulcrumFS;
 
@@ -17,7 +16,8 @@ public sealed partial class FileRepo : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static RecyclableMemoryStreamManager MemoryStreamManager { get; } = new();
 
-    private IAbsoluteFilePath _lockFile;
+    private readonly IAbsoluteFilePath _infoFile;
+    private readonly IAbsoluteFilePath _lockFile;
     private FileStream? _lockStream;
     private int _lockStreamSize;
 
@@ -26,14 +26,14 @@ public sealed partial class FileRepo : IDisposable
     private readonly IAbsoluteDirectoryPath _cleanupDirectory;
 
     private readonly HashSet<FileId> _processingFiles = [];
-    private readonly WeakCollection<FileRepoTransaction> _activeTransactions = [];
 
     private readonly KeyLocker<(FileId FileId, string? VariantId)> _fileSync = new();
     private readonly AsyncLock _stateSync = new();
-    private readonly AsyncLock _cleanSync = new();
+
+    private FileRepoCleaner? _cleaner;
 
     private long _lastSuccessfulHealthCheck = long.MinValue;
-    private bool _isDisposed;
+    private volatile bool _isDisposed;
 
     /// <summary>
     /// Gets the configuration options for the file repository. The returned instance is frozen and cannot be modified.
@@ -82,7 +82,8 @@ public sealed partial class FileRepo : IDisposable
         options.Freeze();
         Options = options;
 
-        _lockFile = options.BaseDirectory.CombineFile(FileRepoPaths.LockFileName, PathOptions.None);
+        _infoFile = options.BaseDirectory.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None);
+        _lockFile = options.BaseDirectory.CombineFile(FileRepoPaths.RepoLockFileName, PathOptions.None);
         _filesDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.FilesDirectoryName, PathOptions.None);
         _tempDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.TempDirectoryName, PathOptions.None);
         _cleanupDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.CleanupDirectoryName, PathOptions.None);
@@ -109,14 +110,73 @@ public sealed partial class FileRepo : IDisposable
     }
 
     /// <summary>
-    /// Ensures that the file repository is initialized, creating necessary directories and acquiring locks.
+    /// Ensures that the file repository exists at the configured base directory, creating or repairing the required directory structure as necessary. May
+    /// also acquire the repository lock for an instance session via a subsequent operation.
     /// </summary>
-    public void EnsureInitialized()
+    /// <remarks>
+    /// <para>If the base directory does not exist or is empty, it is created and initialized as a FulcrumFS repository.</para>
+    /// <para>If the base directory contains an existing FulcrumFS repository (identified by the presence of the <see cref="FileRepoPaths.InfoFileName"/>
+    /// marker file), any missing required subdirectories are restored. Foreign files and folders alongside the repository are left untouched.</para>
+    /// <para>If the base directory exists, contains foreign content, and is not already a FulcrumFS repository, an exception is thrown rather than initializing
+    /// the directory as a repository.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The base directory contains content that does not belong to a FulcrumFS repository.</exception>
+    /// <exception cref="NotSupportedException">The repository was created by a newer incompatible version of FulcrumFS.</exception>
+    /// <exception cref="InvalidDataException">The repository info file is malformed.</exception>
+    public void EnsureCreated()
     {
         using (_stateSync.Lock())
         {
-            InitializeCore();
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+            bool infoExists = _infoFile.State is EntryState.Exists;
+
+            if (!infoExists)
+            {
+                // No marker file. Refuse to initialize a directory that already contains foreign content - this guards against accidentally pointing at the wrong
+                // directory (e.g. a typo). An empty or non-existent directory is treated as a fresh repository location.
+
+                var baseDirState = Options.BaseDirectory.State;
+
+                if (baseDirState is EntryState.Exists)
+                {
+                    if (Options.BaseDirectory.GetChildEntries().Any())
+                    {
+                        throw new InvalidOperationException(
+                            $"Cannot initialize a FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}': the directory contains content that does not " +
+                            $"belong to a repository. Repository directories must be empty or contain only repository-managed content on initial creation.");
+                    }
+                }
+                else
+                {
+                    Options.BaseDirectory.Create();
+                }
+
+                // Write the info marker FIRST so a crash mid-creation still leaves the directory identifiable as a (partial) FulcrumFS repository, allowing the
+                // next EnsureCreated call to enter the repair path and complete the structure.
+
+                RepoInfoFile.Write(_infoFile);
+            }
+            else
+            {
+                // Existing repository - verify we're allowed full access before attempting to repair structure or perform any operations.
+                RepoInfoFile.VerifyFullAccessSupported(_infoFile);
+            }
+
+            _filesDirectory.Create();
+            _cleanupDirectory.Create();
         }
+    }
+
+    /// <summary>
+    /// Ensures the file repository has been verified and the repository lock is acquired. The repository must already exist (call <see cref="EnsureCreated"/>
+    /// first if needed).
+    /// </summary>
+    /// <exception cref="DirectoryNotFoundException">The configured base directory is not a FulcrumFS repository or is missing required structure.</exception>
+    public void EnsureInitialized()
+    {
+        using (_stateSync.Lock())
+            InitializeCore();
     }
 
     /// <summary>
@@ -153,6 +213,16 @@ public sealed partial class FileRepo : IDisposable
             {
                 var elc = new ExceptionListCapture(ex => ex is IOException);
 
+                void CheckHealth()
+                {
+                    // Use a field to store our size rather than querying it, as querying it is an extra syscall - we use SetLength rather than just reading
+                    // Length as a "write" API could be more likely to fail if the file system is in a bad state than a "read" API.
+
+                    _lockStreamSize = (_lockStreamSize + 1) % 10;
+                    _lockStream.SetLength(_lockStreamSize);
+                    _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
+                }
+
                 if (_lockStream is not null && !elc.TryRun(CheckHealth))
                 {
                     _lockStream.Dispose();
@@ -173,21 +243,11 @@ public sealed partial class FileRepo : IDisposable
                 }
             }
         }
-
-        void CheckHealth()
-        {
-            // Use a variable to store our size rather than querying it, as querying it is an extra syscall - we use SetLength rather than just reading Length
-            // as a "write" API could be more likely to fail if the file system is in a bad state than a "read" API.
-            int newSize;
-            lock (_lockStream) newSize = _lockStreamSize = (_lockStreamSize + 1) % 10;
-            _lockStream.SetLength(newSize);
-
-            _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
-        }
     }
 
     /// <summary>
-    /// MUST BE CALLED WITHIN A STATE SYNC LOCK.
+    /// MUST BE CALLED WITHIN A STATE SYNC LOCK. Acquires the repository lock, verifies the repository structure exists, then prepares per-session state.
+    /// Does not create the repository - call <see cref="EnsureCreated"/> first if needed.
     /// </summary>
     private void InitializeCore()
     {
@@ -199,23 +259,17 @@ public sealed partial class FileRepo : IDisposable
         [MethodImpl(MethodImplOptions.NoInlining)]
         void InitializeCoreSlow()
         {
-            if (_isDisposed)
-            {
-                void Throw() => throw new ObjectDisposedException(nameof(FileRepo));
-                Throw();
-            }
-
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
             var lockStream = _lockFile.OpenStream(FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
 
             try
             {
+                VerifyRepoStructure();
+
                 _tempDirectory.Delete(recursive: true);
                 _tempDirectory.Create();
-                _tempDirectory.Attributes |= FileAttributes.Hidden;
-                _cleanupDirectory.Create();
-                _cleanupDirectory.Attributes |= FileAttributes.Hidden;
             }
-            catch (IOException)
+            catch
             {
                 lockStream.Dispose();
                 throw;
@@ -224,71 +278,78 @@ public sealed partial class FileRepo : IDisposable
             _lockStream = lockStream;
             _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
         }
-    }
 
-    private IAbsoluteFilePath GetDeleteMarker(FileId fileId, string? variant)
-    {
-        string name = variant is null ? fileId.ToString() : GetFileIdAndVariantString(fileId, variant);
-        return _cleanupDirectory.CombineFile(name + FileRepoPaths.DeleteMarkerExtension, PathOptions.None);
-    }
-
-    private IAbsoluteFilePath GetIndeterminateMarker(FileId fileId)
-    {
-        return _cleanupDirectory.CombineFile(fileId.ToString() + FileRepoPaths.IndeterminateMarkerExtension, PathOptions.None);
-    }
-
-    private IAbsoluteFilePath GetDataFile(FileId fileId, string extension, string? variantId = null)
-    {
-        string fileNamePart = variantId ?? FileRepoPaths.MainFileName;
-        string fullFileName = fileNamePart + extension;
-        return GetFileDirectory(fileId).CombineFile(fullFileName, PathOptions.None);
-    }
-
-    private IAbsoluteFilePath? FindDataFile(FileId fileId, string? variantId = null)
-    {
-        string fileNamePart = variantId ?? FileRepoPaths.MainFileName;
-
-        try
+        void VerifyRepoStructure()
         {
-            return GetFileDirectory(fileId).GetChildFiles(fileNamePart + ".*").SingleOrDefault();
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Gets the directory where the main file and its variants are stored for the specified file ID.
-    /// </summary>
-    private IAbsoluteDirectoryPath GetFileDirectory(FileId fileId) => _filesDirectory.Combine(fileId.RelativeDirectory);
-
-    private async Task LogToMarkerAsync<T>(IAbsoluteFilePath cleanupFile, string header, T message, bool markerRequired)
-    {
-        bool opened = false;
-
-        try
-        {
-            var stream = cleanupFile.OpenAsyncStream(FileMode.Append, FileAccess.Write, FileShare.Read | FileShare.Delete);
-            opened = true;
-
-            await using (stream.ConfigureAwait(false))
+            if (_infoFile.State is not EntryState.Exists)
             {
-                if (Options.MarkerFileLogging is LoggingMode.HumanReadable)
-                {
-                    var sw = new StreamWriter(stream, leaveOpen: true);
+                if (Options.BaseDirectory.State is not EntryState.Exists)
+                    throw new DirectoryNotFoundException($"The file repository base directory '{Options.BaseDirectory.PathDisplay}' was not found.");
 
-                    string entry =
-                        $"=============== {header} ===============\r\n\r\n" +
-                        $"Timestamp: {DateTimeOffset.Now}\r\n\r\n" +
-                        $"{message}\r\n\r\n";
+                throw new DirectoryNotFoundException(
+                    $"The directory '{Options.BaseDirectory.PathDisplay}' is not an initialized FulcrumFS repository. " +
+                    $"Call '{nameof(EnsureCreated)}' to initialize it.");
+            }
 
-                    await using (sw.ConfigureAwait(false))
-                        await sw.WriteLineAsync(entry).ConfigureAwait(false);
-                }
+            RepoInfoFile.VerifyFullAccessSupported(_infoFile);
+
+            if (_filesDirectory.State is not EntryState.Exists || _cleanupDirectory.State is not EntryState.Exists)
+            {
+                throw new DirectoryNotFoundException(
+                    $"The FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}' is in an incomplete state. " +
+                    $"Call '{nameof(EnsureCreated)}' to repair it.");
             }
         }
-        catch (IOException) when (opened || !markerRequired || cleanupFile.State is EntryState.Exists) { }
+    }
+
+    // TODO: remove on next major release after FulcrumFS 0.x. Consumers that have legacy repositories will then get a compile error notifying them that legacy
+    // migration is no longer supported and they must run an older version of the library at least once to migrate first.
+
+    /// <summary>
+    /// Migrates a repository created by early pre-release legacy versions of FulcrumFS that used dot-prefixed <c>.temp</c> and <c>.cleanup</c> directory names
+    /// to the current layout. Must be called before <see cref="EnsureCreated"/> or any other operation on hosts that may still have legacy repositories on
+    /// disk. Safe to call on already-migrated or non-existent repositories - it is a no-op when no legacy artifacts are present.
+    /// </summary>
+    /// <remarks>
+    /// This method exists only as a one-time migration aid and will be removed in a future release.
+    /// </remarks>
+    public void MigrateLegacyLayout()
+    {
+        using (_stateSync.Lock())
+        {
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+            const string legacyTempName = ".temp";
+            const string legacyCleanupName = ".cleanup";
+
+            var legacyTemp = Options.BaseDirectory.CombineDirectory(legacyTempName, PathOptions.None);
+            var legacyCleanup = Options.BaseDirectory.CombineDirectory(legacyCleanupName, PathOptions.None);
+
+            bool legacyTempExists = legacyTemp.State is EntryState.Exists;
+            bool legacyCleanupExists = legacyCleanup.State is EntryState.Exists;
+
+            if (!legacyTempExists && !legacyCleanupExists)
+                return;
+
+            // Legacy temp dir is transient - just delete if present.
+            if (legacyTempExists)
+                legacyTemp.Delete(recursive: true);
+
+            // Legacy cleanup dir contains delete/indeterminate markers - rename to the new name, preserving contents.
+            if (legacyCleanupExists && _cleanupDirectory.State is not EntryState.Exists)
+            {
+                // Strip the hidden attribute from the legacy directory so the new (non-hidden) layout is consistent after migration.
+                try { legacyCleanup.Attributes &= ~FileAttributes.Hidden; }
+                catch (IOException) { /* best-effort */ }
+
+                Directory.Move(legacyCleanup.PathExport, _cleanupDirectory.PathExport);
+            }
+
+            // Legacy repositories pre-date the info marker file. Stamp one now so the migrated repo is identifiable as a v1 FulcrumFS repository and subsequent
+            // EnsureCreated / open paths don't mistake the existing files/cleanup folders for foreign content.
+            if (_infoFile.State is not EntryState.Exists)
+                RepoInfoFile.Write(_infoFile);
+        }
     }
 
     /// <summary>
@@ -296,7 +357,7 @@ public sealed partial class FileRepo : IDisposable
     /// </summary>
     private static string GetFileIdAndVariantString(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
 
-    private static bool TryParseFileIdAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
+    internal static bool TryParseFileIdAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
     {
         int separatorIndex = entryName.IndexOf(' ');
 

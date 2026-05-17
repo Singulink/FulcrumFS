@@ -1,0 +1,18 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Source/">
+    <Project Path="Source/FulcrumFS.Core/FulcrumFS.Core.csproj" />
+    <Project Path="Source/FulcrumFS.Images/FulcrumFS.Images.csproj" />
+    <Project Path="Source/FulcrumFS.Videos/FulcrumFS.Videos.csproj" />
+    <Project Path="Source/FulcrumFS/FulcrumFS.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/FulcrumFS.Images.Tests/FulcrumFS.Images.Tests.csproj" />
+    <Project Path="Tests/FulcrumFS.Tests/FulcrumFS.Tests.csproj" />
+    <Project Path="Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj" />
+  </Folder>
+</Solution>

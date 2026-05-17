@@ -83,7 +83,7 @@ partial class Tests
         fileId20 = (await txn20.AddAsync(stream20, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn20.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath20 = await repo.GetAsync(fileId20!);
+        var videoPath20 = (await repo.GetAsync(fileId20!)).Path;
         videoPath20.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (this subtitle has an unknown language):
@@ -103,7 +103,7 @@ partial class Tests
         fileId21 = (await txn21.AddAsync(stream21, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn21.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath21 = await repo.GetAsync(fileId21!);
+        var videoPath21 = (await repo.GetAsync(fileId21!)).Path;
         videoPath21.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (the subtitle has "eng" language):
@@ -123,7 +123,7 @@ partial class Tests
         fileId163 = (await txn163.AddAsync(stream163, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn163.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath163 = await repo.GetAsync(fileId163!);
+        var videoPath163 = (await repo.GetAsync(fileId163!)).Path;
         videoPath163.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (the video stream has "eng" language, and the audio stream has "fre" language):
@@ -176,7 +176,7 @@ partial class Tests
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         var (outputOriginal, _, returnCodeOriginal) = await RunFFtoolProcess(
@@ -224,7 +224,7 @@ partial class Tests
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         var (outputOriginal, _, returnCodeOriginal) = await RunFFtoolProcess(
@@ -273,7 +273,7 @@ partial class Tests
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         // Check that the language metadata is preserved in the modified file (the video stream has "eng" language, and the audio stream has "fre" language):
@@ -328,7 +328,7 @@ partial class Tests
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         var (outputOriginal, _, returnCodeOriginal) = await RunFFtoolProcess(

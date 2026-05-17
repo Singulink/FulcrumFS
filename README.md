@@ -70,13 +70,13 @@ The main `FulcrumFS` library uses `FileFormat` via the `FileFormatValidationProc
 
 #### FulcrumFS.Images
 
-Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
+Extension package that adds customizable image processing capabilities to file processing pipelines, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
 Image processing is provided by the fantastic [ImageSharp](https://github.com/SixLabors/ImageSharp) library.
 
 #### FulcrumFS.Videos
 
-Optional extension that adds customizable video processing capabilities, including validation, thumbnail generation, resizing, format conversion, metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.
+Extension package that adds customizable video processing capabilities to file processing pipelines, including validation, thumbnail generation, resizing, format conversion, metadata stripping, bitrate limiting and audio stripping.
 
 Video processing is provided by `FFmpeg` and `FFprobe`.
 

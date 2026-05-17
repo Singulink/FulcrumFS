@@ -1,0 +1,38 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup Label="Runtime">
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+    <PackageVersion Include="Nito.AsyncEx.Coordination" Version="5.1.2" />
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+  </ItemGroup>
+
+  <ItemGroup Label="Singulink">
+    <PackageVersion Include="Singulink.Collections" Version="3.3.3" />
+    <PackageVersion Include="Singulink.Collections.Weak" Version="2.2.0" />
+    <PackageVersion Include="Singulink.Enums" Version="2.4.0" />
+    <PackageVersion Include="Singulink.IO.FileSystem" Version="3.0.1" />
+    <PackageVersion Include="Singulink.Threading" Version="2.1.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Analyzers">
+    <PackageVersion Include="DotNetAnalyzers.DocumentationAnalyzers" Version="1.0.0-beta.59" />
+    <PackageVersion Include="hamarb123.Analyzers" Version="1.2.2" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="4.14.0" />
+    <PackageVersion Include="Roslyn.Diagnostics.Analyzers" Version="5.0.0-1.25277.114" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.15.0" />
+    <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
+  </ItemGroup>
+
+  <ItemGroup Label="Weavers">
+    <PackageVersion Include="RuntimeNullables.Fody" Version="2.1.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="PrefixClassName.MsTest" Version="2.0.0" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+  </ItemGroup>
+</Project>

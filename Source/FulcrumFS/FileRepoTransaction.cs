@@ -7,7 +7,12 @@ public sealed class FileRepoTransaction : IAsyncDisposable
 {
     private readonly HashSet<FileId> _added = [];
     private readonly HashSet<FileId> _deleted = [];
-    private readonly HashSet<FileId> _pendingOutcome = [];
+
+    /// <summary>
+    /// Tracks the exclusive open handle on each pending file's indeterminate marker. Keeping these open is what signals to cleanup operations that the
+    /// transaction is still active and the markers must not be resolved.
+    /// </summary>
+    private readonly Dictionary<FileId, IAsyncDisposable> _indeterminateMarkers = [];
 
     private readonly AsyncLock _sync = new();
 
@@ -18,7 +23,10 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// </summary>
     public FileRepo Repository
     {
-        get => !_isDisposed ? field : throw new ObjectDisposedException(nameof(FileRepoTransaction));
+        get {
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+            return field;
+        }
         private init;
     }
 
@@ -38,7 +46,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <param name="pipeline">The processing pipeline to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The file ID and extension of the resulting file.</returns>
-    public Task<AddFileResult> AddAsync(FileStream stream, bool leaveOpen, FileProcessingPipeline pipeline, CancellationToken cancellationToken = default)
+    public Task<RepoFileInfo> AddAsync(FileStream stream, bool leaveOpen, FileProcessingPipeline pipeline, CancellationToken cancellationToken = default)
     {
         string extension = FilePath.ParseAbsolute(stream.Name, PathOptions.None).Extension;
         return AddAsync(stream, extension, leaveOpen, pipeline, cancellationToken);
@@ -53,7 +61,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <param name="pipeline">The processing pipeline to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The file ID and extension of the resulting file.</returns>
-    public async Task<AddFileResult> AddAsync(
+    public async Task<RepoFileInfo> AddAsync(
         Stream stream,
         string extension,
         bool leaveOpen,
@@ -62,16 +70,11 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     {
         using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
 
-        var result = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, OnFileIdCreated, cancellationToken).ConfigureAwait(false);
+        var (result, indeterminateMarker) = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
         _added.Add(result.FileId);
+        _indeterminateMarkers[result.FileId] = indeterminateMarker;
 
         return result;
-
-        void OnFileIdCreated(FileId fileId)
-        {
-            lock (_pendingOutcome)
-                _pendingOutcome.Add(fileId);
-        }
     }
 
     /// <summary>
@@ -83,19 +86,15 @@ public sealed class FileRepoTransaction : IAsyncDisposable
 
         if (_added.Contains(fileId))
         {
+            await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
             await Repository.TxnRollbackAddAsync(fileId).ConfigureAwait(false);
             _added.Remove(fileId);
-
-            lock (_pendingOutcome)
-                _pendingOutcome.Remove(fileId);
         }
         else
         {
-            await Repository.TxnDeleteAsync(fileId).ConfigureAwait(false);
+            var indeterminateMarker = await Repository.TxnDeleteAsync(fileId).ConfigureAwait(false);
             _deleted.Add(fileId);
-
-            lock (_pendingOutcome)
-                _pendingOutcome.Add(fileId);
+            _indeterminateMarkers[fileId] = indeterminateMarker;
         }
     }
 
@@ -110,22 +109,31 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         {
             foreach (var fileId in _added)
             {
-                await elc.TryRunAsync(Repository.TxnCommitAddAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(CommitAddAsync(fileId)).ConfigureAwait(false);
                 _added.Remove(fileId);
             }
 
             foreach (var fileId in _deleted)
             {
-                await elc.TryRunAsync(Repository.TxnCommitDeleteAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(CommitDeleteAsync(fileId)).ConfigureAwait(false);
                 _deleted.Remove(fileId);
             }
-
-            lock (_pendingOutcome)
-                _pendingOutcome.Clear();
         }
 
         if (elc.HasExceptions)
             await Repository.OnTxnCommitErrorAsync(elc.ResultException).ConfigureAwait(false);
+
+        async Task CommitAddAsync(FileId fileId)
+        {
+            await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
+            await Repository.TxnCommitAddAsync(fileId).ConfigureAwait(false);
+        }
+
+        async Task CommitDeleteAsync(FileId fileId)
+        {
+            await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
+            await Repository.TxnCommitDeleteAsync(fileId).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -141,15 +149,29 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         if (_isDisposed)
             return;
 
+        var repository = Repository;
+        _isDisposed = true;
+
         try
         {
-            var repository = Repository;
-            _isDisposed = true;
-
             await RollbackAsync(repository, default).ConfigureAwait(false);
-            repository.UnregisterTransaction(this);
         }
         catch { }
+
+        // Defensive: ensure any remaining marker handles are released even if RollbackAsync failed to do so. This avoids leaking exclusive file handles
+        // that would block cleanup from resolving the markers later.
+
+        if (_indeterminateMarkers.Count > 0)
+        {
+            var remainingHandles = _indeterminateMarkers.Values.ToArray();
+            _indeterminateMarkers.Clear();
+
+            foreach (var handle in remainingHandles)
+            {
+                try { await handle.DisposeAsync().ConfigureAwait(false); }
+                catch { }
+            }
+        }
     }
 
     private async Task RollbackAsync(FileRepo repository, CancellationToken cancellationToken)
@@ -160,27 +182,36 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         {
             foreach (var fileId in _added)
             {
-                await elc.TryRunAsync(repository.TxnRollbackAddAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(RollbackAddAsync(fileId)).ConfigureAwait(false);
                 _added.Remove(fileId);
             }
 
             foreach (var fileId in _deleted)
             {
-                await elc.TryRunAsync(repository.TxnRollbackDeleteAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(RollbackDeleteAsync(fileId)).ConfigureAwait(false);
                 _deleted.Remove(fileId);
             }
-
-            lock (_pendingOutcome)
-                _pendingOutcome.Clear();
         }
 
         if (elc.HasExceptions)
             await repository.OnTxnRollbackErrorAsync(elc.ResultException).ConfigureAwait(false);
+
+        async Task RollbackAddAsync(FileId fileId)
+        {
+            await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
+            await repository.TxnRollbackAddAsync(fileId).ConfigureAwait(false);
+        }
+
+        async Task RollbackDeleteAsync(FileId fileId)
+        {
+            await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
+            await repository.TxnRollbackDeleteAsync(fileId).ConfigureAwait(false);
+        }
     }
 
-    internal bool IsFilePendingOutcome(FileId fileId)
+    private async ValueTask ReleaseIndeterminateMarkerAsync(FileId fileId)
     {
-        lock (_pendingOutcome)
-            return _pendingOutcome.Contains(fileId);
+        if (_indeterminateMarkers.Remove(fileId, out var handle))
+            await handle.DisposeAsync().ConfigureAwait(false);
     }
 }

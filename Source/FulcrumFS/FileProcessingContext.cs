@@ -196,7 +196,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
     }
 
     /// <summary>
-    /// Asynchronously releases the resources used by the instance.
+    /// Asynchronously releases the resources used by the instance, including disposing the source (if owned) and deleting the temporary working directory.
     /// </summary>
     public async ValueTask DisposeAsync()
     {
@@ -204,6 +204,7 @@ public sealed class FileProcessingContext : IAsyncDisposable
             await disposable.DisposeAsync().ConfigureAwait(false);
 
         _source = null;
+        _tempWorkingDir.TryDelete(recursive: true, out _);
     }
 
     internal async Task SetResultAsync(FileProcessingResult result, bool oneStepLeft)

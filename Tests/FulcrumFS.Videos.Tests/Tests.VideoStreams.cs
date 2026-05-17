@@ -715,7 +715,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         // Validate our expectations:
@@ -844,7 +844,7 @@ partial class Tests
             await using var txn = await repo.BeginTransactionAsync();
             var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
             await txn.CommitAsync(TestContext.CancellationToken);
-            videoPath = await repo.GetAsync(fileId);
+            videoPath = (await repo.GetAsync(fileId)).Path;
             videoPath.Exists.ShouldBeTrue();
         }
 
@@ -955,7 +955,7 @@ partial class Tests
         await using var txn = await repo.BeginTransactionAsync();
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         if (!shouldReencode)
@@ -1311,7 +1311,7 @@ partial class Tests
             await txn.CommitAsync(TestContext.CancellationToken);
         }
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         // Verify output dimensions match expected scaled size
@@ -1380,7 +1380,7 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         // Verify output dimensions match expected rounded size

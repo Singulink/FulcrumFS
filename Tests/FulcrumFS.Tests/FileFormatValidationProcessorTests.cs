@@ -8,8 +8,8 @@ public sealed class FileFormatValidationProcessorTests
     private static readonly IAbsoluteDirectoryPath _sampleDir = _appDir.CombineDirectory("SampleFiles");
 
     private static readonly FileRepo _repo = new(_repoDir, options => {
-        options.DeleteDelay = TimeSpan.Zero;
-        options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(120);
+        options.DeleteMode = DeleteMode.Immediate;
+        options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
     });
 
     private static bool _initialized;
@@ -95,6 +95,7 @@ public sealed class FileFormatValidationProcessorTests
                 _repoDir.Delete(true);
 
             _repoDir.Create();
+            _repo.EnsureCreated();
         }
     }
 }

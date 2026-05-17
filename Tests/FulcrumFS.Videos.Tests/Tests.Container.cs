@@ -75,7 +75,7 @@ partial class Tests
         fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var videoPath = await repo.GetAsync(fileId);
+        var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
         // Check that the original file was not progressive download, and the new one is (note: the check is very basic & could be fooled, but is sufficient

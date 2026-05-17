@@ -40,26 +40,30 @@ public class FileRepoOptions
     }
 
     /// <summary>
-    /// Gets or sets the time delay between when files are marked for deletion and when they are physically deleted from the repository. A value of <see
-    /// cref="TimeSpan.Zero"/> indicates immediate deletion upon transaction commit. Default is 1 hour.
+    /// Gets or sets the mode used when files are deleted through the repository. Default is <see cref="DeleteMode.DeferredUntilClean"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A delete delay is important for concurrent open transactions to have access to deleted files for a period of time. It can also be used to enable
-    /// recovery of files that were mistakenly deleted, or to allow scheduled file backups to run before files are physically deleted.</para>
+    /// In <see cref="DeleteMode.DeferredUntilClean"/> mode, a delete marker is written when a delete operation completes (or when a transaction containing the
+    /// deletion commits), and the physical deletion happens later when a <see cref="FileRepoCleaner"/> clean operation processes markers older than the delete
+    /// delay specified to <see cref="FileRepoCleaner.CleanAsync(TimeSpan, CancellationToken)"/>. This allows concurrent open transactions to access deleted
+    /// files for a period of time, supports recovery of files that were mistakenly deleted, and allows scheduled file backups to run before files are
+    /// physically deleted.</para>
+    /// <para>
+    /// In <see cref="DeleteMode.Immediate"/> mode, files are physically deleted as soon as the delete operation completes (or when a transaction containing
+    /// the deletion commits). No delete marker is written and no grace period is observed.</para>
     /// <para>
     /// This setting does not affect immediate deletion of files when a file add operation gets rolled back, e.g. when a transaction that added a file is rolled
     /// back or the file is deleted within the same transaction that added it.</para>
     /// </remarks>
-    public TimeSpan DeleteDelay
-    {
+    public DeleteMode DeleteMode {
         get;
         set {
             EnsureNotFrozen();
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero, nameof(value));
+            value.ThrowIfNotDefined();
             field = value;
         }
-    } = TimeSpan.FromHours(1);
+    } = DeleteMode.DeferredUntilClean;
 
     /// <summary>
     /// Gets or sets the mode used to generate file IDs in the repository. Default is <see cref="FileIdMode.Secure"/>.
@@ -119,14 +123,14 @@ public class FileRepoOptions
 
     /// <summary>
     /// Gets or sets the maximum time that repository operations will wait for successful I/O access to the repository before throwing a <see
-    /// cref="TimeoutException"/>. Must be between 1 second and <see cref="int.MaxValue"/> milliseconds (inclusive). Default is 8 seconds.
+    /// cref="TimeoutException"/>. Must be between 1 second and 1 minute (inclusive). Default is 8 seconds.
     /// </summary>
     public TimeSpan MaxAccessWaitOrRetryTime {
         get;
         set {
             EnsureNotFrozen();
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.FromSeconds(1));
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, TimeSpan.FromMilliseconds(int.MaxValue));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, TimeSpan.FromMinutes(1));
 
             field = value;
         }

@@ -15,8 +15,8 @@ public sealed class Tests
     private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot");
 
     private static readonly FileRepo _repo = new(_repoDir, options => {
-        options.DeleteDelay = TimeSpan.Zero;
-        options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(120);
+        options.DeleteMode = DeleteMode.Immediate;
+        options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
     });
 
     private static bool _initialized;
@@ -81,10 +81,10 @@ public sealed class Tests
             await txn.CommitAsync(TestContext.CancellationToken);
         }
 
-        var imagePath = await _repo.GetAsync(fileId);
+        var imagePath = (await _repo.GetAsync(fileId)).Path;
         imagePath.Exists.ShouldBeTrue();
 
-        var thumbnailPath = await _repo.GetVariantAsync(fileId, "thumbnail");
+        var thumbnailPath = (await _repo.GetVariantAsync(fileId, "thumbnail")).Path;
         imagePath.Exists.ShouldBeTrue();
 
         await using (var txn = await _repo.BeginTransactionAsync())
@@ -122,10 +122,10 @@ public sealed class Tests
             await txn.CommitAsync(TestContext.CancellationToken);
         }
 
-        var highest = await _repo.GetAsync(fileId);
-        var high = await _repo.GetVariantAsync(fileId, "high");
-        var medium = await _repo.GetVariantAsync(fileId, "medium");
-        var low = await _repo.GetVariantAsync(fileId, "low");
+        var highest = (await _repo.GetAsync(fileId)).Path;
+        var high = (await _repo.GetVariantAsync(fileId, "high")).Path;
+        var medium = (await _repo.GetVariantAsync(fileId, "medium")).Path;
+        var low = (await _repo.GetVariantAsync(fileId, "low")).Path;
 
         highest.Length.ShouldBeGreaterThan(high.Length);
         high.Length.ShouldBeGreaterThan(medium.Length);
@@ -174,31 +174,31 @@ public sealed class Tests
             await txn.CommitAsync(TestContext.CancellationToken);
         }
 
-        using (var image = Image.Load((await _repo.GetAsync(fileId)).PathExport))
+        using (var image = Image.Load((await _repo.GetAsync(fileId)).Path.PathExport))
         {
             image.Width.ShouldBe(1024);
             image.Height.ShouldBe(768);
         }
 
-        using (var max = Image.Load((await _repo.GetVariantAsync(fileId, "max")).PathExport))
+        using (var max = Image.Load((await _repo.GetVariantAsync(fileId, "max")).Path.PathExport))
         {
             max.Width.ShouldBe(1024);
             max.Height.ShouldBe(768);
         }
 
-        using (var crop = Image.Load((await _repo.GetVariantAsync(fileId, "crop")).PathExport))
+        using (var crop = Image.Load((await _repo.GetVariantAsync(fileId, "crop")).Path.PathExport))
         {
             crop.Width.ShouldBe(768);
             crop.Height.ShouldBe(768);
         }
 
-        using (var pad1 = Image.Load((await _repo.GetVariantAsync(fileId, "pad1")).PathExport))
+        using (var pad1 = Image.Load((await _repo.GetVariantAsync(fileId, "pad1")).Path.PathExport))
         {
             pad1.Width.ShouldBe(800);
             pad1.Height.ShouldBe(800);
         }
 
-        using (var pad2 = Image.Load((await _repo.GetVariantAsync(fileId, "pad2")).PathExport))
+        using (var pad2 = Image.Load((await _repo.GetVariantAsync(fileId, "pad2")).Path.PathExport))
         {
             pad2.Width.ShouldBe(1024);
             pad2.Height.ShouldBe(1024);
@@ -276,6 +276,7 @@ public sealed class Tests
                 _repoDir.Delete(true);
 
             _repoDir.Create();
+            _repo.EnsureCreated();
         }
     }
 }
