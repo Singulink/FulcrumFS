@@ -14,11 +14,11 @@ partial class FileRepo
         return new FileRepoTransaction(this);
     }
 
-    internal async Task<(RepoFileInfo Result, IAsyncDisposable IndeterminateMarker)> TxnAddAsync(
+    internal async Task<(RepoFileGroupInfo Result, IAsyncDisposable IndeterminateMarker)> TxnAddAsync(
         Stream stream,
         string extension,
         bool leaveOpen,
-        FileProcessingPipeline pipeline,
+        IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
         extension = FileExtension.Normalize(extension);
@@ -56,10 +56,7 @@ partial class FileRepo
 
         try
         {
-            var (dataFile, indeterminateMarkerHandle) = await AddAsyncCore(
-                fileId, stream, extension, sourceInRepo: false, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
-
-            return (new RepoFileInfo(fileId, variantId: null, dataFile), indeterminateMarkerHandle);
+            return await AddTransactionalAsyncCore(fileId, stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

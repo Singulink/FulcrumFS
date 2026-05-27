@@ -3,323 +3,570 @@ using System.Diagnostics;
 namespace FulcrumFS;
 
 /// <content>
-/// Contains the implementation of main file add functionality for the file repository.
+/// Contains the implementation of add functionality for the file repository (main file via transaction + variants), including the recursive auto-variant
+/// runner and the batch-move commit step.
 /// </content>
 partial class FileRepo
 {
-    /// <inheritdoc cref="AddVariantAsync(FileId, string, string?, FileProcessingPipeline, CancellationToken)"/>
-    public Task<RepoFileInfo> AddVariantAsync(
+    private enum VariantAddMode
+    {
+        Add,
+        Try,
+        GetOrAdd,
+    }
+
+    private sealed class StagedNode
+    {
+        public required string? VariantId;
+        public required IAbsoluteFilePath Path;
+        public required string Extension;
+        public required FileProcessingContext? Context;
+        public required bool IsExisting;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Public variant-add API
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <inheritdoc cref="AddVariantAsync(FileId, string, string?, IFileProcessingPipelineSelector, CancellationToken)"/>
+    public Task<IReadOnlyList<RepoFileInfo>> AddVariantAsync(
         FileId fileId,
         string variantId,
-        FileProcessingPipeline pipeline,
+        IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        return AddVariantAsync(fileId, variantId, null, pipeline, cancellationToken);
+        return AddVariantAsync(fileId, variantId, sourceVariantId: null, pipeline, cancellationToken);
     }
 
     /// <summary>
-    /// Adds a new file variant to an existing file in the repository, processing it through the specified file pipeline.
+    /// Adds a new file variant (and any nested auto-variants declared by the pipeline) to an existing file in the repository.
     /// </summary>
     /// <param name="fileId">The ID of the main file to which the variant will be added.</param>
-    /// <param name="variantId">The ID of the variant to be added. Must only contain ASCII letters, digits, hyphens and underscores.</param>
+    /// <param name="variantId">The ID of the top-level variant to be added.</param>
     /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
-    /// <param name="pipeline">The processing pipeline to use for the variant.</param>
+    /// <param name="pipeline">The pipeline provider used to process the top-level variant.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <exception cref="InvalidOperationException">The variant already exists or is currently being processed by another operation.</exception>
-    public async Task<RepoFileInfo> AddVariantAsync(
+    /// <returns>The list of stored variants in pre-order (top-level first, then nested in declaration order). Variants whose pipelines were skipped due to
+    /// <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/> are omitted.</returns>
+    /// <exception cref="InvalidOperationException">A variant in the requested tree already exists.</exception>
+    public async Task<IReadOnlyList<RepoFileInfo>> AddVariantAsync(
         FileId fileId,
         string variantId,
         string? sourceVariantId,
-        FileProcessingPipeline pipeline,
+        IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        var addResult = await TryAddVariantAsync(fileId, variantId, sourceVariantId, pipeline, cancellationToken).ConfigureAwait(false);
-
-        if (addResult is null)
-        {
-            string message = $"File ID '{fileId}' variant '{variantId}' already exists or is currently being processed by another operation.";
-            throw new InvalidOperationException(message);
-        }
-
-        return addResult;
+        var result = await RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.Add, cancellationToken).ConfigureAwait(false);
+        Debug.Assert(result is not null, "Add mode should never return null.");
+        return result;
     }
 
-    /// <inheritdoc cref="GetOrAddVariantAsync(FileId, string, string?, FileProcessingPipeline, CancellationToken)"/>
-    public Task<RepoFileInfo> GetOrAddVariantAsync(
+    /// <inheritdoc cref="GetOrAddVariantAsync(FileId, string, string?, IFileProcessingPipelineSelector, CancellationToken)"/>
+    public Task<IReadOnlyList<RepoFileInfo>> GetOrAddVariantAsync(
         FileId fileId,
         string variantId,
-        FileProcessingPipeline pipeline,
+        IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        return GetOrAddVariantAsync(fileId, variantId, null, pipeline, cancellationToken);
+        return GetOrAddVariantAsync(fileId, variantId, sourceVariantId: null, pipeline, cancellationToken);
     }
 
     /// <summary>
-    /// Adds a new file variant to an existing file in the repository if it does not already exist, processing it through the specified file pipeline. If a
-    /// variant with the same ID already exists, it returns the existing variant without reprocessing.
+    /// Adds new file variants where they do not already exist, processing missing variants through their pipelines and keeping existing ones unchanged. Each
+    /// declared variant ID in the tree is represented in the returned list except for those that skip due to
+    /// <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/>.
     /// </summary>
-    /// <param name="fileId">The ID of the main file to which the variant will be added.</param>
-    /// <param name="variantId">The ID of the variant to be added. Must only contain ASCII letters, digits, hyphens and underscores.</param>
-    /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
-    /// <param name="pipeline">The processing pipeline to use for the variant.</param>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    public async Task<RepoFileInfo> GetOrAddVariantAsync(
+    /// <remarks>
+    /// Post-call existence is not guaranteed for variants whose pipelines opt into <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/>: when the
+    /// pipeline produces no changes the variant is silently skipped, but its nested children still run against the unchanged parent source.
+    /// </remarks>
+    public async Task<IReadOnlyList<RepoFileInfo>> GetOrAddVariantAsync(
         FileId fileId,
         string variantId,
         string? sourceVariantId,
-        FileProcessingPipeline pipeline,
+        IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
+    {
+        var result = await RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.GetOrAdd, cancellationToken).ConfigureAwait(false);
+        Debug.Assert(result is not null, "GetOrAdd mode should never return null.");
+        return result;
+    }
+
+    /// <inheritdoc cref="TryAddVariantAsync(FileId, string, string?, IFileProcessingPipelineSelector, CancellationToken)"/>
+    public Task<IReadOnlyList<RepoFileInfo>?> TryAddVariantAsync(
+        FileId fileId,
+        string variantId,
+        IFileProcessingPipelineSelector pipeline,
+        CancellationToken cancellationToken = default)
+    {
+        return TryAddVariantAsync(fileId, variantId, sourceVariantId: null, pipeline, cancellationToken);
+    }
+
+    /// <summary>
+    /// Tries to add a new file variant (and any nested auto-variants declared by the pipeline) to an existing file in the repository. Returns
+    /// <see langword="null"/> if any declared variant ID in the tree already exists or if any per-variant lock cannot be acquired immediately. The operation is
+    /// strict and all-or-nothing: any collision aborts the entire add.
+    /// </summary>
+    public Task<IReadOnlyList<RepoFileInfo>?> TryAddVariantAsync(
+        FileId fileId,
+        string variantId,
+        string? sourceVariantId,
+        IFileProcessingPipelineSelector pipeline,
+        CancellationToken cancellationToken = default)
+    {
+        return RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.Try, cancellationToken);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Variant-add core
+    // ---------------------------------------------------------------------------------------------------------------
+
+    private async Task<IReadOnlyList<RepoFileInfo>?> RunVariantAddAsync(
+        FileId fileId,
+        string variantId,
+        string? sourceVariantId,
+        IFileProcessingPipelineSelector rootSelector,
+        VariantAddMode mode,
+        CancellationToken cancellationToken)
     {
         variantId = VariantId.Normalize(variantId);
+        sourceVariantId = sourceVariantId is null ? null : VariantId.Normalize(sourceVariantId);
+
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        IAbsoluteFilePath variantFile = FindDataFile(_filesDirectory, fileId, variantId);
+        // Locate the source file to obtain the extension used to resolve the root pipeline.
+        var sourceFile = FindDataFile(_filesDirectory, fileId, sourceVariantId)
+            ?? throw new RepoFileNotFoundException(
+                sourceVariantId is null
+                    ? $"File ID '{fileId}' was not found."
+                    : $"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
 
-        if (variantFile is not null)
-            return new RepoFileInfo(fileId, variantId, variantFile);
+        var rootPipeline = rootSelector.GetPipeline(sourceFile.Extension);
 
-        using (await _fileSync.LockAsync((fileId, variantId), cancellationToken).ConfigureAwait(false))
-        {
-            variantFile = FindDataFile(_filesDirectory, fileId, variantId);
+        // Discover every variant ID statically declared in the tree (including the user-provided root variant ID).
+        var allVariantIds = new SortedSet<string>(StringComparer.Ordinal) { variantId };
+        CollectVariantIds(rootPipeline, allVariantIds, variantId);
 
-            if (variantFile is not null)
-                return new RepoFileInfo(fileId, variantId, variantFile);
-
-            var sourceFile = FindDataFile(_filesDirectory, fileId, sourceVariantId);
-
-            if (sourceFile is null)
-            {
-                if (sourceVariantId is null)
-                    throw new RepoFileNotFoundException($"File ID '{fileId}' was not found.");
-
-                throw new RepoFileNotFoundException($"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
-            }
-
-            var sourceFileStream = sourceFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-
-            await using (sourceFileStream.ConfigureAwait(false))
-            {
-                var dataFile = await AddVariantAsyncCore(
-                    fileId, variantId, sourceFileStream, sourceFile.Extension, sourceInRepo: true, leaveOpen: false, pipeline, cancellationToken)
-                    .ConfigureAwait(false);
-
-                return new RepoFileInfo(fileId, variantId, dataFile);
-            }
-        }
-    }
-
-    /// <inheritdoc cref="TryAddVariantAsync(FileId, string, string?, FileProcessingPipeline, CancellationToken)"/>
-    public Task<RepoFileInfo?> TryAddVariantAsync(
-        FileId fileId,
-        string variantId,
-        FileProcessingPipeline pipeline,
-        CancellationToken cancellationToken = default)
-    {
-        return TryAddVariantAsync(fileId, variantId, null, pipeline, cancellationToken);
-    }
-
-    /// <summary>
-    /// Tries to add a new file variant to an existing file in the repository, processing it through the specified file pipeline. Returns <see langword="null"/>
-    /// if the variant already exists or is currently being processed by another operation.
-    /// </summary>
-    /// <param name="fileId">The ID of the main file to which the variant will be added.</param>
-    /// <param name="variantId">The ID of the variant to be added. Must only contain ASCII letters, digits, hyphens and underscores.</param>
-    /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
-    /// <param name="pipeline">The processing pipeline to use for the variant.</param>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    public async Task<RepoFileInfo?> TryAddVariantAsync(
-        FileId fileId,
-        string variantId,
-        string? sourceVariantId,
-        FileProcessingPipeline pipeline,
-        CancellationToken cancellationToken = default)
-    {
-        variantId = VariantId.Normalize(variantId);
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-
-        IAbsoluteFilePath variantFile = FindDataFile(_filesDirectory, fileId, variantId);
-
-        if (variantFile is not null)
-            return new RepoFileInfo(fileId, variantId, variantFile);
-
-        var sourceFile = FindDataFile(_filesDirectory, fileId, sourceVariantId);
-
-        if (sourceFile is null)
-        {
-            if (sourceVariantId is null)
-                throw new RepoFileNotFoundException($"File ID '{fileId}' was not found.");
-
-            throw new RepoFileNotFoundException($"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
-        }
-
-        var sourceFileStream = sourceFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-        await using (sourceFileStream.ConfigureAwait(false))
-        {
-            bool fileLockEntered = false;
-
-            try
-            {
-                using (await _fileSync.LockAsync((fileId, variantId), 0, cancellationToken).ConfigureAwait(false))
-                {
-                    fileLockEntered = true;
-
-                    if (FindDataFile(_filesDirectory, fileId, variantId) is not null)
-                        return null;
-
-                    var dataFile = await AddVariantAsyncCore(
-                        fileId, variantId, sourceFileStream, sourceFile.Extension, sourceInRepo: true, leaveOpen: false, pipeline, cancellationToken)
-                        .ConfigureAwait(false);
-
-                    return new RepoFileInfo(fileId, variantId, dataFile);
-                }
-            }
-            catch (TimeoutException) when (!fileLockEntered)
-            {
-                return null;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Adds a new variant file to an existing file in the repository. Variants are not transactional - no indeterminate marker is created.
-    /// </summary>
-    private async Task<IAbsoluteFilePath> AddVariantAsyncCore(
-        FileId fileId,
-        string variantId,
-        Stream stream,
-        string extension,
-        bool sourceInRepo,
-        bool leaveOpen,
-        FileProcessingPipeline pipeline,
-        CancellationToken cancellationToken)
-    {
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-
-        var (context, resultFile) = await ProcessSourceToWorkFileAsync(
-            fileId, variantId, stream, extension, sourceInRepo, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
-
-        await using (context.ConfigureAwait(false))
-        {
-            var dataFile = GetDataFile(_filesDirectory, fileId, context.Extension, variantId);
-            var dataFileDir = dataFile.ParentDirectory;
-
-            Debug.Assert(dataFile.State is EntryState.ParentExists, "Data file was in an unexpected state.");
-
-            try
-            {
-                resultFile.MoveTo(dataFile, overwrite: false);
-            }
-            catch (DirectoryNotFoundException)
-            {
-                // If the file directory does not exist (but its parent does) then it means that a race occurred and the file dir was deleted while we were
-                // processing the variant. In that case we act as though adding the variant was successful and the delete happened afterwards by returning
-                // success.
-
-                if (dataFileDir.State is not EntryState.ParentExists)
-                    throw;
-            }
-
-            return dataFile;
-        }
-    }
-
-    /// <summary>
-    /// Adds a new main file to the repository. Creates an indeterminate marker for the file and keeps an exclusive handle on it open so that an active
-    /// transaction can be detected by cleanup operations. The returned marker handle must be disposed by the caller when the transaction commits or rolls back.
-    /// </summary>
-    private async Task<(IAbsoluteFilePath DataFile, IAsyncDisposable IndeterminateMarker)> AddAsyncCore(
-        FileId fileId,
-        Stream stream,
-        string extension,
-        bool sourceInRepo,
-        bool leaveOpen,
-        FileProcessingPipeline pipeline,
-        CancellationToken cancellationToken)
-    {
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-
-        var (context, resultFile) = await ProcessSourceToWorkFileAsync(
-            fileId, variantId: null, stream, extension, sourceInRepo, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
-
-        await using (context.ConfigureAwait(false))
-        {
-            var dataFile = GetDataFile(_filesDirectory, fileId, context.Extension);
-            var dataFileDir = dataFile.ParentDirectory;
-            var indeterminateMarker = GetIndeterminateMarker(_cleanupDirectory, fileId);
-
-            const string message = "A transaction has tentatively added this file.";
-            var indeterminateMarkerHandle = await CreateExclusiveMarkerAsync(indeterminateMarker, "TRANSACTION PENDING ADD", message, Options.MarkerFileLogging).ConfigureAwait(false);
-
-            try
-            {
-                Debug.Assert(dataFileDir.State is EntryState.ParentExists or EntryState.ParentDoesNotExist, "Data file group dir is in an unexpected state.");
-                dataFileDir.Create();
-
-                resultFile.MoveTo(dataFile, overwrite: false);
-            }
-            catch
-            {
-                // Release the exclusive lock on the marker so we can delete it as part of cleanup.
-
-                await indeterminateMarkerHandle.DisposeAsync().ConfigureAwait(false);
-
-                // Attempt to clean up the failed add operation before we throw.
-
-                if (!dataFileDir.TryDelete(out var ex) || !indeterminateMarker.TryDelete(out ex))
-                {
-                    // If cleanup fails, log to the indeterminate marker file. Leave the file as indeterminate to be on the safe side instead of marking for
-                    // deletion in case something went horribly wrong and a conflict occurred somehow, just let indeterminate resolution handle it later.
-                    await LogToOptionalMarkerAsync(indeterminateMarker, "ABORTED ADD CLEANUP FAILED", ex, Options.MarkerFileLogging).ConfigureAwait(false);
-                }
-
-                throw;
-            }
-
-            return (dataFile, indeterminateMarkerHandle);
-        }
-    }
-
-    /// <summary>
-    /// Runs the processing pipeline for an add operation and returns the resulting work file (always located inside the temp working directory). The caller
-    /// is responsible for disposing the returned context, which will also delete the temp working directory. On failure, the context is disposed before the
-    /// exception propagates.
-    /// </summary>
-    private async Task<(FileProcessingContext Context, IAbsoluteFilePath ResultFile)> ProcessSourceToWorkFileAsync(
-        FileId fileId,
-        string? variantId,
-        Stream stream,
-        string extension,
-        bool sourceInRepo,
-        bool leaveOpen,
-        FileProcessingPipeline pipeline,
-        CancellationToken cancellationToken)
-    {
-        var tempWorkingDir = _tempDirectory.CombineDirectory(GetFileIdAndVariantString(fileId, variantId), PathOptions.None);
-        var context = new FileProcessingContext(fileId, variantId, tempWorkingDir, stream, extension, leaveOpen, cancellationToken);
+        var locks = new List<IDisposable>(allVariantIds.Count);
+        var stagedNodes = new List<StagedNode>();
+        FileStream? sourceFileStream = null;
 
         try
         {
-            await pipeline.ExecuteAsync(context, sourceInRepo).ConfigureAwait(false);
+            // Acquire per-variant locks in sorted order for deadlock-freedom.
+            var lockTimeout = mode is VariantAddMode.Try ? TimeSpan.Zero : Timeout.InfiniteTimeSpan;
 
-            var resultFile = await context.GetSourceAsFileAsync().ConfigureAwait(false);
+            foreach (string vid in allVariantIds)
+            {
+                try
+                {
+                    var lockHandle = await _fileSync.LockAsync((fileId, vid), lockTimeout, cancellationToken).ConfigureAwait(false);
 
-            // If the result file is not in the temp working directory then we need to copy it there first.
+#pragma warning disable RS0042 // Unsupported use of non-copyable type — boxing the lock handle here is intentional.
+                    locks.Add(lockHandle);
+#pragma warning restore RS0042
+                }
+                catch (TimeoutException) when (mode is VariantAddMode.Try)
+                {
+                    return null;
+                }
+            }
 
-            if (!context.IsTempWorkingFile(resultFile))
+            // Re-check disk existence for every declared variant ID under the locks.
+            var existingByVariantId = new Dictionary<string, IAbsoluteFilePath>(StringComparer.Ordinal);
+
+            foreach (string vid in allVariantIds)
+            {
+                var existing = FindDataFile(_filesDirectory, fileId, vid);
+                if (existing is not null)
+                    existingByVariantId[vid] = existing;
+            }
+
+            if (existingByVariantId.Count > 0 && mode is not VariantAddMode.GetOrAdd)
+            {
+                if (mode is VariantAddMode.Try)
+                    return null;
+
+                // Add mode: throw naming the first colliding variant ID (in sorted enumeration order, for stability).
+                string firstCollision = allVariantIds.First(existingByVariantId.ContainsKey);
+                throw new InvalidOperationException($"File ID '{fileId}' variant '{firstCollision}' already exists.");
+            }
+
+            // Open the source file stream that the root pipeline will read from.
+            sourceFileStream = sourceFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
+            // Run the tree. The context takes ownership of the stream (leaveOpen=false) and disposes it once it has materialized the source as a file.
+            await RunNodeAsync(
+                fileId,
+                streamSource: sourceFileStream,
+                streamLeaveOpen: false,
+                fileSource: null,
+                sourceExtension: sourceFile.Extension,
+                variantId,
+                rootPipeline,
+                mode,
+                existingByVariantId,
+                stagedNodes,
+                cancellationToken).ConfigureAwait(false);
+
+            sourceFileStream = null;
+
+            // Batch-move into files/.
+            await BatchMoveVariantsAsync(fileId, stagedNodes, cancellationToken).ConfigureAwait(false);
+
+            // Build result.
+            var results = new List<RepoFileInfo>(stagedNodes.Count);
+            foreach (var node in stagedNodes)
+                results.Add(new RepoFileInfo(fileId, node.VariantId, node.Path));
+
+            return results;
+        }
+        finally
+        {
+            // Always dispose contexts (cleans up temp dirs). Safe to call regardless of move outcome since context Dispose doesn't touch files/.
+            foreach (var node in stagedNodes)
+            {
+                if (node.Context is not null)
+                {
+                    try { await node.Context.DisposeAsync().ConfigureAwait(false); }
+                    catch { }
+                }
+            }
+
+            if (sourceFileStream is not null)
+            {
+                try { await sourceFileStream.DisposeAsync().ConfigureAwait(false); }
+                catch { }
+            }
+
+            // Release locks in reverse acquisition order.
+            for (int i = locks.Count - 1; i >= 0; i--)
+                locks[i].Dispose();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Recursive runner
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Executes a pipeline node and all of its nested variants. The node may be the top-level variant (when called from the variant-add path), a nested
+    /// variant in a pipeline's <see cref="FileProcessingPipeline.Variants"/>, or the main pipeline of a transactional add.
+    /// </summary>
+    /// <remarks>
+    /// Exactly one of <paramref name="streamSource"/> or <paramref name="fileSource"/> must be non-null. The runner appends to <paramref name="stagedNodes"/>;
+    /// the caller is responsible for disposing all node contexts in the accumulated list (the runner does not roll back on failure).
+    /// </remarks>
+    private async Task RunNodeAsync(
+        FileId fileId,
+        Stream? streamSource,
+        bool streamLeaveOpen,
+        IAbsoluteFilePath? fileSource,
+        string sourceExtension,
+        string? variantId,
+        FileProcessingPipeline pipeline,
+        VariantAddMode mode,
+        Dictionary<string, IAbsoluteFilePath>? existingByVariantId,
+        List<StagedNode> stagedNodes,
+        CancellationToken cancellationToken)
+    {
+        Debug.Assert((streamSource is null) != (fileSource is null), "Exactly one of streamSource or fileSource must be non-null.");
+
+        // GetOrAdd: if this variant already exists on disk, register it and recurse children against the existing file.
+        if (variantId is not null && mode is VariantAddMode.GetOrAdd && existingByVariantId!.TryGetValue(variantId, out var existingFile))
+        {
+            stagedNodes.Add(new StagedNode
+            {
+                VariantId = variantId,
+                Path = existingFile,
+                Extension = existingFile.Extension,
+                Context = null,
+                IsExisting = true,
+            });
+
+            await RunChildrenAsync(fileId, existingFile, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        // Create a context with its own temp working dir.
+        var tempWorkingDir = _tempDirectory.CombineDirectory(GetFileIdAndVariantString(fileId, variantId), PathOptions.None);
+        FileProcessingContext context;
+
+        if (streamSource is not null)
+            context = new FileProcessingContext(fileId, variantId, tempWorkingDir, streamSource, sourceExtension, streamLeaveOpen, cancellationToken);
+        else
+            context = new FileProcessingContext(fileId, variantId, tempWorkingDir, fileSource!, cancellationToken);
+
+        IAbsoluteFilePath? stagedResult;
+
+        try
+        {
+            await pipeline.ExecuteAsync(context, knownRepoFileSource: fileSource is not null).ConfigureAwait(false);
+
+            stagedResult = await context.GetSourceAsFileAsync().ConfigureAwait(false);
+
+            // Make sure the staged result is inside the temp working dir so the batch-move is a same-volume rename.
+            if (!context.IsTempWorkingFile(stagedResult))
             {
                 var workFile = context.GetNewWorkFile(context.Extension);
                 workFile.ParentDirectory.Create();
-                await resultFile.CopyToAsync(workFile, cancellationToken).ConfigureAwait(false);
-
-                resultFile = workFile;
+                await stagedResult.CopyToAsync(workFile, cancellationToken).ConfigureAwait(false);
+                stagedResult = workFile;
                 cancellationToken.ThrowIfCancellationRequested();
             }
+        }
+        catch (FileSourceUnchangedException) when (variantId is not null && pipeline.SkipWhenSourceUnchanged)
+        {
+            // Skip storing this variant; dispose its context and continue with the unchanged parent source for children.
+            await context.DisposeAsync().ConfigureAwait(false);
 
-            return (context, resultFile);
+            await RunChildrenAsync(
+                fileId,
+                fileSource ?? throw new InvalidOperationException("SkipWhenSourceUnchanged should never trigger when the source is a stream (main pipeline)."),
+                pipeline.Variants,
+                mode,
+                existingByVariantId,
+                stagedNodes,
+                cancellationToken).ConfigureAwait(false);
+
+            return;
         }
         catch
         {
             await context.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+
+        stagedNodes.Add(new StagedNode
+        {
+            VariantId = variantId,
+            Path = stagedResult,
+            Extension = context.Extension,
+            Context = context,
+            IsExisting = false,
+        });
+
+        await RunChildrenAsync(fileId, stagedResult, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RunChildrenAsync(
+        FileId fileId,
+        IAbsoluteFilePath parentSource,
+        IReadOnlyList<FileProcessingVariant> variants,
+        VariantAddMode mode,
+        Dictionary<string, IAbsoluteFilePath>? existingByVariantId,
+        List<StagedNode> stagedNodes,
+        CancellationToken cancellationToken)
+    {
+        if (variants.Count is 0)
+            return;
+
+        foreach (var v in variants)
+        {
+            var childPipeline = v.Pipeline.GetPipeline();
+
+            await RunNodeAsync(
+                fileId,
+                streamSource: null,
+                streamLeaveOpen: false,
+                fileSource: parentSource,
+                sourceExtension: parentSource.Extension,
+                v.VariantId,
+                childPipeline,
+                mode,
+                existingByVariantId,
+                stagedNodes,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Walks the static variant tree of the specified pipeline, accumulating variant IDs into the destination set. Throws <see cref="ArgumentException"/> if a
+    /// duplicate ID is encountered.
+    /// </summary>
+    private static void CollectVariantIds(FileProcessingPipeline pipeline, SortedSet<string> destination, string? rootIdForMessage)
+    {
+        foreach (var v in pipeline.Variants)
+        {
+            if (!destination.Add(v.VariantId))
+            {
+                string root = rootIdForMessage is null ? "tree" : $"tree rooted at '{rootIdForMessage}'";
+                throw new ArgumentException($"Variant {root} contains duplicate variant ID '{v.VariantId}'.", nameof(pipeline));
+            }
+
+            // Variant pipelines are statically shaped (IFileProcessingPipelineProvider), so we can resolve their concrete FileProcessingPipeline without
+            // knowing the source extension - which makes upfront enumeration of the entire nested variant tree possible.
+            var childPipeline = v.Pipeline.GetPipeline();
+            CollectVariantIds(childPipeline, destination, rootIdForMessage);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Batch move (variant path, non-transactional)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    private async Task BatchMoveVariantsAsync(FileId fileId, List<StagedNode> stagedNodes, CancellationToken cancellationToken)
+    {
+        var fileDir = GetFileDirectory(_filesDirectory, fileId);
+        var failed = new List<(StagedNode Node, Exception Ex)>();
+        var moved = new List<StagedNode>();
+
+        foreach (var node in stagedNodes)
+        {
+            if (node.IsExisting)
+            {
+                moved.Add(node);
+                continue;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var dest = GetDataFile(_filesDirectory, fileId, node.Extension, node.VariantId);
+
+            try
+            {
+                node.Path.MoveTo(dest, overwrite: false);
+                node.Path = dest;
+                moved.Add(node);
+            }
+            catch (DirectoryNotFoundException) when (fileDir.State is EntryState.ParentExists)
+            {
+                // The file directory was deleted concurrently. Treat the variant as successfully added; cleanup of the (already-deleted) file group has
+                // already taken the file with it.
+                node.Path = dest;
+                moved.Add(node);
+            }
+            catch (Exception ex)
+            {
+                failed.Add((node, ex));
+            }
+        }
+
+        if (failed.Count is 0)
+            return;
+
+        string movedIds = string.Join(", ", moved.Where(m => !m.IsExisting).Select(m => m.VariantId ?? "(main)"));
+        string failedIds = string.Join(", ", failed.Select(f => f.Node.VariantId ?? "(main)"));
+
+        throw new AggregateException(
+            $"Failed to move {failed.Count} variant(s) into the repository (succeeded: [{movedIds}]; failed: [{failedIds}]).",
+            failed.Select(f => f.Ex));
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Transactional main + variants (called by TxnAddAsync)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Adds a new main file (and any auto-variants declared by the pipeline) to the repository. Creates an indeterminate marker for the file and keeps an
+    /// exclusive handle on it open so that an active transaction can be detected by cleanup operations. The returned marker handle must be disposed by the
+    /// caller when the transaction commits or rolls back.
+    /// </summary>
+    internal async Task<(RepoFileGroupInfo Group, IAsyncDisposable IndeterminateMarker)> AddTransactionalAsyncCore(
+        FileId fileId,
+        Stream stream,
+        string extension,
+        bool leaveOpen,
+        IFileProcessingPipelineSelector rootSelector,
+        CancellationToken cancellationToken)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        extension = FileExtension.Normalize(extension);
+        var rootPipeline = rootSelector.GetPipeline(extension);
+
+        // Validate variant id uniqueness in the static tree. Main itself has no variant id, so we just walk children.
+        var declaredIds = new SortedSet<string>(StringComparer.Ordinal);
+        CollectVariantIds(rootPipeline, declaredIds, rootIdForMessage: null);
+
+        var stagedNodes = new List<StagedNode>();
+        bool succeeded = false;
+        IAsyncDisposable? markerHandle = null;
+
+        try
+        {
+            // Run the main pipeline and any auto-variants. No variant locks needed: the file ID is freshly minted and not externally visible.
+            await RunNodeAsync(
+                fileId,
+                streamSource: stream,
+                streamLeaveOpen: leaveOpen,
+                fileSource: null,
+                sourceExtension: extension,
+                variantId: null,
+                rootPipeline,
+                VariantAddMode.Add,
+                existingByVariantId: null,
+                stagedNodes,
+                cancellationToken).ConfigureAwait(false);
+
+            // Batch-move under indeterminate marker.
+            markerHandle = await BatchMoveTransactionalAsync(fileId, stagedNodes, cancellationToken).ConfigureAwait(false);
+
+            succeeded = true;
+
+            // Build group result. The first staged node is always the main file (variant id null).
+            Debug.Assert(stagedNodes.Count >= 1 && stagedNodes[0].VariantId is null, "Main file must be the first staged node in a transactional add.");
+
+            var mainNode = stagedNodes[0];
+            var mainInfo = new RepoFileInfo(fileId, variantId: null, mainNode.Path);
+
+            var variantInfos = stagedNodes.Skip(1).Select(n => new RepoFileInfo(fileId, n.VariantId!, n.Path));
+
+            return (new RepoFileGroupInfo(mainInfo, variantInfos), markerHandle);
+        }
+        finally
+        {
+            foreach (var node in stagedNodes)
+            {
+                if (node.Context is not null)
+                {
+                    try { await node.Context.DisposeAsync().ConfigureAwait(false); }
+                    catch { }
+                }
+            }
+
+            if (!succeeded && markerHandle is not null)
+            {
+                try { await markerHandle.DisposeAsync().ConfigureAwait(false); }
+                catch { }
+            }
+        }
+    }
+
+    private async Task<IAsyncDisposable> BatchMoveTransactionalAsync(FileId fileId, List<StagedNode> stagedNodes, CancellationToken cancellationToken)
+    {
+        Debug.Assert(stagedNodes.Count >= 1 && stagedNodes[0].VariantId is null, "Transactional add must produce a main file as the first staged node.");
+
+        var indeterminateMarker = GetIndeterminateMarker(_cleanupDirectory, fileId);
+        var fileDir = GetFileDirectory(_filesDirectory, fileId);
+
+        const string message = "A transaction has tentatively added this file.";
+        var markerHandle = await CreateExclusiveMarkerAsync(indeterminateMarker, "TRANSACTION PENDING ADD", message, Options.MarkerFileLogging).ConfigureAwait(false);
+
+        try
+        {
+            Debug.Assert(fileDir.State is EntryState.ParentExists or EntryState.ParentDoesNotExist, "File group dir is in an unexpected state.");
+            fileDir.Create();
+
+            foreach (var node in stagedNodes)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Debug.Assert(!node.IsExisting, "Transactional add should never produce pre-existing staged nodes.");
+
+                var dest = GetDataFile(_filesDirectory, fileId, node.Extension, node.VariantId);
+                node.Path.MoveTo(dest, overwrite: false);
+                node.Path = dest;
+            }
+
+            return markerHandle;
+        }
+        catch
+        {
+            await markerHandle.DisposeAsync().ConfigureAwait(false);
+
+            if (!fileDir.TryDelete(recursive: true, out var ex) || !indeterminateMarker.TryDelete(out ex))
+                await LogToOptionalMarkerAsync(indeterminateMarker, "ABORTED ADD CLEANUP FAILED", ex!, Options.MarkerFileLogging).ConfigureAwait(false);
+
             throw;
         }
     }

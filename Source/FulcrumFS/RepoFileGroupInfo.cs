@@ -17,9 +17,19 @@ public sealed record RepoFileGroupInfo
     /// </summary>
     public IReadOnlyList<RepoFileInfo> Variants { get; }
 
-    internal RepoFileGroupInfo(RepoFileInfo main, IReadOnlyList<RepoFileInfo> variants)
+    /// <summary>
+    /// Gets the file ID of the main file. Convenience forwarder for <see cref="Main"/>.<see cref="RepoFileInfo.FileId"/>.
+    /// </summary>
+    public FileId FileId => Main.FileId;
+
+    /// <summary>
+    /// Gets the extension of the main file (including the leading period). Convenience forwarder for <see cref="Main"/>.<see cref="RepoFileInfo.Extension"/>.
+    /// </summary>
+    public string Extension => Main.Extension;
+
+    internal RepoFileGroupInfo(RepoFileInfo main, IEnumerable<RepoFileInfo> variants)
     {
         Main = main;
-        Variants = EquatableArray.Create<RepoFileInfo>(variants);
+        Variants = EquatableArray.Create(variants);
     }
 }

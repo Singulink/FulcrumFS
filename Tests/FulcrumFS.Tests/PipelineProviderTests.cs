@@ -1,0 +1,117 @@
+namespace FulcrumFS;
+
+[PrefixTestClass]
+public sealed class PipelineProviderTests
+{
+    private static readonly IAbsoluteDirectoryPath _appDir = DirectoryPath.GetAppBase();
+    private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot_PipelineProvider");
+    private static readonly IAbsoluteDirectoryPath _sampleDir = _appDir.CombineDirectory("SampleFiles");
+
+    public required TestContext TestContext { get; set; }
+
+    [TestMethod]
+    public async Task BareProcessor_AddedDirectly_AsProvider()
+    {
+        using var repo = CreateRepo();
+        var processor = new FileFormatValidationProcessor(new FileFormatValidationOptions(FileFormat.Jpeg));
+
+        await using var source = File.OpenRead(_sampleDir.CombineFile("sample.jpg").PathExport);
+        await using var txn = await repo.BeginTransactionAsync();
+        var group = await txn.AddAsync(source, ".jpg", leaveOpen: true, processor, TestContext.CancellationToken);
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        group.Main.Extension.ShouldBe(".jpg");
+        group.Variants.Count.ShouldBe(0);
+    }
+
+    [TestMethod]
+    public async Task Pipeline_WithVariant_ProducesAutoVariant()
+    {
+        using var repo = CreateRepo();
+
+        var pipeline = new FileFormatValidationProcessor(new FileFormatValidationOptions(FileFormat.Jpeg))
+            .ToPipeline()
+            .WithVariant("copy", FileProcessingPipeline.Empty);
+
+        await using var source = File.OpenRead(_sampleDir.CombineFile("sample.jpg").PathExport);
+        await using var txn = await repo.BeginTransactionAsync();
+        var group = await txn.AddAsync(source, ".jpg", leaveOpen: true, pipeline, TestContext.CancellationToken);
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        group.Main.Extension.ShouldBe(".jpg");
+        group.Variants.Count.ShouldBe(1);
+        group.Variants[0].VariantId.ShouldBe("copy");
+        group.Variants[0].Extension.ShouldBe(".jpg");
+        File.Exists(group.Variants[0].Path.PathExport).ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task PipelineGroup_RoutesByExtension()
+    {
+        using var repo = CreateRepo();
+
+        var jpegPipeline = new FileFormatValidationProcessor(new FileFormatValidationOptions(FileFormat.Jpeg));
+        var pdfPipeline = new FileFormatValidationProcessor(new FileFormatValidationOptions(FileFormat.Pdf));
+        var group = new FileProcessingPipelineSelector(jpegPipeline, pdfPipeline);
+
+        // JPEG path
+        await using (var jpegSource = File.OpenRead(_sampleDir.CombineFile("sample.jpg").PathExport))
+        await using (var txn = await repo.BeginTransactionAsync())
+        {
+            var added = await txn.AddAsync(jpegSource, ".jpg", leaveOpen: true, group, TestContext.CancellationToken);
+            await txn.CommitAsync(TestContext.CancellationToken);
+            added.Main.Extension.ShouldBe(".jpg");
+        }
+
+        // PDF path
+        await using (var pdfSource = File.OpenRead(_sampleDir.CombineFile("sample.pdf").PathExport))
+        await using (var txn = await repo.BeginTransactionAsync())
+        {
+            var added = await txn.AddAsync(pdfSource, ".pdf", leaveOpen: true, group, TestContext.CancellationToken);
+            await txn.CommitAsync(TestContext.CancellationToken);
+            added.Main.Extension.ShouldBe(".pdf");
+        }
+    }
+
+    [TestMethod]
+    public async Task PipelineGroup_UnmatchedExtension_Throws()
+    {
+        using var repo = CreateRepo();
+        var jpegPipeline = new FileFormatValidationProcessor(new FileFormatValidationOptions(FileFormat.Jpeg));
+        var group = new FileProcessingPipelineSelector(jpegPipeline);
+
+        await using var source = File.OpenRead(_sampleDir.CombineFile("sample.pdf").PathExport);
+        await using var txn = await repo.BeginTransactionAsync();
+        await Should.ThrowAsync<FileProcessingException>(async () =>
+            await txn.AddAsync(source, ".pdf", leaveOpen: true, group, TestContext.CancellationToken));
+    }
+
+    [TestMethod]
+    public async Task PipelineGroup_DefaultFallback_HandlesUnmatched()
+    {
+        using var repo = CreateRepo();
+
+        var jpegPipeline = new FileFormatValidationProcessor(new FileFormatValidationOptions(FileFormat.Jpeg));
+        var group = new FileProcessingPipelineSelector(jpegPipeline, FileProcessingPipeline.Empty);
+
+        await using var source = File.OpenRead(_sampleDir.CombineFile("sample.pdf").PathExport);
+        await using var txn = await repo.BeginTransactionAsync();
+        var added = await txn.AddAsync(source, ".pdf", leaveOpen: true, group, TestContext.CancellationToken);
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        added.Main.Extension.ShouldBe(".pdf");
+    }
+
+    private static FileRepo CreateRepo()
+    {
+        if (_repoDir.Exists)
+            _repoDir.Delete(recursive: true);
+
+        var repo = new FileRepo(_repoDir, options => {
+            options.DeleteMode = DeleteMode.Immediate;
+            options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
+        });
+        repo.EnsureCreated();
+        return repo;
+    }
+}

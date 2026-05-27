@@ -293,12 +293,12 @@ partial class Tests
         string? exceptionMessage,
         (int NewStreamCount, (int From, int To, string ExtensionToCheckWith, bool Equal)[] StreamMapping)? expectedChanges,
         string? addAsyncExtensionOverride = null,
-        bool throwWhenSourceUnchanged = false,
+        bool skipWhenSourceUnchanged = false,
         bool pathIsAbsolute = false,
         Func<string, Task>? afterFinishedAction = null)
     {
         // Create the processing pipeline:
-        var pipeline = new VideoProcessor(options).ToPipeline(throwWhenSourceUnchanged: throwWhenSourceUnchanged);
+        var pipeline = new VideoProcessor(options).ToPipeline(skipWhenSourceUnchanged: skipWhenSourceUnchanged);
 
         // Open the source video file:
         var fullFileName = pathIsAbsolute ? FilePath.ParseAbsolute(videoFileName) : _videoFilesDir.CombineFile(videoFileName);

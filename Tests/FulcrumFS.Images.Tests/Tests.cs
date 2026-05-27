@@ -206,7 +206,7 @@ public sealed class Tests
     }
 
     [TestMethod]
-    public async Task ThrowWhenSourceUnchanged()
+    public async Task SkipWhenSourceUnchanged()
     {
         ResetRepository();
 
@@ -214,7 +214,7 @@ public sealed class Tests
             Formats = [new(ImageFormat.Jpeg)],
             Resize = new(ImageResizeMode.FitDown, 2000, 2000),
             ReencodeMode = ImageReencodeMode.AvoidReencoding,
-        }).ToPipeline(throwWhenSourceUnchanged: true);
+        }).ToPipeline(skipWhenSourceUnchanged: true);
 
         await using var stream = _imageFile.OpenAsyncStream();
 

@@ -5,8 +5,10 @@ namespace FulcrumFS;
 /// <summary>
 /// Represents a base class for processing files in a file repository.
 /// </summary>
-public abstract class FileProcessor
+public abstract class FileProcessor : IFileProcessingPipelineProvider, IFileProcessingPipelineSelector
 {
+    private FileProcessingPipeline? _selfPipeline;
+
     /// <summary>
     /// Gets the file extensions that this processor allows, including the leading dot (e.g., ".jpg", ".png"), or an empty collection if all file extensions are
     /// allowed.
@@ -17,18 +19,32 @@ public abstract class FileProcessor
     /// Creates a <see cref="FileProcessingPipeline"/> that contains this processor.
     /// </summary>
     /// <param name="sourceBufferingMode">The mode to use for buffering source streams to temporary repository work files.</param>
-    /// <param name="throwWhenSourceUnchanged">
-    /// Indicates whether <see cref="FileSourceUnchangedException"/> should be thrown when the source file remains unchanged after being processed through the
-    /// pipeline. See <see cref="FileProcessingPipeline.ThrowWhenSourceUnchanged"/> for details.
+    /// <param name="skipWhenSourceUnchanged">
+    /// Indicates how an unchanged source file is handled after running through the pipeline. See
+    /// <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/> for details.
     /// </param>
-    public FileProcessingPipeline ToPipeline(SourceBufferingMode sourceBufferingMode = SourceBufferingMode.Auto, bool throwWhenSourceUnchanged = false)
+    public FileProcessingPipeline ToPipeline(SourceBufferingMode sourceBufferingMode = SourceBufferingMode.Auto, bool skipWhenSourceUnchanged = false)
     {
         return new FileProcessingPipeline([this])
         {
             SourceBufferingMode = sourceBufferingMode,
-            ThrowWhenSourceUnchanged = throwWhenSourceUnchanged,
+            SkipWhenSourceUnchanged = skipWhenSourceUnchanged,
         };
     }
+
+    /// <summary>
+    /// Returns a new <see cref="FileProcessingPipeline"/> containing this processor with the specified variant appended. Sugar for
+    /// <c>ToPipeline().WithVariant(variantId, pipeline)</c>.
+    /// </summary>
+    /// <param name="variantId">The variant ID. Must only contain ASCII letters, digits, hyphens and underscores.</param>
+    /// <param name="pipeline">The pipeline used to process the variant.</param>
+    public FileProcessingPipeline WithVariant(string variantId, IFileProcessingPipelineProvider pipeline) => ToPipeline().WithVariant(variantId, pipeline);
+
+    /// <inheritdoc/>
+    FileProcessingPipeline IFileProcessingPipelineProvider.GetPipeline() => _selfPipeline ??= ToPipeline();
+
+    /// <inheritdoc/>
+    FileProcessingPipeline IFileProcessingPipelineSelector.GetPipeline(string extension) => _selfPipeline ??= ToPipeline();
 
     /// <summary>
     /// Processes the file represented by the specified <see cref="FileProcessingContext"/>.

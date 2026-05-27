@@ -43,10 +43,10 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// </summary>
     /// <param name="stream">The source file stream.</param>
     /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
-    /// <param name="pipeline">The processing pipeline to use.</param>
+    /// <param name="pipeline">The processing pipeline provider to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <returns>The file ID and extension of the resulting file.</returns>
-    public Task<RepoFileInfo> AddAsync(FileStream stream, bool leaveOpen, FileProcessingPipeline pipeline, CancellationToken cancellationToken = default)
+    /// <returns>The resulting file group, including the main file and any auto-variants produced by the pipeline.</returns>
+    public Task<RepoFileGroupInfo> AddAsync(FileStream stream, bool leaveOpen, IFileProcessingPipelineSelector pipeline, CancellationToken cancellationToken = default)
     {
         string extension = FilePath.ParseAbsolute(stream.Name, PathOptions.None).Extension;
         return AddAsync(stream, extension, leaveOpen, pipeline, cancellationToken);
@@ -58,14 +58,14 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <param name="stream">The source stream.</param>
     /// <param name="extension">The source file extension.</param>
     /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
-    /// <param name="pipeline">The processing pipeline to use.</param>
+    /// <param name="pipeline">The processing pipeline provider to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <returns>The file ID and extension of the resulting file.</returns>
-    public async Task<RepoFileInfo> AddAsync(
+    /// <returns>The resulting file group, including the main file and any auto-variants produced by the pipeline.</returns>
+    public async Task<RepoFileGroupInfo> AddAsync(
         Stream stream,
         string extension,
         bool leaveOpen,
-        FileProcessingPipeline pipeline,
+        IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
         using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
