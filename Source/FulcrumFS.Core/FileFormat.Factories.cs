@@ -16,21 +16,24 @@ public abstract partial class FileFormat
     /// Creates a <see cref="FileFormat"/> that accepts any content for the specified extensions. No content validation is performed beyond ensuring the file's
     /// extension is one of the specified extensions.
     /// </summary>
-    /// <param name="extensions">The file extensions (including the leading dot, e.g., ".log") this file format applies to. Must contain at least one entry.</param>
+    /// <param name="extensions">The file extensions (including the leading dot, e.g., ".log") this file format applies to. Must contain at least one entry.
+    /// The first extension is the <see cref="PrimaryExtension"/> that all other extensions are normalized to.</param>
     public static FileFormat AnyContent(params ReadOnlySpan<string> extensions) => new AnyContentFileFormat(extensions);
 
     /// <summary>
     /// Creates a <see cref="FileFormat"/> that validates files are valid ASCII text for the specified extensions. All bytes in the file must be in the range
-    /// [0, 127] (i.e. <see cref="System.Text.Ascii.IsValid(System.ReadOnlySpan{byte})"/> must return <see langword="true"/>).
+    /// [0, 127] (i.e. <see cref="Ascii.IsValid(ReadOnlySpan{byte})"/> must return <see langword="true"/>).
     /// </summary>
-    /// <param name="extensions">The file extensions (including the leading dot, e.g., ".txt") this file format applies to. Must contain at least one entry.</param>
+    /// <param name="extensions">The file extensions (including the leading dot, e.g., ".txt") this file format applies to. Must contain at least one entry.
+    /// The first extension is the <see cref="PrimaryExtension"/> that all other extensions are normalized to.</param>
     public static FileFormat TextAscii(params ReadOnlySpan<string> extensions) => new TextAsciiFileFormat(extensions);
 
     /// <summary>
     /// Creates a <see cref="FileFormat"/> that validates files are valid Unicode text in any encoding supported by <see cref="UnicodeEncodings.All"/>, for the
     /// specified extensions.
     /// </summary>
-    /// <param name="extensions">The file extensions (including the leading dot, e.g., ".txt", ".md") this file format applies to. Must contain at least one entry.</param>
+    /// <param name="extensions">The file extensions (including the leading dot, e.g., ".txt", ".md") this file format applies to. Must contain at least one entry.
+    /// The first extension is the <see cref="PrimaryExtension"/> that all other extensions are normalized to.</param>
     public static FileFormat TextUnicode(params ReadOnlySpan<string> extensions) => TextUnicode(UnicodeEncodings.All, extensions);
 
     /// <summary>
@@ -42,7 +45,8 @@ public abstract partial class FileFormat
     /// name="allowedEncodings"/>; otherwise validation fails.
     /// </remarks>
     /// <param name="allowedEncodings">The Unicode encodings that are accepted. Must specify at least one encoding.</param>
-    /// <param name="extensions">The file extensions (including the leading dot) this file format applies to. Must contain at least one entry.</param>
+    /// <param name="extensions">The file extensions (including the leading dot) this file format applies to. Must contain at least one entry.
+    /// The first extension is the <see cref="PrimaryExtension"/> that all other extensions are normalized to.</param>
     public static FileFormat TextUnicode(UnicodeEncodings allowedEncodings, params ReadOnlySpan<string> extensions)
     {
         if (allowedEncodings == UnicodeEncodings.None)
@@ -56,7 +60,8 @@ public abstract partial class FileFormat
     /// </summary>
     /// <param name="encoding">The encoding to validate against. The encoding will be used with strict decoding enabled, so invalid byte sequences will cause
     /// validation to fail.</param>
-    /// <param name="extensions">The file extensions (including the leading dot) this file format applies to. Must contain at least one entry.</param>
+    /// <param name="extensions">The file extensions (including the leading dot) this file format applies to. Must contain at least one entry.
+    /// The first extension is the <see cref="PrimaryExtension"/> that all other extensions are normalized to.</param>
     public static FileFormat TextEncoding(Encoding encoding, params ReadOnlySpan<string> extensions)
     {
         return new TextEncodingFileFormat(encoding, extensions);
@@ -113,7 +118,7 @@ public abstract partial class FileFormat
                     if (read is 0)
                         return FileFormatValidationResult.Success;
 
-                    if (!System.Text.Ascii.IsValid(buffer.AsSpan(0, read)))
+                    if (!Ascii.IsValid(buffer.AsSpan(0, read)))
                         return FileFormatValidationResult.Invalid("File contains bytes outside the valid ASCII range [0, 127].");
                 }
             }

@@ -1,0 +1,11 @@
+- name: Repository Layout
+  href: repository-layout.md
+
+- name: Transactional Commit Model
+  href: commit-model.md
+
+- name: Variant Aliasing
+  href: variant-aliasing.md
+
+- name: Crash Recovery and Invariants
+  href: crash-recovery.md

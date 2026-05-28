@@ -32,23 +32,32 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     }
 
     /// <summary>
-    /// Gets or initializes a value indicating how an unchanged source file is handled after running through the pipeline. Default value is
+    /// Gets or initializes a value indicating whether a variant pipeline should produce an alias to its source variant when running the pipeline results in no
+    /// changes to the source file. Default value is <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>This property only applies to variant pipelines (the top-level pipeline passed to a variant-add method on <see cref="FileRepo"/>, or any nested
+    /// entry in <see cref="Variants"/>). It has no effect on the main pipeline of a <see cref="FileRepoTransaction"/> add call; use
+    /// <see cref="ThrowWhenMainSourceUnchanged"/> for that scenario.</para>
+    /// <para>When this property is <see langword="true"/> and no processor in the pipeline reports changes, no data file is stored for the variant. Instead, a
+    /// zero-byte alias marker is written that transparently resolves to the variant's source on fetch operations. Nested variants of the aliased variant
+    /// continue to run against the unchanged parent source.</para>
+    /// <para>This is useful for avoiding storing duplicate files. For example, a thumbnail variant pipeline that produces no changes when the source image is
+    /// already small enough will store an alias to the source instead of an identical copy.</para>
+    /// </remarks>
+    public bool AliasWhenVariantSourceUnchanged { get; init; }
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether the main pipeline of a <see cref="FileRepoTransaction"/> add call should throw a
+    /// <see cref="FileSourceUnchangedException"/> when running the pipeline results in no changes to the source file. Default value is
     /// <see langword="false"/>.
     /// </summary>
     /// <remarks>
-    /// <para>When this property is <see langword="true"/> and no processor in the pipeline reports changes, the behavior depends on the role of the pipeline
-    /// in the add operation:</para>
-    /// <list type="bullet">
-    /// <item><description>On the <em>main</em> pipeline of a <see cref="FileRepoTransaction"/> add call a <see cref="FileSourceUnchangedException"/> is thrown
-    /// to the caller because <see cref="RepoFileGroupInfo.Main"/> cannot be omitted.</description></item>
-    /// <item><description>On any <em>variant</em> pipeline (the top-level pipeline passed to a variant-add method on <see cref="FileRepo"/>, or any nested
-    /// entry in <see cref="Variants"/>) the variant is silently skipped, no file is stored for it, and any nested variants of the skipped variant continue to
-    /// run against the unchanged parent source. Skipped variants are omitted from the returned result list.</description></item>
-    /// </list>
-    /// <para>This is useful for avoiding storing duplicate files. For example, a thumbnail variant pipeline that produces no changes when the source image is
-    /// already small enough can be skipped instead of storing an identical copy.</para>
+    /// This property only applies to the main pipeline of a transactional add; it has no effect on variant pipelines (use
+    /// <see cref="AliasWhenVariantSourceUnchanged"/> for those). When <see langword="true"/> and no processor reports changes, the exception is propagated to
+    /// the caller so the add can be aborted (the main file cannot be omitted from a file group).
     /// </remarks>
-    public bool SkipWhenSourceUnchanged { get; init; }
+    public bool ThrowWhenMainSourceUnchanged { get; init; }
 
 #pragma warning restore SA1623
 
@@ -81,6 +90,33 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     }
 
     /// <summary>
+    /// Gets a pre-order flat enumeration of every variant in this pipeline's nested variant tree (descendants only; does not include any conceptual "root"
+    /// entry for the pipeline itself). The list is computed and validated lazily on first access; an <see cref="ArgumentException"/> is thrown at that time
+    /// if any two variant IDs anywhere in the tree collide.
+    /// </summary>
+    internal IReadOnlyList<FileProcessingVariant> AllVariants => field ??= BuildAllVariants(this);
+
+    private static List<FileProcessingVariant> BuildAllVariants(FileProcessingPipeline root)
+    {
+        var flat = new List<FileProcessingVariant>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        Walk(root, flat, seen);
+        return flat;
+
+        static void Walk(FileProcessingPipeline pipeline, List<FileProcessingVariant> flat, HashSet<string> seen)
+        {
+            foreach (var v in pipeline.Variants)
+            {
+                if (!seen.Add(v.VariantId))
+                    throw new ArgumentException($"Pipeline variants processing tree contains duplicate variant ID '{v.VariantId}'.");
+
+                flat.Add(v);
+                Walk(v.Pipeline.GetPipeline(), flat, seen);
+            }
+        }
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="FileProcessingPipeline"/> class with the specified file processors.
     /// </summary>
     public FileProcessingPipeline(params IEnumerable<FileProcessor> processors)
@@ -103,7 +139,8 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
         return new FileProcessingPipeline(Processors)
         {
             SourceBufferingMode = SourceBufferingMode,
-            SkipWhenSourceUnchanged = SkipWhenSourceUnchanged,
+            AliasWhenVariantSourceUnchanged = AliasWhenVariantSourceUnchanged,
+            ThrowWhenMainSourceUnchanged = ThrowWhenMainSourceUnchanged,
             Variants = newVariants,
         };
     }
@@ -114,7 +151,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     /// <inheritdoc/>
     FileProcessingPipeline IFileProcessingPipelineSelector.GetPipeline(string extension) => this;
 
-    internal async Task ExecuteAsync(FileProcessingContext context, bool knownRepoFileSource)
+    internal async Task ExecuteAsync(FileProcessingContext context, bool knownRepoFileSource, bool isMainPipeline)
     {
         if ((SourceBufferingMode is SourceBufferingMode.ForceTempCopy && !knownRepoFileSource) ||
             (SourceBufferingMode is SourceBufferingMode.Auto && !context.IsSourceInMemoryOrFile))
@@ -131,7 +168,9 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
             await context.SetResultAsync(result, oneStepLeft).ConfigureAwait(false);
         }
 
-        if (SkipWhenSourceUnchanged && !context.HasChanges)
+        bool throwOnUnchanged = isMainPipeline ? ThrowWhenMainSourceUnchanged : AliasWhenVariantSourceUnchanged;
+
+        if (throwOnUnchanged && !context.HasChanges)
             throw new FileSourceUnchangedException();
     }
 }

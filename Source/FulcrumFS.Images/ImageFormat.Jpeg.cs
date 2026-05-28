@@ -13,7 +13,7 @@ public abstract partial class ImageFormat
     {
         public JpegFormat() : base(LibFormats.Jpeg.JpegFormat.Instance) { }
 
-        public override FulcrumFS.FileFormat FileFormat => FulcrumFS.FileFormat.Jpeg;
+        public override FileFormat FileFormat => FileFormat.Jpeg;
 
         public override string Name => "JPEG";
 

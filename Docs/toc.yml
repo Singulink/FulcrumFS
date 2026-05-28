@@ -1,0 +1,8 @@
+- name: Home
+  href: index.md
+- name: Articles
+  href: articles/
+- name: API Documentation
+  href: api/
+- name: GitHub Repository
+  href: https://github.com/Singulink/FulcrumFS/

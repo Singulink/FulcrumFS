@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Singulink.Collections;
 
 namespace FulcrumFS;
@@ -10,26 +11,23 @@ public sealed record RepoFileGroupInfo
     /// <summary>
     /// Gets information about the main file.
     /// </summary>
-    public RepoFileInfo Main { get; }
+    public RepoFileInfo MainFile { get; }
 
     /// <summary>
     /// Gets information about each variant of the main file. The list is empty if the file has no variants.
     /// </summary>
-    public IReadOnlyList<RepoFileInfo> Variants { get; }
+    public IReadOnlyList<RepoFileInfo> VariantFiles { get; }
 
     /// <summary>
-    /// Gets the file ID of the main file. Convenience forwarder for <see cref="Main"/>.<see cref="RepoFileInfo.FileId"/>.
+    /// Gets the file ID of the group.
     /// </summary>
-    public FileId FileId => Main.FileId;
-
-    /// <summary>
-    /// Gets the extension of the main file (including the leading period). Convenience forwarder for <see cref="Main"/>.<see cref="RepoFileInfo.Extension"/>.
-    /// </summary>
-    public string Extension => Main.Extension;
+    public FileId FileId => MainFile.FileId;
 
     internal RepoFileGroupInfo(RepoFileInfo main, IEnumerable<RepoFileInfo> variants)
     {
-        Main = main;
-        Variants = EquatableArray.Create(variants);
+        MainFile = main;
+        VariantFiles = EquatableArray.Create(variants);
+
+        Debug.Assert(VariantFiles.All(v => v.FileId == MainFile.FileId), "All files in the group must have the same file ID.");
     }
 }

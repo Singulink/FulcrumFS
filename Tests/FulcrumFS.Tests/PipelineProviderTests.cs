@@ -20,8 +20,8 @@ public sealed class PipelineProviderTests
         var group = await txn.AddAsync(source, ".jpg", leaveOpen: true, processor, TestContext.CancellationToken);
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        group.Main.Extension.ShouldBe(".jpg");
-        group.Variants.Count.ShouldBe(0);
+        group.MainFile.Extension.ShouldBe(".jpg");
+        group.VariantFiles.Count.ShouldBe(0);
     }
 
     [TestMethod]
@@ -38,11 +38,11 @@ public sealed class PipelineProviderTests
         var group = await txn.AddAsync(source, ".jpg", leaveOpen: true, pipeline, TestContext.CancellationToken);
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        group.Main.Extension.ShouldBe(".jpg");
-        group.Variants.Count.ShouldBe(1);
-        group.Variants[0].VariantId.ShouldBe("copy");
-        group.Variants[0].Extension.ShouldBe(".jpg");
-        File.Exists(group.Variants[0].Path.PathExport).ShouldBeTrue();
+        group.MainFile.Extension.ShouldBe(".jpg");
+        group.VariantFiles.Count.ShouldBe(1);
+        group.VariantFiles[0].VariantId.ShouldBe("copy");
+        group.VariantFiles[0].Extension.ShouldBe(".jpg");
+        File.Exists(group.VariantFiles[0].Path.PathExport).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -60,7 +60,7 @@ public sealed class PipelineProviderTests
         {
             var added = await txn.AddAsync(jpegSource, ".jpg", leaveOpen: true, group, TestContext.CancellationToken);
             await txn.CommitAsync(TestContext.CancellationToken);
-            added.Main.Extension.ShouldBe(".jpg");
+            added.MainFile.Extension.ShouldBe(".jpg");
         }
 
         // PDF path
@@ -69,7 +69,7 @@ public sealed class PipelineProviderTests
         {
             var added = await txn.AddAsync(pdfSource, ".pdf", leaveOpen: true, group, TestContext.CancellationToken);
             await txn.CommitAsync(TestContext.CancellationToken);
-            added.Main.Extension.ShouldBe(".pdf");
+            added.MainFile.Extension.ShouldBe(".pdf");
         }
     }
 
@@ -99,7 +99,7 @@ public sealed class PipelineProviderTests
         var added = await txn.AddAsync(source, ".pdf", leaveOpen: true, group, TestContext.CancellationToken);
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        added.Main.Extension.ShouldBe(".pdf");
+        added.MainFile.Extension.ShouldBe(".pdf");
     }
 
     private static FileRepo CreateRepo()

@@ -19,16 +19,24 @@ public abstract class FileProcessor : IFileProcessingPipelineProvider, IFileProc
     /// Creates a <see cref="FileProcessingPipeline"/> that contains this processor.
     /// </summary>
     /// <param name="sourceBufferingMode">The mode to use for buffering source streams to temporary repository work files.</param>
-    /// <param name="skipWhenSourceUnchanged">
-    /// Indicates how an unchanged source file is handled after running through the pipeline. See
-    /// <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/> for details.
+    /// <param name="aliasWhenVariantSourceUnchanged">
+    /// When <see langword="true"/>, an alias to the source is stored if a variant pipeline run produces no changes. See
+    /// <see cref="FileProcessingPipeline.AliasWhenVariantSourceUnchanged"/> for details.
     /// </param>
-    public FileProcessingPipeline ToPipeline(SourceBufferingMode sourceBufferingMode = SourceBufferingMode.Auto, bool skipWhenSourceUnchanged = false)
+    /// <param name="throwWhenMainSourceUnchanged">
+    /// When <see langword="true"/>, a <see cref="FileSourceUnchangedException"/> is thrown to the caller if a transactional main pipeline run produces no
+    /// changes. See <see cref="FileProcessingPipeline.ThrowWhenMainSourceUnchanged"/> for details.
+    /// </param>
+    public FileProcessingPipeline ToPipeline(
+        SourceBufferingMode sourceBufferingMode = SourceBufferingMode.Auto,
+        bool aliasWhenVariantSourceUnchanged = false,
+        bool throwWhenMainSourceUnchanged = false)
     {
-        return new FileProcessingPipeline([this])
+        return new FileProcessingPipeline(this)
         {
             SourceBufferingMode = sourceBufferingMode,
-            SkipWhenSourceUnchanged = skipWhenSourceUnchanged,
+            AliasWhenVariantSourceUnchanged = aliasWhenVariantSourceUnchanged,
+            ThrowWhenMainSourceUnchanged = throwWhenMainSourceUnchanged,
         };
     }
 

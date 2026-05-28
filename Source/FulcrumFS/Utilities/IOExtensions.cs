@@ -1,12 +1,17 @@
 internal static class IOExtensions
 {
-    public static async Task CopyToAsync(this IAbsoluteFilePath source, IAbsoluteFilePath destination, CancellationToken cancellationToken = default)
+    public static Task CopyToAsync(this IAbsoluteFilePath source, IAbsoluteFilePath destination, CancellationToken cancellationToken = default)
+    {
+        return source.CopyToAsync(destination, overwrite: false, cancellationToken);
+    }
+
+    public static async Task CopyToAsync(this IAbsoluteFilePath source, IAbsoluteFilePath destination, bool overwrite = false, CancellationToken cancellationToken = default)
     {
         var sourceStream = source.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
 
         await using (sourceStream.ConfigureAwait(false))
         {
-            var destinationStream = destination.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.Delete);
+            var destinationStream = destination.OpenAsyncStream(overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.Delete);
 
             await using (destinationStream.ConfigureAwait(false))
             {

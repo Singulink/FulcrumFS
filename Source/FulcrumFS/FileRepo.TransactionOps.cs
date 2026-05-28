@@ -24,14 +24,29 @@ partial class FileRepo
         extension = FileExtension.Normalize(extension);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        FileId fileId;
+        KeyLock<(FileId FileId, string? VariantId)> fileLock = default;
 
-        while (true)
+        try
         {
-            fileId = Options.FileIdMode is FileIdMode.Secure ? FileId.CreateSecure() : FileId.CreateSequential();
+            FileId fileId;
 
-            using (await _fileSync.LockAsync((fileId, null), cancellationToken).ConfigureAwait(false))
+            while (true)
             {
+                fileId = Options.FileIdMode is FileIdMode.Secure ? FileId.CreateSecure() : FileId.CreateSequential();
+
+                // Try to acquire the per-id lock immediately. If another in-flight TxnAddAsync already owns this id (an astronomically rare collision in
+                // Secure mode, impossible-within-session in Sequential mode), mint a new id and retry rather than waiting. The lock is held for the entire
+                // duration of AddTransactionalAsyncCore so that this in-process reservation is honored end-to-end - critical as a defense-in-depth guard
+                // against ever processing two unrelated files into the same file ID.
+                try
+                {
+                    fileLock = await _fileSync.LockAsync((fileId, null), TimeSpan.Zero, cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    continue;
+                }
+
                 var fileDir = GetFileDirectory(_filesDirectory, fileId);
                 var fileDirState = fileDir.State;
 
@@ -39,29 +54,23 @@ partial class FileRepo
                 var deleteMarkerState = deleteMarker.State;
 
                 if (fileDirState is EntryState.Exists || deleteMarkerState is EntryState.Exists)
+                {
+                    fileLock.Dispose();
                     continue;
+                }
 
                 if (deleteMarkerState is not EntryState.ParentExists)
                     throw new IOException("An error occurred while accessing the repository: Cleanup directory does not exist.");
 
-                lock (_processingFiles)
-                {
-                    if (!_processingFiles.Add(fileId))
-                        continue;
-                }
-
                 break;
             }
-        }
 
-        try
-        {
             return await AddTransactionalAsyncCore(fileId, stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            lock (_processingFiles)
-                _processingFiles.Remove(fileId);
+            if (!fileLock.IsDefault)
+                fileLock.Dispose();
         }
     }
 
@@ -69,33 +78,28 @@ partial class FileRepo
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
-        using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
+        // No _fileSync lock is needed here. A caller can only possess a FileId after TxnAddAsync has returned, which means BatchMoveTransactionalAsync has
+        // already moved the file into _filesDirectory and the in-process add reservation lock has been released. Concurrent TxnDeleteAsync calls on the
+        // same id are supported by design via the shared indeterminate marker (multiple holders, FileShare allowed).
+
+        var fileDir = GetFileDirectory(_filesDirectory, fileId);
+        var deleteMarker = GetDeleteMarker(_cleanupDirectory, fileId, null);
+
+        switch (fileDir.State, deleteMarker.State)
         {
-            lock (_processingFiles)
-            {
-                if (_processingFiles.Contains(fileId))
-                    throw new InvalidOperationException($"File ID '{fileId}' is currently being processed and cannot be deleted.");
-            }
-
-            var fileDir = GetFileDirectory(_filesDirectory, fileId);
-            var deleteMarker = GetDeleteMarker(_cleanupDirectory, fileId, null);
-
-            switch (fileDir.State, deleteMarker.State)
-            {
-                case (EntryState.ParentExists, _) or (_, EntryState.Exists):
-                    throw new RepoFileNotFoundException($"File ID '{fileId}' could not be found in the repository or has already been marked for deletion.");
-                case (EntryState.ParentDoesNotExist, _) or (_, EntryState.ParentDoesNotExist):
-                    throw new IOException("Repository directories are not accessible.");
-            }
-
-            // Write an indeterminate marker to mark the file as potentially deleted and keep it open with a non-exclusive (shared) handle. Multiple
-            // concurrent transactions are allowed to share the marker, but cleanup operations probing it with an exclusive (FileShare.None) handle will be
-            // blocked while any transaction is still holding it.
-
-            var indeterminateMarker = GetIndeterminateMarker(_cleanupDirectory, fileId);
-            const string message = "A transaction tentatively has marked this file for deletion.";
-            return await OpenOrCreateSharedMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message, Options.MarkerFileLogging).ConfigureAwait(false);
+            case (EntryState.ParentExists, _) or (_, EntryState.Exists):
+                throw new RepoFileNotFoundException($"File ID '{fileId}' could not be found in the repository or has already been marked for deletion.");
+            case (EntryState.ParentDoesNotExist, _) or (_, EntryState.ParentDoesNotExist):
+                throw new IOException("Repository directories are not accessible.");
         }
+
+        // Write an indeterminate marker to mark the file as potentially deleted and keep it open with a non-exclusive (shared) handle. Multiple
+        // concurrent transactions are allowed to share the marker, but cleanup operations probing it with an exclusive (FileShare.None) handle will be
+        // blocked while any transaction is still holding it.
+
+        var indeterminateMarker = GetIndeterminateMarker(_cleanupDirectory, fileId);
+        const string message = "A transaction tentatively has marked this file for deletion.";
+        return await OpenOrCreateSharedMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message, Options.MarkerFileLogging).ConfigureAwait(false);
     }
 
     internal async ValueTask TxnCommitAddAsync(FileId fileId)
@@ -107,10 +111,10 @@ partial class FileRepo
     }
 
     internal async ValueTask TxnCommitDeleteAsync(FileId fileId) =>
-        await DeleteAsync(fileId, immediateDelete: Options.DeleteMode is DeleteMode.Immediate).ConfigureAwait(false);
+        await DeleteAsync(fileId, immediate: Options.DeleteMode is DeleteMode.Immediate).ConfigureAwait(false);
 
     internal async ValueTask TxnRollbackAddAsync(FileId fileId) =>
-        await DeleteAsync(fileId, immediateDelete: true).ConfigureAwait(false);
+        await DeleteAsync(fileId, immediate: true).ConfigureAwait(false);
 
     internal async ValueTask TxnRollbackDeleteAsync(FileId fileId)
     {

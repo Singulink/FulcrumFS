@@ -214,7 +214,7 @@ public sealed class Tests
             Formats = [new(ImageFormat.Jpeg)],
             Resize = new(ImageResizeMode.FitDown, 2000, 2000),
             ReencodeMode = ImageReencodeMode.AvoidReencoding,
-        }).ToPipeline(skipWhenSourceUnchanged: true);
+        }).ToPipeline(throwWhenMainSourceUnchanged: true);
 
         await using var stream = _imageFile.OpenAsyncStream();
 

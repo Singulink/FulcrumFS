@@ -25,8 +25,6 @@ public sealed partial class FileRepo : IDisposable
     private readonly IAbsoluteDirectoryPath _tempDirectory;
     private readonly IAbsoluteDirectoryPath _cleanupDirectory;
 
-    private readonly HashSet<FileId> _processingFiles = [];
-
     private readonly KeyLocker<(FileId FileId, string? VariantId)> _fileSync = new();
     private readonly AsyncLock _stateSync = new();
 
@@ -302,8 +300,7 @@ public sealed partial class FileRepo : IDisposable
         }
     }
 
-    // TODO: remove on next major release after FulcrumFS 0.x. Consumers that have legacy repositories will then get a compile error notifying them that legacy
-    // migration is no longer supported and they must run an older version of the library at least once to migrate first.
+    // TODO: Remove legacy migration in next preview release.
 
     /// <summary>
     /// Migrates a repository created by early pre-release legacy versions of FulcrumFS that used dot-prefixed <c>.temp</c> and <c>.cleanup</c> directory names

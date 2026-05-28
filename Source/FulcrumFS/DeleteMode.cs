@@ -18,4 +18,20 @@ public enum DeleteMode
     /// files are physically removed.
     /// </summary>
     DeferredUntilClean,
+
+    /// <summary>
+    /// Main file deletions are deferred (same as <see cref="DeferredUntilClean"/>), but variant deletions take physical effect immediately. The deferred
+    /// grace period for variants exists primarily so that backups capture variants in a consistent state alongside their main files; this mode skips that
+    /// protection and is only appropriate when either:
+    /// <list type="bullet">
+    /// <item><description>
+    /// Backups exclude variants entirely, for example because variants are always (re)materialized on demand via
+    /// <see cref="FileRepo.GetOrAddVariantAsync(FileId, string, IFileProcessingPipelineSelector, CancellationToken)"/>, or are regenerated from main files as
+    /// part of a backup restoration procedure.</description></item>
+    /// <item><description>
+    /// The repository is offline and already backed up, and the operator wants to "force delete" variants immediately to remediate a problem with previously
+    /// generated variants.</description></item>
+    /// </list>
+    /// </summary>
+    DeferredFilesOnly,
 }

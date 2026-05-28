@@ -15,7 +15,7 @@
     <PackageVersion Include="Singulink.Collections.Weak" Version="2.2.0" />
     <PackageVersion Include="Singulink.Enums" Version="2.4.0" />
     <PackageVersion Include="Singulink.IO.FileSystem" Version="3.0.1" />
-    <PackageVersion Include="Singulink.Threading" Version="2.1.0" />
+    <PackageVersion Include="Singulink.Threading" Version="2.2.0" />
   </ItemGroup>
 
   <ItemGroup Label="Analyzers">

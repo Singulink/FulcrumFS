@@ -1,0 +1,32 @@
+- name: Getting Started
+  href: getting-started.md
+
+- name: Adding and Committing Files
+  href: adding-files.md
+
+- name: Fetching Files
+  href: fetching-files.md
+
+- name: Processing Pipelines
+  href: processing-pipelines.md
+
+- name: File Variants
+  href: file-variants.md
+
+- name: Validating File Formats
+  href: file-formats.md
+
+- name: Image Processing
+  href: image-processing.md
+
+- name: Video Processing
+  href: video-processing.md
+
+- name: Deleting Files and Variants
+  href: deleting-files.md
+
+- name: Repository Cleanup
+  href: cleanup.md
+
+- name: Exception Handling
+  href: exception-handling.md

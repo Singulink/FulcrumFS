@@ -52,4 +52,21 @@ public static class FileRepoPaths
     /// The file extension used for indeterminate markers in the repository, which go in the cleanup directory.
     /// </summary>
     public const string IndeterminateMarkerExtension = ".ind";
+
+    /// <summary>
+    /// The file extension used for alias markers in the repository, which go in a file group's directory alongside data files. An alias marker stands in for a
+    /// variant whose pipeline produced no changes (see <c>FileProcessingPipeline.SkipWhenSourceUnchanged</c>); the marker filename encodes a pointer to the
+    /// resolved source data file in the form <c>{variantId}.{sourceVariantId}.{sourceExt}.alias</c>, where <c>sourceVariantId</c> is either
+    /// a normalized variant ID or the literal <see cref="MainFileName"/> sentinel (<c>$main</c>) and <c>sourceExt</c> is the data extension without a leading
+    /// dot. Aliases always point to real data files (never to other aliases) so resolution is a single direct lookup.
+    /// </summary>
+    public const string AliasMarkerExtension = ".alias";
+
+    /// <summary>
+    /// The file extension used for rebase markers in the repository, which go in a file group's directory alongside data files. A rebase marker records the
+    /// in-progress promotion of an alias dependent to a standalone data file while its source variant is being retired with surviving dependents; the marker
+    /// filename encodes the source and chosen variant IDs in the form <c>{sourceVariantId}.{chosenVariantId}.rebase</c>. Used by the cleaner to
+    /// deterministically resume a rebase operation after a crash.
+    /// </summary>
+    public const string RebaseMarkerExtension = ".rebase";
 }

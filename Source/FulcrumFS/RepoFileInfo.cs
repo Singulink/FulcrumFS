@@ -21,7 +21,7 @@ public sealed record RepoFileInfo
     /// <remarks>
     /// <para>Prefer calling <see cref="Open"/> to read repository files. Opening or otherwise accessing the file directly via this path requires understanding
     /// the sharing and deletion semantics used by the repository. Using inappropriate <see cref="FileMode"/>, <see cref="FileAccess"/>, or
-    /// <see cref="FileShare"/> values can interfere with the repository's cleanup, transaction, and concurrency behavior. Modifying or deleting the file
+    /// <see cref="FileShare"/> values can interfere with the repository's cleanup, transaction, and concurrency behavior. Accessing the file
     /// directly through this path results in undefined behavior and is not supported. Use at your own risk.</para>
     /// </remarks>
     public IAbsoluteFilePath Path { get; }

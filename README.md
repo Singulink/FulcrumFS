@@ -15,6 +15,8 @@
 
 While it serves as a key component of our upcoming **FulcrumDB** database engine, it is also designed to function independently, bringing robust file handling to any application or database. FulcrumFS is especially well-suited for managing user-uploaded content such as documents, images and videos, offering strong guarantees around consistency and integrity.
 
+When your application commits its database transaction before the repository transaction, FulcrumFS guarantees that every file the database references stays accessible in the repository (even after a crash), and every file the database no longer references is eventually deleted so storage never leaks.
+
 Details of each component are provided below:
 
 || Library | Status | Package |
@@ -120,10 +122,10 @@ var videoPipeline = new VideoProcessor(VideoProcessingOptions.StandardizedH264AA
         thumbnailProcessor,
     ));
 
-// Route by extension. Unsupported extensions are rejected with a FileProcessingException.
+// Route by file type. Unsupported extensions are rejected with a FileProcessingException.
 var pipeline = new FileProcessingPipelineSelector(pdfPipeline, imagePipeline, videoPipeline);
 
-// Open scopes for both the database and the file repository.
+// Open transactions for both the database and the file repository.
 await using var dbTxn = await myDb.BeginTransactionAsync();
 await using var fileTxn = await repo.BeginTransactionAsync();
 
@@ -143,8 +145,8 @@ await fileTxn.CommitAsync();
 
 // Read the main file (and enumerate any auto-generated variants) at any time using the stored FileId.
 var info = await repo.GetAsync(added.FileId);
-using var readStream = info.Main.Open();
-// info.Variants contains the "thumbnail" entry for images and videos.
+using var readStream = info.MainFile.Open();
+// info.VariantFiles contains the "thumbnail" entry for images and videos.
 ```
 
 The commit ordering is what guarantees consistency. If a crash occurs after `dbTxn.CommitAsync()` but before `fileTxn.CommitAsync()`, the added file is still on disk and reachable through the FileId stored in the database. If a crash occurs before `dbTxn.CommitAsync()`, the file is left in an indeterminate state on disk with no database reference to it, and the next clean operation will reclaim it.
@@ -154,11 +156,11 @@ The commit ordering is what guarantees consistency. If a crash occurs after `dbT
 Files are stored in standard directories under the repository base directory and remain fully browsable in any file manager:
 
 ```
-<base>/
+{base}/
     fulcrumfs.info               Repository marker / version info
     fulcrumfs.lock               Held by the active FileRepo instance
     files/
-        <yy>/<zz>/<file-id>/     Sharded by FileId bytes
+        {yy}/{zz}/{file-id}/     Sharded by FileId bytes
             $main.pdf            Main file
             thumbnail.jpg        Optional variants
             scaled.jpg
@@ -182,4 +184,4 @@ A few common alternatives and how FulcrumFS compares:
 
 ## Further Reading
 
-API documentation and additional usage information is coming soon.
+Please head over to the [project documentation site](https://www.singulink.com/Docs/FulcrumFS/index.html) to view articles, examples and the fully documented API.

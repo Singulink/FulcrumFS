@@ -4,7 +4,8 @@ namespace FulcrumFS;
 /// Represents an exception that can be thrown when file processing does not result in any changes to the source file.
 /// </summary>
 /// <remarks>
-/// See <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/> for more information about when this exception may be thrown.
+/// See <see cref="FileProcessingPipeline.AliasWhenVariantSourceUnchanged"/> and <see cref="FileProcessingPipeline.ThrowWhenMainSourceUnchanged"/> for more
+/// information about when this exception may be thrown.
 /// </remarks>
 public class FileSourceUnchangedException : FileProcessingException
 {

@@ -22,6 +22,18 @@ partial class FileRepo
         public required string Extension;
         public required FileProcessingContext? Context;
         public required bool IsExisting;
+
+        /// <summary>
+        /// The variant ID of the actual on-disk data file this node resolves to (or <see cref="FileRepoPaths.MainFileName"/> for the main file). For a data
+        /// node, this equals <see cref="VariantId"/> (or <c>$main</c>). For an alias node, this is inherited from the parent and identifies the data file the
+        /// alias points to.
+        /// </summary>
+        public required string RootVariantId;
+
+        /// <summary>
+        /// The extension (with leading dot, or empty) of the actual on-disk data file this node resolves to.
+        /// </summary>
+        public required string RootExtension;
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -46,8 +58,8 @@ partial class FileRepo
     /// <param name="sourceVariantId">The ID of the source variant, or <see langword="null"/> to use the main file as the source.</param>
     /// <param name="pipeline">The pipeline provider used to process the top-level variant.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
-    /// <returns>The list of stored variants in pre-order (top-level first, then nested in declaration order). Variants whose pipelines were skipped due to
-    /// <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/> are omitted.</returns>
+    /// <returns>The list of stored variants in pre-order (top-level first, then nested in declaration order). Variants whose pipelines stored an alias due to
+    /// <see cref="FileProcessingPipeline.AliasWhenVariantSourceUnchanged"/> are included in the list with the resolved data file path.</returns>
     /// <exception cref="InvalidOperationException">A variant in the requested tree already exists.</exception>
     public async Task<IReadOnlyList<RepoFileInfo>> AddVariantAsync(
         FileId fileId,
@@ -73,12 +85,13 @@ partial class FileRepo
 
     /// <summary>
     /// Adds new file variants where they do not already exist, processing missing variants through their pipelines and keeping existing ones unchanged. Each
-    /// declared variant ID in the tree is represented in the returned list except for those that skip due to
-    /// <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/>.
+    /// declared variant ID in the tree is represented in the returned list; variants whose pipelines stored an alias due to
+    /// <see cref="FileProcessingPipeline.AliasWhenVariantSourceUnchanged"/> resolve transparently to their source.
     /// </summary>
     /// <remarks>
-    /// Post-call existence is not guaranteed for variants whose pipelines opt into <see cref="FileProcessingPipeline.SkipWhenSourceUnchanged"/>: when the
-    /// pipeline produces no changes the variant is silently skipped, but its nested children still run against the unchanged parent source.
+    /// Variants whose pipelines opt into <see cref="FileProcessingPipeline.AliasWhenVariantSourceUnchanged"/> remain addressable after the add: an alias
+    /// marker is stored that transparently resolves to the variant's source on fetch operations. Nested variants of the aliased variant still run against the
+    /// unchanged parent source.
     /// </remarks>
     public async Task<IReadOnlyList<RepoFileInfo>> GetOrAddVariantAsync(
         FileId fileId,
@@ -121,6 +134,8 @@ partial class FileRepo
     // Variant-add core
     // ---------------------------------------------------------------------------------------------------------------
 
+    private const int MaxAddRebaseRollForwardAttempts = 8;
+
     private async Task<IReadOnlyList<RepoFileInfo>?> RunVariantAddAsync(
         FileId fileId,
         string variantId,
@@ -134,114 +149,264 @@ partial class FileRepo
 
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        // Locate the source file to obtain the extension used to resolve the root pipeline.
-        var sourceFile = FindDataFile(_filesDirectory, fileId, sourceVariantId)
-            ?? throw new RepoFileNotFoundException(
-                sourceVariantId is null
-                    ? $"File ID '{fileId}' was not found."
-                    : $"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
+        IAbsoluteFilePath sourceFile = null;
+        FileProcessingPipeline rootPipeline;
 
-        var rootPipeline = rootSelector.GetPipeline(sourceFile.Extension);
-
-        // Discover every variant ID statically declared in the tree (including the user-provided root variant ID).
-        var allVariantIds = new SortedSet<string>(StringComparer.Ordinal) { variantId };
-        CollectVariantIds(rootPipeline, allVariantIds, variantId);
-
-        var locks = new List<IDisposable>(allVariantIds.Count);
-        var stagedNodes = new List<StagedNode>();
-        FileStream? sourceFileStream = null;
-
-        try
+        if (rootSelector is IFileProcessingPipelineProvider provider)
         {
-            // Acquire per-variant locks in sorted order for deadlock-freedom.
-            var lockTimeout = mode is VariantAddMode.Try ? TimeSpan.Zero : Timeout.InfiniteTimeSpan;
-
-            foreach (string vid in allVariantIds)
-            {
-                try
-                {
-                    var lockHandle = await _fileSync.LockAsync((fileId, vid), lockTimeout, cancellationToken).ConfigureAwait(false);
-
-#pragma warning disable RS0042 // Unsupported use of non-copyable type — boxing the lock handle here is intentional.
-                    locks.Add(lockHandle);
-#pragma warning restore RS0042
-                }
-                catch (TimeoutException) when (mode is VariantAddMode.Try)
-                {
-                    return null;
-                }
-            }
-
-            // Re-check disk existence for every declared variant ID under the locks.
-            var existingByVariantId = new Dictionary<string, IAbsoluteFilePath>(StringComparer.Ordinal);
-
-            foreach (string vid in allVariantIds)
-            {
-                var existing = FindDataFile(_filesDirectory, fileId, vid);
-                if (existing is not null)
-                    existingByVariantId[vid] = existing;
-            }
-
-            if (existingByVariantId.Count > 0 && mode is not VariantAddMode.GetOrAdd)
-            {
-                if (mode is VariantAddMode.Try)
-                    return null;
-
-                // Add mode: throw naming the first colliding variant ID (in sorted enumeration order, for stability).
-                string firstCollision = allVariantIds.First(existingByVariantId.ContainsKey);
-                throw new InvalidOperationException($"File ID '{fileId}' variant '{firstCollision}' already exists.");
-            }
-
-            // Open the source file stream that the root pipeline will read from.
-            sourceFileStream = sourceFile.OpenAsyncStream(FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-
-            // Run the tree. The context takes ownership of the stream (leaveOpen=false) and disposes it once it has materialized the source as a file.
-            await RunNodeAsync(
-                fileId,
-                streamSource: sourceFileStream,
-                streamLeaveOpen: false,
-                fileSource: null,
-                sourceExtension: sourceFile.Extension,
-                variantId,
-                rootPipeline,
-                mode,
-                existingByVariantId,
-                stagedNodes,
-                cancellationToken).ConfigureAwait(false);
-
-            sourceFileStream = null;
-
-            // Batch-move into files/.
-            await BatchMoveVariantsAsync(fileId, stagedNodes, cancellationToken).ConfigureAwait(false);
-
-            // Build result.
-            var results = new List<RepoFileInfo>(stagedNodes.Count);
-            foreach (var node in stagedNodes)
-                results.Add(new RepoFileInfo(fileId, node.VariantId, node.Path));
-
-            return results;
+            rootPipeline = provider.GetPipeline();
         }
-        finally
+        else
         {
-            // Always dispose contexts (cleans up temp dirs). Safe to call regardless of move outcome since context Dispose doesn't touch files/.
-            foreach (var node in stagedNodes)
+            // The root selector is not a provider, so we need to resolve the source file to obtain the extension for pipeline resolution.
+            // Locate the source file to obtain the extension used to resolve the root pipeline.
+
+            sourceFile = FindSourceFile();
+            rootPipeline = rootSelector.GetPipeline(sourceFile.Extension);
+        }
+
+        // Lock-free fast path for GetOrAdd: if every declared variant already exists on disk, return them directly without acquiring any locks. The check is
+        // racy (a concurrent delete could remove a variant after the check), but that is consistent with the best-effort guarantees this API already provides
+        // under concurrent access. Alias markers count as "exists" and are resolved transparently.
+
+        if (mode is VariantAddMode.GetOrAdd)
+        {
+            var fastPathResults = new List<RepoFileInfo>();
+            if (TryCollectExistingVariants(fileId, variantId, rootPipeline, fastPathResults))
+                return fastPathResults;
+        }
+
+        // A pending rebase marker observed while resolving the source forces an optimistic rollforward-and-restart (honoring the whole-system invariant that
+        // no add/delete plans while a rebase marker exists — see the alias-resolution block below), so the whole add runs under a bounded restart loop.
+        for (int addAttempt = 0; ; addAttempt++)
+        {
+            if (addAttempt >= MaxAddRebaseRollForwardAttempts)
             {
-                if (node.Context is not null)
+                throw new IOException(
+                    $"Unable to resolve a stable source for file ID '{fileId}' after {MaxAddRebaseRollForwardAttempts} attempts due to concurrent rebase " +
+                    $"activity. Retry the operation.");
+            }
+
+            // Re-resolve the source on each iteration; a prior restart may have rewritten it to a resolved data file, and a rollforward may have re-pointed it.
+            sourceFile = null;
+
+            // Discover every variant ID being created in the tree (the user-provided root variant ID plus the statically declared nested variants). These are
+            // the IDs that participate in collision detection, since they are the ones the add brings into existence.
+
+            var createdVariantIds = new SortedSet<string>(StringComparer.Ordinal) { variantId };
+            AddVariantIds(rootPipeline, createdVariantIds);
+
+            // The full lock set additionally includes the source variant (if any) so it cannot be removed concurrently while we may be writing an alias marker
+            // that depends on it. The source is expected to already exist (it is a precondition, not a collision), so it is locked and gated against retirement
+            // but excluded from collision detection. Note that when the source is itself an alias, the chain-compression invariant means our staged aliases
+            // will reference the resolved root, which we additionally lock below once we've inspected the source file on disk.
+
+            var allVariantIds = new SortedSet<string>(createdVariantIds, StringComparer.Ordinal);
+
+            if (sourceVariantId is not null)
+                allVariantIds.Add(sourceVariantId);
+
+            var locks = new List<KeyLock<(FileId, string?)>>(allVariantIds.Count + 1);
+            var stagedNodes = new List<StagedNode>();
+            bool needRollForward = false;
+
+            try
+            {
+                // Acquire per-variant locks in sorted order for deadlock-freedom.
+
+                var lockTimeout = mode is VariantAddMode.GetOrAdd ? Timeout.InfiniteTimeSpan : TimeSpan.Zero;
+
+                foreach (string vid in allVariantIds)
                 {
-                    try { await node.Context.DisposeAsync().ConfigureAwait(false); }
-                    catch { }
+                    try
+                    {
+                        locks.Add(await _fileSync.LockAsync((fileId, vid), lockTimeout, cancellationToken).ConfigureAwait(false));
+                    }
+                    catch (TimeoutException) when (mode is VariantAddMode.Try)
+                    {
+                        return null;
+                    }
+                }
+
+                // Re-check disk existence for every declared variant ID under the locks. Also check for in-group delete markers (folded into FindDataFile's out
+                // param): if a delete marker is present, the slot still has unsettled retirement state on disk and cannot accept an add until the cleaner finishes
+                // physical removal. This is a state conflict (not a collision and not a transient retry case), so even TryAdd fails fast rather than swallowing
+                // it. Once cleanup completes, callers may add under the same ID again — see RepoVariantPendingCleanupException remarks.
+
+                var existingByVariantId = new Dictionary<string, IAbsoluteFilePath>(StringComparer.Ordinal);
+
+                foreach (string vid in allVariantIds)
+                {
+                    var existing = FindDataFile(_filesDirectory, fileId, vid, out bool isRetired);
+
+                    if (isRetired)
+                    {
+                        throw new RepoVariantPendingCleanupException(
+                            $"File ID '{fileId}' variant '{vid}' has pending retirement cleanup state on disk and cannot be added under the same ID until " +
+                            $"cleanup completes. Reusing a retired variant ID is an advanced scenario — consult the FileRepo.DeleteVariantsAsync " +
+                            $"documentation before relying on this behavior.");
+                    }
+
+                    if (existing is not null)
+                        existingByVariantId[vid] = existing;
+                }
+
+                if (mode is not VariantAddMode.GetOrAdd)
+                {
+                    // Add/Try mode: a created variant ID that already exists is a collision. The source variant ID is deliberately excluded; it is required to
+                    // already exist to serve as a source, so its presence is never a collision.
+
+                    string? firstCollision = createdVariantIds.FirstOrDefault(existingByVariantId.ContainsKey);
+
+                    if (firstCollision is not null)
+                    {
+                        if (mode is VariantAddMode.Try)
+                            return null;
+
+                        throw new InvalidOperationException($"File ID '{fileId}' variant '{firstCollision}' already exists.");
+                    }
+                }
+
+                // Open the source file stream that the root pipeline will read from. If the source on disk is an alias marker, resolve it transparently so the
+                // pipeline reads from the real data file; track the resolved root for any alias markers we may write for this variant or its descendants.
+                sourceFile ??= FindSourceFile();
+
+                // Defaults are only meaningful on the staging path below; when a rollforward is needed they are left unused.
+                string parentRootVariantId = FileRepoPaths.MainFileName;
+                string parentRootExtension = string.Empty;
+
+                if (sourceFile.Extension is FileRepoPaths.AliasMarkerExtension)
+                {
+                    if (!TryParseAliasMarker(sourceFile, out _, out string? rootVid, out string? rootExt))
+                    {
+                        throw new InvalidOperationException(
+                            $"File ID '{fileId}' source variant '{sourceVariantId}' alias marker '{sourceFile.Name}' is malformed.");
+                    }
+
+                    // Additionally lock the resolved root if it differs from the (already-locked) sourceVariantId, so the underlying data file cannot be
+                    // deleted concurrently. Acquired out of sorted order — acceptable because no other locks remain to be taken at this point in the flow.
+                    if (rootVid is not null && !allVariantIds.Contains(rootVid))
+                    {
+                        try
+                        {
+                            locks.Add(await _fileSync.LockAsync((fileId, rootVid), lockTimeout, cancellationToken).ConfigureAwait(false));
+                        }
+                        catch (TimeoutException) when (mode is VariantAddMode.Try)
+                        {
+                            return null;
+                        }
+                    }
+
+                    // Probe the resolved root under its lock. FindDataFile also surfaces — for free — any pending rebase naming the root as the source: a
+                    // crash-interrupted (or in-progress, cross-process) retirement of the root that is being replaced by a chosen survivor. Binding the new
+                    // variant to the doomed root could leave our freshly-written alias dangling once the cleaner finishes that rebase and removes the root.
+                    // Honor the whole-system invariant instead: drop our locks (in the finally), roll the rebase forward to completion under its own locks,
+                    // then restart and re-resolve against the settled, single-head subtree. (No locks are held across the rollforward, so no out-of-order
+                    // acquisition is possible.)
+                    var resolved = FindDataFile(_filesDirectory, fileId, rootVid, out _, out string? rootRebaseChosen);
+
+                    if (rootRebaseChosen is not null)
+                    {
+                        if (rootVid is null)
+                        {
+                            throw new InvalidOperationException(
+                                $"File ID '{fileId}' has a rebase marker naming the main file as a source, which is invalid. This indicates repository " +
+                                $"corruption.");
+                        }
+
+                        needRollForward = true;
+                    }
+                    else
+                    {
+                        if (resolved is null || resolved.State is not EntryState.Exists)
+                        {
+                            throw new RepoFileNotFoundException(
+                                $"File ID '{fileId}' source variant '{sourceVariantId}' alias points to missing data file.");
+                        }
+
+                        parentRootVariantId = rootVid ?? FileRepoPaths.MainFileName;
+                        parentRootExtension = rootExt;
+
+                        sourceFile = resolved;
+                    }
+                }
+                else
+                {
+                    parentRootVariantId = sourceVariantId ?? FileRepoPaths.MainFileName;
+                    parentRootExtension = sourceFile.Extension;
+                }
+
+                if (!needRollForward)
+                {
+                    // Run the tree against the resolved source data file directly. Passing the file path (rather than a pre-opened stream) lets each
+                    // processor consume the source in whatever form is optimal for it: a file-based processor (e.g. one that shells out to ffmpeg) reads the
+                    // path with no intermediate copy, while a stream-based processor opens it on demand. It also lets the pipeline treat the source as a known
+                    // repo file and skip any defensive buffering.
+
+                    await RunNodeAsync(
+                        fileId,
+                        streamSource: null,
+                        streamLeaveOpen: false,
+                        fileSource: sourceFile,
+                        parentRootVariantId,
+                        parentRootExtension,
+                        variantId,
+                        rootPipeline,
+                        mode,
+                        existingByVariantId,
+                        stagedNodes,
+                        cancellationToken).ConfigureAwait(false);
+
+                    // Batch-move into files/.
+
+                    await BatchMoveVariantsAsync(fileId, stagedNodes, cancellationToken).ConfigureAwait(false);
+
+                    // Build result.
+
+                    var results = new List<RepoFileInfo>(stagedNodes.Count);
+                    foreach (var node in stagedNodes)
+                    {
+                        // Alias nodes are addressable variants but resolve transparently to their source data file, so report the resolved data path (the
+                        // marker itself is never surfaced to callers).
+                        var reportedPath = node.Extension is FileRepoPaths.AliasMarkerExtension ?
+                            ResolveAlias(_filesDirectory, fileId, node.Path) ?? node.Path :
+                            node.Path;
+
+                        results.Add(new RepoFileInfo(fileId, node.VariantId, reportedPath));
+                    }
+
+                    return results;
                 }
             }
-
-            if (sourceFileStream is not null)
+            finally
             {
-                try { await sourceFileStream.DisposeAsync().ConfigureAwait(false); }
-                catch { }
+                // Always dispose contexts (cleans up temp dirs). Safe to call regardless of move outcome since context Dispose doesn't touch files/.
+                foreach (var node in stagedNodes)
+                {
+                    if (node.Context is not null)
+                    {
+                        try { await node.Context.DisposeAsync().ConfigureAwait(false); }
+                        catch { }
+                    }
+                }
+
+                locks.ReverseDisposeAll();
             }
 
-            // Release locks in reverse acquisition order.
-            for (int i = locks.Count - 1; i >= 0; i--)
-                locks[i].Dispose();
+            // Our locks are released. Roll the observed pending rebase forward to completion (under its own locks) and restart, so the next iteration resolves
+            // the source against a settled, single-head subtree.
+            await RollForwardPendingRebasesAsync(fileId, cancellationToken).ConfigureAwait(false);
+        }
+
+        IAbsoluteFilePath FindSourceFile()
+        {
+            // Retirement of sourceVariantId is already ruled out: the add path has gated every declared variant ID (including sources) against delete markers
+            // under locks before reaching the staging runner.
+            return FindDataFile(_filesDirectory, fileId, sourceVariantId, out _) ??
+                throw new RepoFileNotFoundException(
+                    sourceVariantId is null ?
+                        $"File ID '{fileId}' was not found." :
+                        $"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
         }
     }
 
@@ -262,7 +427,8 @@ partial class FileRepo
         Stream? streamSource,
         bool streamLeaveOpen,
         IAbsoluteFilePath? fileSource,
-        string sourceExtension,
+        string parentRootVariantId,
+        string parentRootExtension,
         string? variantId,
         FileProcessingPipeline pipeline,
         VariantAddMode mode,
@@ -272,20 +438,64 @@ partial class FileRepo
     {
         Debug.Assert((streamSource is null) != (fileSource is null), "Exactly one of streamSource or fileSource must be non-null.");
 
-        // GetOrAdd: if this variant already exists on disk, register it and recurse children against the existing file.
+        // GetOrAdd: if this variant already exists on disk, register it and recurse children against the existing file (resolving an alias marker if needed).
         if (variantId is not null && mode is VariantAddMode.GetOrAdd && existingByVariantId!.TryGetValue(variantId, out var existingFile))
         {
-            stagedNodes.Add(new StagedNode
-            {
-                VariantId = variantId,
-                Path = existingFile,
-                Extension = existingFile.Extension,
-                Context = null,
-                IsExisting = true,
-            });
+            IAbsoluteFilePath childSource;
+            string childRootVariantId;
+            string childRootExtension;
 
-            await RunChildrenAsync(fileId, existingFile, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
-            return;
+            if (existingFile.Extension is FileRepoPaths.AliasMarkerExtension)
+            {
+                if (!TryParseAliasMarker(existingFile, out _, out string? aliasSourceVid, out string? aliasSourceExt))
+                {
+                    throw new InvalidOperationException(
+                        $"File ID '{fileId}' variant '{variantId}' alias marker '{existingFile.Name}' is malformed.");
+                }
+
+                var resolved = GetDataFile(_filesDirectory, fileId, aliasSourceExt, aliasSourceVid);
+                if (resolved.State is not EntryState.Exists)
+                {
+                    // Defensive: alias resolution failed under the variant lock. Treat as non-existing so it can be properly recreated.
+                    existingByVariantId.Remove(variantId);
+                }
+                else
+                {
+                    stagedNodes.Add(new StagedNode
+                    {
+                        VariantId = variantId,
+                        Path = resolved,
+                        Extension = aliasSourceExt,
+                        Context = null,
+                        IsExisting = true,
+                        RootVariantId = aliasSourceVid ?? FileRepoPaths.MainFileName,
+                        RootExtension = aliasSourceExt,
+                    });
+
+                    childSource = resolved;
+                    childRootVariantId = aliasSourceVid ?? FileRepoPaths.MainFileName;
+                    childRootExtension = aliasSourceExt;
+
+                    await RunChildrenAsync(fileId, childSource, childRootVariantId, childRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+            }
+            else
+            {
+                stagedNodes.Add(new StagedNode
+                {
+                    VariantId = variantId,
+                    Path = existingFile,
+                    Extension = existingFile.Extension,
+                    Context = null,
+                    IsExisting = true,
+                    RootVariantId = variantId,
+                    RootExtension = existingFile.Extension,
+                });
+
+                await RunChildrenAsync(fileId, existingFile, variantId, existingFile.Extension, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
+                return;
+            }
         }
 
         // Create a context with its own temp working dir.
@@ -293,7 +503,7 @@ partial class FileRepo
         FileProcessingContext context;
 
         if (streamSource is not null)
-            context = new FileProcessingContext(fileId, variantId, tempWorkingDir, streamSource, sourceExtension, streamLeaveOpen, cancellationToken);
+            context = new FileProcessingContext(fileId, variantId, tempWorkingDir, streamSource, parentRootExtension, streamLeaveOpen, cancellationToken);
         else
             context = new FileProcessingContext(fileId, variantId, tempWorkingDir, fileSource!, cancellationToken);
 
@@ -301,7 +511,7 @@ partial class FileRepo
 
         try
         {
-            await pipeline.ExecuteAsync(context, knownRepoFileSource: fileSource is not null).ConfigureAwait(false);
+            await pipeline.ExecuteAsync(context, knownRepoFileSource: fileSource is not null, isMainPipeline: variantId is null).ConfigureAwait(false);
 
             stagedResult = await context.GetSourceAsFileAsync().ConfigureAwait(false);
 
@@ -315,19 +525,39 @@ partial class FileRepo
                 cancellationToken.ThrowIfCancellationRequested();
             }
         }
-        catch (FileSourceUnchangedException) when (variantId is not null && pipeline.SkipWhenSourceUnchanged)
+        catch (FileSourceUnchangedException) when (variantId is not null && pipeline.AliasWhenVariantSourceUnchanged)
         {
-            // Skip storing this variant; dispose its context and continue with the unchanged parent source for children.
-            await context.DisposeAsync().ConfigureAwait(false);
+            // Variant pipeline produced no changes: instead of storing a duplicate data file, stage a zero-byte alias marker that points to the resolved root
+            // data file for the parent. The marker becomes a first-class addressable variant on disk and lets future GetOrAdd fast-paths succeed for this
+            // variant. Children still run against the unchanged parent source.
 
-            await RunChildrenAsync(
-                fileId,
-                fileSource ?? throw new InvalidOperationException("SkipWhenSourceUnchanged should never trigger when the source is a stream (main pipeline)."),
-                pipeline.Variants,
-                mode,
-                existingByVariantId,
-                stagedNodes,
-                cancellationToken).ConfigureAwait(false);
+            tempWorkingDir.Create();
+            string aliasName = BuildAliasFileName(variantId, parentRootVariantId, parentRootExtension);
+            var aliasStaged = tempWorkingDir.CombineFile(aliasName, PathOptions.None);
+
+            using (var stream = aliasStaged.OpenStream(FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                // Zero-byte marker; nothing to write.
+            }
+
+            // Children run against the unchanged parent data. For a file-sourced node that is fileSource directly; for a stream-sourced node (the top-level
+            // variant-add path) the parent data must be materialized from the context. Either way the context owns tempWorkingDir (which holds the staged
+            // alias marker, and possibly the materialized source), so it must not be disposed here — it is handed to the staged node and disposed in the outer
+            // finally only after the batch-move has relocated the marker out of the temp dir.
+            var childSource = fileSource ?? await context.GetSourceAsFileAsync().ConfigureAwait(false);
+
+            stagedNodes.Add(new StagedNode
+            {
+                VariantId = variantId,
+                Path = aliasStaged,
+                Extension = FileRepoPaths.AliasMarkerExtension,
+                Context = context,
+                IsExisting = false,
+                RootVariantId = parentRootVariantId,
+                RootExtension = parentRootExtension,
+            });
+
+            await RunChildrenAsync(fileId, childSource, parentRootVariantId, parentRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
 
             return;
         }
@@ -337,6 +567,9 @@ partial class FileRepo
             throw;
         }
 
+        string thisRootVariantId = variantId ?? FileRepoPaths.MainFileName;
+        string thisRootExtension = context.Extension;
+
         stagedNodes.Add(new StagedNode
         {
             VariantId = variantId,
@@ -344,14 +577,18 @@ partial class FileRepo
             Extension = context.Extension,
             Context = context,
             IsExisting = false,
+            RootVariantId = thisRootVariantId,
+            RootExtension = thisRootExtension,
         });
 
-        await RunChildrenAsync(fileId, stagedResult, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
+        await RunChildrenAsync(fileId, stagedResult, thisRootVariantId, thisRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RunChildrenAsync(
         FileId fileId,
         IAbsoluteFilePath parentSource,
+        string parentRootVariantId,
+        string parentRootExtension,
         IReadOnlyList<FileProcessingVariant> variants,
         VariantAddMode mode,
         Dictionary<string, IAbsoluteFilePath>? existingByVariantId,
@@ -370,7 +607,8 @@ partial class FileRepo
                 streamSource: null,
                 streamLeaveOpen: false,
                 fileSource: parentSource,
-                sourceExtension: parentSource.Extension,
+                parentRootVariantId,
+                parentRootExtension,
                 v.VariantId,
                 childPipeline,
                 mode,
@@ -381,23 +619,71 @@ partial class FileRepo
     }
 
     /// <summary>
-    /// Walks the static variant tree of the specified pipeline, accumulating variant IDs into the destination set. Throws <see cref="ArgumentException"/> if a
-    /// duplicate ID is encountered.
+    /// Builds an alias marker filename of the form <c>{variantId}.{sourceVariantId}.{sourceExt}.alias</c>.
     /// </summary>
-    private static void CollectVariantIds(FileProcessingPipeline pipeline, SortedSet<string> destination, string? rootIdForMessage)
+    private static string BuildAliasFileName(string variantId, string sourceVariantId, string sourceExtension)
     {
-        foreach (var v in pipeline.Variants)
+        string extPart = sourceExtension.Length is 0 ? string.Empty : sourceExtension[1..];
+        return $"{variantId}.{sourceVariantId}.{extPart}{FileRepoPaths.AliasMarkerExtension}";
+    }
+
+    /// <summary>
+    /// Walks the static variant tree in pre-order, attempting to locate every declared variant on disk. Returns <see langword="true"/> if every variant in the
+    /// tree (including the root) was found and appended to <paramref name="results"/>; otherwise returns <see langword="false"/> with the partial results left
+    /// in an undefined state (the caller should discard them). Alias markers are resolved transparently; the returned <see cref="RepoFileInfo.Path"/> always
+    /// references a real data file. A dangling alias (source data file missing) aborts the fast path so the locked path can recreate the variant.
+    /// </summary>
+    private bool TryCollectExistingVariants(FileId fileId, string rootVariantId, FileProcessingPipeline rootPipeline, List<RepoFileInfo> results)
+    {
+        if (!TryAppend(rootVariantId))
+            return false;
+
+        foreach (var v in rootPipeline.AllVariants)
         {
-            if (!destination.Add(v.VariantId))
+            if (!TryAppend(v.VariantId))
+                return false;
+        }
+
+        return true;
+
+        bool TryAppend(string variantId)
+        {
+            var existing = FindDataFile(_filesDirectory, fileId, variantId, out bool isRetired);
+
+            // Pending retirement cleanup: abort fast path so the locked path can throw RepoVariantPendingCleanupException under the lock.
+            if (isRetired)
+                return false;
+
+            if (existing is null)
+                return false;
+
+            if (existing.Extension is FileRepoPaths.AliasMarkerExtension)
             {
-                string root = rootIdForMessage is null ? "tree" : $"tree rooted at '{rootIdForMessage}'";
-                throw new ArgumentException($"Variant {root} contains duplicate variant ID '{v.VariantId}'.", nameof(pipeline));
+                var resolved = ResolveAlias(_filesDirectory, fileId, existing);
+                if (resolved is null)
+                    return false;
+
+                results.Add(new RepoFileInfo(fileId, variantId, resolved));
+            }
+            else
+            {
+                results.Add(new RepoFileInfo(fileId, variantId, existing));
             }
 
-            // Variant pipelines are statically shaped (IFileProcessingPipelineProvider), so we can resolve their concrete FileProcessingPipeline without
-            // knowing the source extension - which makes upfront enumeration of the entire nested variant tree possible.
-            var childPipeline = v.Pipeline.GetPipeline();
-            CollectVariantIds(childPipeline, destination, rootIdForMessage);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Adds the variant IDs of every entry in the pipeline's pre-validated flat variant tree to <paramref name="destination"/>. Throws
+    /// <see cref="ArgumentException"/> if any of them collides with an ID already in the set (typically the caller-supplied root variant ID).
+    /// </summary>
+    private static void AddVariantIds(FileProcessingPipeline pipeline, SortedSet<string> destination)
+    {
+        foreach (var v in pipeline.AllVariants)
+        {
+            if (!destination.Add(v.VariantId))
+                throw new ArgumentException($"Pipeline variants processing tree contains duplicate variant ID '{v.VariantId}'.", nameof(pipeline));
         }
     }
 
@@ -421,7 +707,7 @@ partial class FileRepo
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var dest = GetDataFile(_filesDirectory, fileId, node.Extension, node.VariantId);
+            var dest = GetStagedDestination(node, fileDir, fileId);
 
             try
             {
@@ -453,6 +739,18 @@ partial class FileRepo
             failed.Select(f => f.Ex));
     }
 
+    private IAbsoluteFilePath GetStagedDestination(StagedNode node, IAbsoluteDirectoryPath fileDir, FileId fileId)
+    {
+        if (node.Extension is FileRepoPaths.AliasMarkerExtension)
+        {
+            Debug.Assert(node.VariantId is not null, "Alias staged nodes must have a variant ID (main file is never aliased).");
+            string? sourceVariantIdOrNull = node.RootVariantId == FileRepoPaths.MainFileName ? null : node.RootVariantId;
+            return GetAliasMarker(fileDir, node.VariantId, sourceVariantIdOrNull, node.RootExtension);
+        }
+
+        return GetDataFile(_filesDirectory, fileId, node.Extension, node.VariantId);
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Transactional main + variants (called by TxnAddAsync)
     // ---------------------------------------------------------------------------------------------------------------
@@ -477,7 +775,7 @@ partial class FileRepo
 
         // Validate variant id uniqueness in the static tree. Main itself has no variant id, so we just walk children.
         var declaredIds = new SortedSet<string>(StringComparer.Ordinal);
-        CollectVariantIds(rootPipeline, declaredIds, rootIdForMessage: null);
+        AddVariantIds(rootPipeline, declaredIds);
 
         var stagedNodes = new List<StagedNode>();
         bool succeeded = false;
@@ -485,13 +783,15 @@ partial class FileRepo
 
         try
         {
-            // Run the main pipeline and any auto-variants. No variant locks needed: the file ID is freshly minted and not externally visible.
+            // Run the main pipeline and any auto-variants. No variant locks needed: the file ID is freshly minted and not externally visible. The main file is
+            // its own root for any child aliases.
             await RunNodeAsync(
                 fileId,
                 streamSource: stream,
                 streamLeaveOpen: leaveOpen,
                 fileSource: null,
-                sourceExtension: extension,
+                parentRootVariantId: FileRepoPaths.MainFileName,
+                parentRootExtension: extension,
                 variantId: null,
                 rootPipeline,
                 VariantAddMode.Add,
@@ -553,7 +853,7 @@ partial class FileRepo
                 cancellationToken.ThrowIfCancellationRequested();
                 Debug.Assert(!node.IsExisting, "Transactional add should never produce pre-existing staged nodes.");
 
-                var dest = GetDataFile(_filesDirectory, fileId, node.Extension, node.VariantId);
+                var dest = GetStagedDestination(node, fileDir, fileId);
                 node.Path.MoveTo(dest, overwrite: false);
                 node.Path = dest;
             }

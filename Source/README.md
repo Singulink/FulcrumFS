@@ -74,4 +74,4 @@ Video processing is provided by `FFmpeg` and `FFprobe`.
 
 ## Further Reading
 
-API documentation and additional usage information is coming soon.
+Please head over to the [project documentation site](https://www.singulink.com/Docs/FulcrumFS/index.html) to view articles, examples and the fully documented API.

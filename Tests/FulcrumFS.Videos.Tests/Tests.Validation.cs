@@ -484,7 +484,7 @@ partial class Tests
     [TestMethod]
     public async Task SkipWhenSourceUnchanged()
     {
-        // Tests that FileProcessingException is thrown when skipWhenSourceUnchanged is enabled and the file would be unchanged.
+        // Tests that FileProcessingException is thrown when throwWhenMainSourceUnchanged is enabled and the file would be unchanged.
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -497,7 +497,7 @@ partial class Tests
             "video1.mp4",
             exceptionMessage: "File processing did not result in any changes to the source file.",
             expectedChanges: null,
-            skipWhenSourceUnchanged: true);
+            throwWhenMainSourceUnchanged: true);
     }
 
     [TestMethod]

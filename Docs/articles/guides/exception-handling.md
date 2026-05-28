@@ -1,0 +1,93 @@
+<div class="article">
+
+# Exception Handling
+
+This guide covers the exceptions FulcrumFS raises, when they occur, and the event-based model used for commit and rollback failures (which are not thrown).
+
+### Two failure styles
+
+Most errors surface as exceptions you catch at the call site, which is the natural shape for input validation: a bad upload becomes an exception in the upload handler that you translate into an HTTP 400. Commit and rollback failures are different: because the affected files stay readable and the application has no useful way to "undo" a half-finished commit, they are reported through events and the files are marked indeterminate for later resolution. Understanding which style applies where is the key to handling failures correctly.
+
+## Fetch Errors
+
+Fetching a file or variant that does not exist throws <xref:FulcrumFS.RepoFileNotFoundException>. This applies to <xref:FulcrumFS.FileRepo.GetAsync*>, <xref:FulcrumFS.FileRepo.OpenAsync*>, and <xref:FulcrumFS.FileRepo.GetVariantAsync*>.
+
+```csharp
+// "GET /api/documents/{id}" handler.
+try
+{
+    var info = await repo.GetAsync(doc.FileId);
+    return Results.File(info.Open(), contentType: doc.ContentType);
+}
+catch (RepoFileNotFoundException)
+{
+    // The repository has no file for this row. Most likely the database
+    // and repository have drifted apart, which warrants investigation.
+    logger.LogError("Document {Id} references missing file {FileId}.", doc.Id, doc.FileId);
+    return Results.NotFound();
+}
+```
+
+## Processing Errors
+
+A failure during add-time processing throws <xref:FulcrumFS.FileProcessingException>. This covers content that fails format validation (a `.jpg` upload that is really an EXE), a <xref:FulcrumFS.FileProcessingPipelineSelector> with no matching pipeline and no default (a file extension the endpoint does not accept), and errors raised by a processor (a corrupt image that ImageSharp cannot decode). Catch it around <xref:FulcrumFS.FileRepoTransaction.AddAsync*> to reject bad uploads.
+
+```csharp
+// "POST /api/photos" handler.
+try
+{
+    var added = await txn.AddAsync(source, ".jpg", leaveOpen: true, pipeline);
+    // ... commit database, commit repository ...
+    return Results.Ok();
+}
+catch (FileProcessingException ex)
+{
+    // The upload was rejected. The transaction will be rolled back on dispose.
+    return Results.BadRequest(new { error = ex.Message });
+}
+```
+
+> [!TIP]
+> Place format validation as the first step in a pipeline so invalid content is rejected before any expensive transformation runs. See [Validating File Formats](file-formats.md).
+
+#### Unchanged main sources
+
+When a main-file pipeline sets <xref:FulcrumFS.FileProcessingPipeline.ThrowWhenMainSourceUnchanged> to `true`, adding content the pipeline leaves unchanged throws <xref:FulcrumFS.FileSourceUnchangedException>. This is useful for detecting an accidental re-add of identical content; for example, a re-import that is supposed to produce a transformed copy can flag the case where the input was already in the target format. See [Processing Pipelines](processing-pipelines.md).
+
+## Variant Collision Errors
+
+Adding a variant that already exists with <xref:FulcrumFS.FileRepo.AddVariantAsync*> throws <xref:System.InvalidOperationException>. Choose the right method for your intent:
+
+- <xref:FulcrumFS.FileRepo.AddVariantAsync*> when the variant is *required* to be new (caller error otherwise).
+- <xref:FulcrumFS.FileRepo.TryAddVariantAsync*> when you want to attempt the add and get `null` back on collision.
+- <xref:FulcrumFS.FileRepo.GetOrAddVariantAsync*> when you want "ensure this variant exists" semantics, for example a lazy thumbnail generator that runs on first request.
+
+See [File Variants](file-variants.md).
+
+## Commit and Rollback Failures
+
+Commit and rollback do not throw on failure. Instead, the affected files are marked indeterminate and remain readable, and the failure is reported through events:
+
+- <xref:FulcrumFS.FileRepo.CommitFailed> fires when a <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> cannot fully complete.
+- <xref:FulcrumFS.FileRepo.RollbackFailed> fires when a rollback (explicit or via disposal) cannot fully complete.
+
+Subscribe to these to log or alert. If you want throwing behavior at the call site, a handler can raise an exception itself.
+
+```csharp
+repo.CommitFailed += (sender, e) =>
+    logger.LogError("Repository commit failed; affected files are indeterminate and will be resolved during cleanup.");
+
+repo.RollbackFailed += (sender, e) =>
+    logger.LogWarning("Repository rollback failed; affected files are indeterminate.");
+```
+
+> [!IMPORTANT]
+> Indeterminate files left by these failures are resolved later during cleanup, where a callback decides per <xref:FulcrumFS.FileId> whether to <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> each one. This is what closes the loop on commit failures, so make sure cleanup is scheduled in any environment that runs the repository. See [Repository Cleanup](cleanup.md) and [Transactional Commit Model](../concepts/commit-model.md).
+
+## Next Steps
+
+- [Transactional Commit Model](../concepts/commit-model.md) - The indeterminate state in depth.
+- [Repository Cleanup](cleanup.md) - Resolving indeterminate files.
+- [Adding and Committing Files](adding-files.md) - Where commit failures originate.
+
+</div>
