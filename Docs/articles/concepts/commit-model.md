@@ -73,7 +73,7 @@ Like main files, variants are immutable once written. To swap a variant's conten
 
 Commit and rollback are not guaranteed to be instantaneous or infallible against an unreliable file system: a transient `IOException` from antivirus interference, a network share dropping mid-write, a full disk encountered partway through. Rather than throw and leave a caller guessing whether the file is now visible or not, FulcrumFS marks affected files as *indeterminate* when a commit or rollback fails, and keeps them accessible.
 
-Failures are surfaced through the <xref:FulcrumFS.FileRepo.CommitFailed> and <xref:FulcrumFS.FileRepo.RollbackFailed> events rather than thrown automatically, because the files involved are still readable; they are simply flagged for later resolution. A handler can log, alert, or choose to throw if it wants throwing behavior.
+Failures are surfaced through the single <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> event (carrying a <xref:FulcrumFS.RepoTransactionCompletionFailureInfo> that identifies the failed <xref:FulcrumFS.RepoTransactionCompletionOperation> and the underlying exception) rather than thrown automatically, because the files involved are still readable; they are simply flagged for later resolution. A handler can log, alert, or choose to throw if it wants throwing behavior.
 
 Indeterminate files are resolved during cleanup. <xref:FulcrumFS.FileRepo.CleanAsync*> accepts a callback that decides, per <xref:FulcrumFS.FileId>, whether to <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> each indeterminate file. This is where a process reconciles the repository against the source of truth (typically the owning database) after a crash.
 

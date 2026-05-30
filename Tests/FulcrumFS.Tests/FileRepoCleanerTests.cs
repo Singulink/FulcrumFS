@@ -24,8 +24,8 @@ public sealed class FileRepoCleanerTests
         var cleaner2 = new FileRepoCleaner(ioptions);
         cleaner2.Options.BaseDirectory.ShouldBe(repoDir);
 
-        var cleaner3 = new FileRepoCleaner(repoDir, o => o.MarkerFileLogging = LoggingMode.None);
-        cleaner3.Options.MarkerFileLogging.ShouldBe(LoggingMode.None);
+        var cleaner3 = new FileRepoCleaner(repoDir, o => o.MarkerFileLogging = RepoLoggingMode.None);
+        cleaner3.Options.MarkerFileLogging.ShouldBe(RepoLoggingMode.None);
     }
 
     [TestMethod]

@@ -96,7 +96,7 @@ partial class FileRepo
                 }
 
                 if (plan is null)
-                    return; // Nothing to do — every listed variant is already retired or absent.
+                    return; // Nothing to do - every listed variant is already retired or absent.
 
                 await ExecuteDeletePlanAsync(fileId, plan).ConfigureAwait(false);
                 return;
@@ -113,8 +113,8 @@ partial class FileRepo
     /// and delete paths: a mutating operation that observes a pending <c>.rebase</c> marker (a crash-interrupted, or in-progress cross-process, retirement)
     /// calls this with none of its own locks held, then restarts so it plans against a settled, single-head subtree. Idempotent and a no-op when there is
     /// nothing to roll forward. The chosen survivor pinned in each marker is honored (never recomputed) so the foreground and a concurrent cleaner converge
-    /// on the same survivor. Degenerate/orphaned markers (no derivable source extension, hence no real data to fork) are left for the cleaner and do not
-    /// block add/delete.
+    /// on the same survivor. Orphaned markers (no derivable source extension, hence no real data to fork) are surfaced via the corruption event and physically
+    /// removed inline; they do not block add/delete.
     /// </summary>
     /// <param name="fileId">The ID of the file whose pending rebases are rolled forward.</param>
     /// <param name="cancellationToken">A token to cancel the asynchronous copy operations.</param>
@@ -129,7 +129,17 @@ partial class FileRepo
                     $"attempts due to concurrent variant additions. Retry the operation.");
             }
 
-            var inv = BuildGroupInventory(_filesDirectory, fileId);
+            var inv = _fs.BuildGroupInventory(fileId);
+
+            // Surface any orphan rebase markers and physically remove them inline. Orphans cannot be rolled forward (no data to fork) and the marker file is
+            // pure residue from a rebase whose final delete step was lost - deleting it here keeps subsequent inventory passes from re-observing it. The event
+            // is raised purely for diagnostic visibility.
+            foreach (var orphan in inv.OrphanRebaseMarkers)
+            {
+                await CorruptionDetected.RaiseOrphanRebaseMarkerAsync(fileId, orphan.SourceVariantId, orphan.ChosenVariantId).ConfigureAwait(false);
+                orphan.Marker.TryDelete(out _);
+            }
+
             ComputeResumeRebases(inv, out var candidateLocks);
 
             if (candidateLocks.Count is 0)
@@ -142,7 +152,7 @@ partial class FileRepo
                 foreach (string vid in candidateLocks)
                     locks.Add(await _fileSync.LockAsync((fileId, vid), Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false));
 
-                var invLocked = BuildGroupInventory(_filesDirectory, fileId);
+                var invLocked = _fs.BuildGroupInventory(fileId);
                 var resumeRebases = ComputeResumeRebases(invLocked, out var requiredLocks);
 
                 if (resumeRebases.Count is 0)
@@ -153,10 +163,14 @@ partial class FileRepo
 
                 foreach (var resume in resumeRebases)
                 {
-                    var ex = await RebaseSubtreeAsync(_filesDirectory, fileId, resume, DebugStepHook, cancellationToken).ConfigureAwait(false);
-
-                    if (ex is not null)
+                    try
+                    {
+                        await _fs.RebaseSubtreeAsync(fileId, resume, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
                         throw new FileProcessingException($"Failed to roll a pending rebase of file ID '{fileId}' forward.", ex);
+                    }
                 }
 
                 return;
@@ -169,52 +183,28 @@ partial class FileRepo
     }
 
     /// <summary>
-    /// Computes the rollforward plans for every pending rebase marker in a group inventory and the full set of variant locks completing them requires. The
-    /// pinned chosen survivor recorded in each marker is honored (never recomputed). Degenerate/orphaned markers (those with no derivable source extension,
-    /// source data gone, chosen data gone, no surviving aliases, and hence no real data to fork) are skipped entirely and contribute no participant locks,
-    /// so they neither block nor loop add/delete; the cleaner is left to remove them.
+    /// Collects the rollforward plans for every <see cref="RepoFileSystem.ResumableRebase"/> in a group inventory and the full set of variant locks executing
+    /// them requires (the sources, chosen survivors, and survivors to be re-pointed). Orphan rebase markers are not included here - they carry no
+    /// participant locks and are left for the cleaner to remove.
     /// </summary>
-    /// <param name="inv">The group inventory to scan for rebase markers.</param>
-    /// <param name="participantLocks">Receives the variant IDs whose locks completing the returned rebases requires (sources, chosen survivors and re-pointed survivors).</param>
-    private static List<SubtreeRebasePlan> ComputeResumeRebases(GroupVariantInventory inv, out SortedSet<string> participantLocks)
+    /// <param name="inv">The group inventory whose resumable rebases are being collected.</param>
+    /// <param name="participantLocks">Receives the variant IDs whose locks completing the returned rebases requires.</param>
+    private static List<RepoFileSystem.SubtreeRebasePlan> ComputeResumeRebases(RepoFileSystem.GroupVariantInventory inv, out SortedSet<string> participantLocks)
     {
         participantLocks = new SortedSet<string>(StringComparer.Ordinal);
-        var resumeRebases = new List<SubtreeRebasePlan>();
+        var resumeRebases = new List<RepoFileSystem.SubtreeRebasePlan>(inv.ResumableRebases.Count);
 
-        foreach (var (_, source, chosen) in inv.RebaseMarkers)
+        foreach (var resumable in inv.ResumableRebases)
         {
-            var resumeRepoint = new List<string>();
-            string? aliasSourceExtension = null;
+            var plan = resumable.Plan;
 
-            foreach (var a in inv.Aliases)
-            {
-                if (!string.Equals(a.SourceVariantId, source, StringComparison.Ordinal))
-                    continue;
+            participantLocks.Add(plan.SourceVariantId);
+            participantLocks.Add(plan.ChosenVariantId);
 
-                aliasSourceExtension ??= a.SourceExtension;
-
-                if (!string.Equals(a.VariantId, chosen, StringComparison.Ordinal))
-                    resumeRepoint.Add(a.VariantId);
-            }
-
-            // The source extension is needed to address the data files and markers. It is the source data file's extension while the source persists as
-            // residue; once the source is gone it equals the (content-identical) chosen data file's extension, and failing that the survivors' encoded source
-            // extension. If none can be derived the marker is degenerate/orphaned — skip it (and add no locks) so it neither blocks nor loops the caller.
-            string? sourceExtension =
-                inv.DataFiles.TryGetValue(source, out var srcData) ? srcData.Extension :
-                inv.DataFiles.TryGetValue(chosen, out var chosenData) ? chosenData.Extension :
-                aliasSourceExtension;
-
-            if (sourceExtension is null)
-                continue;
-
-            participantLocks.Add(source);
-            participantLocks.Add(chosen);
-
-            foreach (string r in resumeRepoint)
+            foreach (string r in plan.RepointVariantIds)
                 participantLocks.Add(r);
 
-            resumeRebases.Add(new SubtreeRebasePlan(source, sourceExtension, chosen, resumeRepoint));
+            resumeRebases.Add(plan);
         }
 
         return resumeRebases;
@@ -237,7 +227,7 @@ partial class FileRepo
     {
         requiredLocks = new SortedSet<string>(listed, StringComparer.Ordinal);
 
-        var inv = BuildGroupInventory(_filesDirectory, fileId);
+        var inv = _fs.BuildGroupInventory(fileId);
 
         // Whole-system invariant: no add/delete plans while a (rollforward-able) rebase marker exists. If one is present the caller rolls it forward and
         // re-plans against a settled, single-head subtree. Degenerate/orphaned markers (no real data to fork) are ignored here so they neither block nor loop.
@@ -246,32 +236,32 @@ partial class FileRepo
         var retireListed = new List<string>();
         var aliasMarkersToDelete = new List<IAbsoluteFilePath>();
         var realDataToDelete = new List<IAbsoluteFilePath>();
-        var rebases = new List<SubtreeRebasePlan>();
+        var rebases = new List<RepoFileSystem.SubtreeRebasePlan>();
 
         // Iterate in sorted order.
         foreach (string v in listed)
         {
             if (inv.Retired.Contains(v))
             {
-                // Already retired — idempotent skip. Any unfinished physical teardown for it is owned by the cleaner.
+                // Already retired - idempotent skip. Any unfinished physical teardown for it is owned by the cleaner.
                 continue;
             }
 
             if (inv.DataFiles.TryGetValue(v, out var data))
             {
                 // Real data file. Split its alias dependents into survivors (not listed → preserved via rebase) and listed dependents (retired separately).
-                var survivors = new List<GroupAliasEntry>();
+                var survivors = new List<RepoFileSystem.GroupAliasEntry>();
 
                 foreach (var a in inv.Aliases)
                 {
-                    if (string.Equals(a.SourceVariantId, v, StringComparison.Ordinal) && !listed.Contains(a.VariantId))
+                    if (a.SourceVariantId == v && !listed.Contains(a.VariantId))
                         survivors.Add(a);
                 }
 
                 retireListed.Add(v);
 
                 // The source data file is always retired residue to be physically deleted later. Materialization copies (never moves) the source content into
-                // the promoted survivor, so the source file must persist intact through materialization and is removed only in the deletion phase — this keeps
+                // the promoted survivor, so the source file must persist intact through materialization and is removed only in the deletion phase - this keeps
                 // every variant (retired or not) resolving to real data in any backup snapshot taken mid-operation.
                 realDataToDelete.Add(data.Path);
 
@@ -291,7 +281,7 @@ partial class FileRepo
                 for (int i = 1; i < survivors.Count; i++)
                     repoint.Add(survivors[i].VariantId);
 
-                rebases.Add(new SubtreeRebasePlan(v, data.Extension, chosen, repoint));
+                rebases.Add(new RepoFileSystem.SubtreeRebasePlan(v, data.Extension, chosen, repoint));
 
                 requiredLocks.Add(chosen);
 
@@ -300,10 +290,10 @@ partial class FileRepo
             }
             else
             {
-                // Not a real data file — it may be an alias marker for this variant ID.
+                // Not a real data file - it may be an alias marker for this variant ID.
                 foreach (var a in inv.Aliases)
                 {
-                    if (string.Equals(a.VariantId, v, StringComparison.Ordinal))
+                    if (a.VariantId == v)
                     {
                         retireListed.Add(v);
                         aliasMarkersToDelete.Add(a.Marker);
@@ -311,7 +301,7 @@ partial class FileRepo
                     }
                 }
 
-                // Otherwise the variant is absent (never added, or fully cleaned up) — idempotent skip.
+                // Otherwise the variant is absent (never added, or fully cleaned up) - idempotent skip.
             }
         }
 
@@ -329,18 +319,16 @@ partial class FileRepo
 
     private async Task ExecuteDeletePlanAsync(FileId fileId, VariantDeletePlan plan)
     {
-        var logging = Options.MarkerFileLogging;
-
         // Physical removal of retired residue is immediate in both Immediate and DeferredFilesOnly modes; only DeferredUntilClean defers it to the cleaner.
-        // Materialization (promoting survivors) is ALWAYS performed in the foreground regardless of mode — the deferral only affects the follow-up deletion of
+        // Materialization (promoting survivors) is ALWAYS performed in the foreground regardless of mode - the deferral only affects the follow-up deletion of
         // the retired source data files, alias markers and delete markers.
         bool immediate = Options.DeleteMode is DeleteMode.Immediate or DeleteMode.DeferredFilesOnly;
 
-        // --- Pre-commit scaffolding: cleanup-dir hints. Inert on their own — a crash here is a no-op (a hint without a matching delete marker is swept away). ---
+        // --- Pre-commit scaffolding: cleanup-dir hints. Inert on their own - a crash here is a no-op (a hint without a matching delete marker is swept away). ---
         foreach (string v in plan.RetireListed)
         {
-            var hint = GetDeleteMarker(_cleanupDirectory, fileId, v);
-            await LogToMarkerAsync(hint, "DELETE", "File variant has been marked for deletion.", logging).ConfigureAwait(false);
+            var hint = _fs.GetDeleteMarker(fileId, v);
+            await _fs.LogToMarkerAsync(hint, "DELETE", "File variant has been marked for deletion.").ConfigureAwait(false);
         }
 
         DebugStepHook?.Invoke(DebugStep.DeleteHintsWritten);
@@ -348,26 +336,21 @@ partial class FileRepo
         // --- Commit: in-group delete markers. After this, every listed variant is retired from the fetch perspective. A crash at/after here rolls forward. ---
         foreach (string v in plan.RetireListed)
         {
-            var deleteMarker = GetInGroupDeleteMarker(_filesDirectory, fileId, v);
-            await LogToMarkerAsync(deleteMarker, "DELETE", "File variant has been retired.", logging).ConfigureAwait(false);
+            var deleteMarker = _fs.GetInGroupDeleteMarker(fileId, v);
+            await _fs.LogToMarkerAsync(deleteMarker, "DELETE", "File variant has been retired.").ConfigureAwait(false);
         }
 
         DebugStepHook?.Invoke(DebugStep.DeleteMarkersWritten);
 
-        var elc = ExceptionListCapture.Default;
+        var elc = new ExceptionListCapture(ex => ex is IOException);
 
         // --- Materialize all rebases in the foreground (BOTH modes). Each chosen survivor is promoted by copying the retired source's content into the chosen
-        //     alias marker and renaming it to a real data file; the source data file is left intact so every variant — retired or surviving — continues to
+        //     alias marker and renaming it to a real data file; the source data file is left intact so every variant - retired or surviving - continues to
         //     resolve to real data in any backup snapshot taken mid-operation. The source residue is removed later (immediately below, or by the cleaner). ---
         foreach (var rebase in plan.Rebases)
         {
-            var ex = await RebaseSubtreeAsync(_filesDirectory, fileId, rebase, DebugStepHook).ConfigureAwait(false);
-
-            if (ex is not null)
-            {
-                elc.AddException(ex);
+            if (!await elc.TryRunAsync(_fs.RebaseSubtreeAsync(fileId, rebase)).ConfigureAwait(false))
                 break;
-            }
         }
 
         if (elc.HasExceptions)
@@ -375,8 +358,8 @@ partial class FileRepo
             // Materialization failed mid-way. The committed delete markers, hints and any rebase markers remain for the cleaner to roll forward. Record diagnostics.
             foreach (string v in plan.RetireListed)
             {
-                var hint = GetDeleteMarker(_cleanupDirectory, fileId, v);
-                await LogToOptionalMarkerAsync(hint, "DELETE ATTEMPT FAILED", elc.ResultException, logging).ConfigureAwait(false);
+                var hint = _fs.GetDeleteMarker(fileId, v);
+                await _fs.LogToOptionalMarkerAsync(hint, "DELETE ATTEMPT FAILED", elc.ResultException).ConfigureAwait(false);
             }
 
             return;
@@ -387,7 +370,7 @@ partial class FileRepo
 
         DebugStepHook?.Invoke(DebugStep.DeleteResidueAboutToDelete);
 
-        await PhysicallyDeleteRetiredResidueAsync(fileId, plan, logging).ConfigureAwait(false);
+        await PhysicallyDeleteRetiredResidueAsync(fileId, plan).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -395,32 +378,26 @@ partial class FileRepo
     /// alias markers, the retired real source data files, and finally the delete markers and cleanup hints. Mirrors the deferred-mode teardown performed by the
     /// cleaner so both paths converge on identical on-disk state.
     /// </summary>
-    private async Task PhysicallyDeleteRetiredResidueAsync(FileId fileId, VariantDeletePlan plan, LoggingMode logging)
+    private async Task PhysicallyDeleteRetiredResidueAsync(FileId fileId, VariantDeletePlan plan)
     {
-        var elc = ExceptionListCapture.Default;
+        var elc = new ExceptionListCapture(ex => ex is IOException);
 
-        // Delete the retired alias markers (listed dependents). Survivor aliases are never in this list — they were re-pointed during materialization.
+        // Delete the retired alias markers (listed dependents). Survivor aliases are never in this list - they were re-pointed during materialization.
         foreach (var marker in plan.AliasMarkersToDelete)
-        {
-            if (marker.State is EntryState.Exists && !marker.TryDelete(out var ex))
-                elc.AddException(ex);
-        }
+            elc.TryRun(() => marker.Delete());
 
         // Delete the retired real source data files. Materialization has already copied the content of any rebase source into its promoted survivor, so the
         // source data is now pure residue.
         foreach (var dataFile in plan.RealDataToDelete)
-        {
-            if (dataFile.State is EntryState.Exists && !dataFile.TryDelete(out var ex))
-                elc.AddException(ex);
-        }
+            elc.TryRun(() => dataFile.Delete());
 
         if (elc.HasExceptions)
         {
             // Leave the delete markers and hints in place for the cleaner to roll forward. Record the failure on each hint for diagnostics.
             foreach (string v in plan.RetireListed)
             {
-                var hint = GetDeleteMarker(_cleanupDirectory, fileId, v);
-                await LogToOptionalMarkerAsync(hint, "DELETE ATTEMPT FAILED", elc.ResultException, logging).ConfigureAwait(false);
+                var hint = _fs.GetDeleteMarker(fileId, v);
+                await _fs.LogToOptionalMarkerAsync(hint, "DELETE ATTEMPT FAILED", elc.ResultException).ConfigureAwait(false);
             }
 
             return;
@@ -429,170 +406,18 @@ partial class FileRepo
         // --- Teardown (data files now gone): delete markers first (a delete marker must outlive its data file), then cleanup hints last. ---
         foreach (string v in plan.RetireListed)
         {
-            var deleteMarker = GetInGroupDeleteMarker(_filesDirectory, fileId, v);
+            var deleteMarker = _fs.GetInGroupDeleteMarker(fileId, v);
 
             if (!deleteMarker.TryDelete(out var deleteMarkerEx))
             {
-                var hint = GetDeleteMarker(_cleanupDirectory, fileId, v);
-                await LogToOptionalMarkerAsync(hint, "DELETE MARKER DELETE FAILED", deleteMarkerEx, logging).ConfigureAwait(false);
+                var hint = _fs.GetDeleteMarker(fileId, v);
+                await _fs.LogToOptionalMarkerAsync(hint, "DELETE MARKER DELETE FAILED", deleteMarkerEx).ConfigureAwait(false);
             }
         }
 
         foreach (string v in plan.RetireListed)
-            GetDeleteMarker(_cleanupDirectory, fileId, v).TryDelete(out _);
+            _fs.GetDeleteMarker(fileId, v).TryDelete(out _);
     }
-
-    /// <summary>
-    /// Performs (or idempotently resumes) the rebase of a single subtree whose real source variant is being retired: promotes the chosen survivor to a
-    /// standalone data file by copying the source's content into the chosen alias marker and renaming it to a real data file, then re-points the remaining
-    /// survivors at the chosen variant. The source data file is never touched here; it is removed later as retired residue. Shared by the foreground path and
-    /// the cleaner so both run identical logic. All steps are crash-safe and idempotent. Returns the first exception encountered, or <see langword="null"/> on
-    /// success (an exception is returned rather than captured because the async copy cannot hold a <c>ref</c> to a <see cref="ExceptionListCapture"/>).
-    /// </summary>
-    /// <param name="filesDirectory">The repository files directory.</param>
-    /// <param name="fileId">The file ID identifying the file group whose subtree is being rebased.</param>
-    /// <param name="plan">The subtree rebase plan describing the source variant, chosen survivor and survivors to re-point.</param>
-    /// <param name="debugStepHook">A test-only hook invoked after each rebase step; <see langword="null"/> in production use.</param>
-    /// <param name="cancellationToken">A token to cancel the asynchronous copy operation.</param>
-    internal static async Task<Exception?> RebaseSubtreeAsync(
-        IAbsoluteDirectoryPath filesDirectory, FileId fileId, SubtreeRebasePlan plan, Action<DebugStep>? debugStepHook = null, CancellationToken cancellationToken = default)
-    {
-        var fileGroupDir = GetFileDirectory(filesDirectory, fileId);
-        var rebaseMarker = GetRebaseMarker(filesDirectory, fileId, plan.SourceVariantId, plan.ChosenVariantId);
-        var sourceData = GetDataFile(filesDirectory, fileId, plan.SourceExtension, plan.SourceVariantId);
-        var chosenData = GetDataFile(filesDirectory, fileId, plan.SourceExtension, plan.ChosenVariantId);
-        var chosenAlias = GetAliasMarker(fileGroupDir, plan.ChosenVariantId, plan.SourceVariantId, plan.SourceExtension);
-
-        try
-        {
-            // 1. Pin the chosen survivor before mutating the directory. A crash-resuming cleaner reads this marker to attribute a half-finished subtree to the
-            //    same chosen variant the foreground had selected.
-            if (rebaseMarker.State is not EntryState.Exists)
-            {
-                try
-                {
-                    using (rebaseMarker.OpenStream(FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
-                }
-                catch (IOException) when (rebaseMarker.State is EntryState.Exists)
-                {
-                    // Concurrently created by a resuming pass — fine.
-                }
-            }
-
-            debugStepHook?.Invoke(DebugStep.RebaseMarkerWritten);
-
-            // 2. Materialize the chosen survivor: copy the source content INTO the chosen alias marker (a zero-byte file), then rename that single directory
-            //    entry to the real data file. Because the alias resolves to the source's data throughout the copy, the chosen variant resolves to real content
-            //    at every instant — there is never both a real data file and an alias marker for the chosen variant on disk at the same time.
-            if (chosenData.State is not EntryState.Exists)
-            {
-                if (chosenAlias.State is not EntryState.Exists)
-                {
-                    return new InvalidOperationException(
-                        $"Rebase of file ID '{fileId}' source variant '{plan.SourceVariantId}' onto '{plan.ChosenVariantId}' cannot proceed: neither the " +
-                        $"materialized chosen data file nor the chosen alias marker is present. This indicates repository corruption.");
-                }
-
-                if (sourceData.State is not EntryState.Exists)
-                {
-                    return new InvalidOperationException(
-                        $"Rebase of file ID '{fileId}' source variant '{plan.SourceVariantId}' onto '{plan.ChosenVariantId}' cannot proceed: the source data " +
-                        $"file is missing while the chosen variant is still an unmaterialized alias. This indicates repository corruption.");
-                }
-
-                // Copy the source content INTO the chosen alias marker (overwriting the zero-byte placeholder), then rename that single directory entry to
-                // the real data file. The chosen variant resolves to the source's data via the alias throughout the copy, so it always resolves to real
-                // content and there is never both a real data file and an alias marker for the chosen variant on disk at once.
-                await sourceData.CopyToAsync(chosenAlias, overwrite: true, cancellationToken).ConfigureAwait(false);
-
-                chosenAlias.MoveTo(chosenData, overwrite: false);
-            }
-
-            debugStepHook?.Invoke(DebugStep.RebaseMaterialized);
-
-            // 3. Re-point the remaining survivors from the source onto the (now-materialized) chosen variant.
-            foreach (string dep in plan.RepointVariantIds)
-            {
-                var newMarker = GetAliasMarker(fileGroupDir, dep, plan.ChosenVariantId, plan.SourceExtension);
-
-                if (newMarker.State is EntryState.Exists)
-                    continue; // Already re-pointed.
-
-                var oldMarker = GetAliasMarker(fileGroupDir, dep, plan.SourceVariantId, plan.SourceExtension);
-
-                if (oldMarker.State is EntryState.Exists)
-                    oldMarker.MoveTo(newMarker, overwrite: false);
-            }
-
-            debugStepHook?.Invoke(DebugStep.RebaseRepointed);
-
-            // 4. Rebase complete — drop the pin.
-            rebaseMarker.TryDelete(out _);
-
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-    }
-
-    /// <summary>
-    /// Single-pass inventory of a file group directory, classifying every entry into data files, in-group delete markers (retired variants), alias dependents
-    /// (with their source and creation time), and rebase markers. Used by both the delete planner and the cleaner's rebase-resume logic.
-    /// </summary>
-    internal static GroupVariantInventory BuildGroupInventory(IAbsoluteDirectoryPath filesDirectory, FileId fileId)
-    {
-        var inv = new GroupVariantInventory();
-        var dir = GetFileDirectory(filesDirectory, fileId);
-
-        try
-        {
-            foreach (var info in dir.GetChildFilesInfo())
-            {
-                var path = info.Path;
-                string ext = path.Extension;
-
-                if (ext is FileRepoPaths.DeleteMarkerExtension)
-                {
-                    string name = path.NameWithoutExtension;
-
-                    if (VariantId.IsValidAndNormalized(name))
-                        inv.Retired.Add(name);
-                }
-                else if (ext is FileRepoPaths.AliasMarkerExtension)
-                {
-                    if (TryParseAliasMarker(path, out string? vid, out string? src, out string? srcExt))
-                        inv.Aliases.Add(new GroupAliasEntry(path, vid, src, srcExt, info.CreationTimeUtc));
-                }
-                else if (ext is FileRepoPaths.RebaseMarkerExtension)
-                {
-                    if (TryParseRebaseMarker(path, out string? src, out string? chosen))
-                        inv.RebaseMarkers.Add((path, src, chosen));
-                }
-                else if (FileExtension.IsValidAndNormalized(ext))
-                {
-                    string name = path.NameWithoutExtension;
-
-                    if (name == FileRepoPaths.MainFileName || VariantId.IsValidAndNormalized(name))
-                        inv.DataFiles[name] = (path, ext);
-                }
-            }
-        }
-        catch (DirectoryNotFoundException)
-        {
-            inv.DirectoryExists = false;
-        }
-
-        return inv;
-    }
-
-    /// <summary>
-    /// A planned rebase of one subtree: the listed real <paramref name="SourceVariantId"/> is retired and its data (with <paramref name="SourceExtension"/>)
-    /// is copied into <paramref name="ChosenVariantId"/> (which is promoted to a standalone data file); the survivors in <paramref name="RepointVariantIds"/>
-    /// are re-pointed at the chosen variant. The source data file is left intact for later residue deletion.
-    /// </summary>
-    internal readonly record struct SubtreeRebasePlan(string SourceVariantId, string SourceExtension, string ChosenVariantId, List<string> RepointVariantIds);
 
     private sealed class VariantDeletePlan
     {
@@ -602,23 +427,8 @@ partial class FileRepo
 
         public required List<IAbsoluteFilePath> RealDataToDelete { get; init; }
 
-        public required List<SubtreeRebasePlan> Rebases { get; init; }
+        public required List<RepoFileSystem.SubtreeRebasePlan> Rebases { get; init; }
     }
-
-    internal sealed class GroupVariantInventory
-    {
-        public Dictionary<string, (IAbsoluteFilePath Path, string Extension)> DataFiles { get; } = new(StringComparer.Ordinal);
-
-        public HashSet<string> Retired { get; } = new(StringComparer.Ordinal);
-
-        public List<GroupAliasEntry> Aliases { get; } = [];
-
-        public List<(IAbsoluteFilePath Marker, string SourceVariantId, string ChosenVariantId)> RebaseMarkers { get; } = [];
-
-        public bool DirectoryExists { get; set; } = true;
-    }
-
-    internal sealed record GroupAliasEntry(IAbsoluteFilePath Marker, string VariantId, string? SourceVariantId, string SourceExtension, DateTime CreationTimeUtc);
 
     /// <summary>
     /// Deletes a file and its variants from the repository.
@@ -628,13 +438,13 @@ partial class FileRepo
         await EnsureInitializedAsync().ConfigureAwait(false);
         using var fileLock = await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false);
 
-        var fileDir = GetFileDirectory(_filesDirectory, fileId);
-        var deleteMarker = GetDeleteMarker(_cleanupDirectory, fileId, null);
-        var indeterminateMarker = GetIndeterminateMarker(_cleanupDirectory, fileId);
+        var fileDir = _fs.GetFileDirectory(fileId);
+        var deleteMarker = _fs.GetDeleteMarker(fileId, null);
+        var indeterminateMarker = _fs.GetIndeterminateMarker(fileId);
 
         if (immediate)
         {
-            var elc = ExceptionListCapture.Default;
+            var elc = new ExceptionListCapture(ex => ex is IOException);
 
             // Initial alias sweep: delete every alias marker before recursively removing the file group directory. If any alias delete fails, abort and write
             // a delete marker so the cleaner retries the whole operation. This keeps the directory contents consistent (no orphaned data files left after a
@@ -642,10 +452,7 @@ partial class FileRepo
             try
             {
                 foreach (var marker in fileDir.GetChildFiles("*" + FileRepoPaths.AliasMarkerExtension))
-                {
-                    if (!marker.TryDelete(out var markerEx))
-                        elc.AddException(markerEx);
-                }
+                    elc.TryRun(() => marker.Delete());
             }
             catch (DirectoryNotFoundException)
             {
@@ -654,19 +461,19 @@ partial class FileRepo
 
             if (elc.HasExceptions)
             {
-                await LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", elc.ResultException, Options.MarkerFileLogging).ConfigureAwait(false);
+                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", elc.ResultException).ConfigureAwait(false);
                 return;
             }
 
             if (!fileDir.TryDelete(recursive: true, out var ex) || !indeterminateMarker.TryDelete(out ex) || !deleteMarker.TryDelete(out ex))
-                await LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", ex, Options.MarkerFileLogging).ConfigureAwait(false);
+                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", ex).ConfigureAwait(false);
 
             return;
         }
         else
         {
             const string message = "File has been marked for deletion.";
-            await LogToMarkerAsync(deleteMarker, "DELETE", message, Options.MarkerFileLogging).ConfigureAwait(false);
+            await _fs.LogToMarkerAsync(deleteMarker, "DELETE", message).ConfigureAwait(false);
             indeterminateMarker.TryDelete(out _);
         }
     }

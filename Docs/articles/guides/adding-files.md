@@ -90,11 +90,11 @@ await txn.CommitAsync();     // 2. Repository second.
 ```
 
 > [!IMPORTANT]
-> A failed commit does not throw. Affected files are marked indeterminate and remain fully readable and usable, and the failure is reported through the <xref:FulcrumFS.FileRepo.CommitFailed> event. Subscribe to it if you need to log, alert, or surface commit failures to operators. See [Exception Handling](exception-handling.md).
+> A failed commit does not throw. Affected files are marked indeterminate and remain fully readable and usable, and the failure is reported through the <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> event (with <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> set to <xref:FulcrumFS.RepoTransactionCompletionOperation.Commit>). Subscribe to it if you need to log, alert, or surface commit failures to operators. See [Exception Handling](exception-handling.md).
 
 ## Rolling Back
 
-To abandon a transaction explicitly, call <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*>. Otherwise, disposing without committing rolls back automatically. Tentatively added files are discarded; if rollback itself cannot complete cleanly, the affected files become indeterminate and the <xref:FulcrumFS.FileRepo.RollbackFailed> event fires.
+To abandon a transaction explicitly, call <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*>. Otherwise, disposing without committing rolls back automatically. Tentatively added files are discarded; if rollback itself cannot complete cleanly, the affected files become indeterminate and the same <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> event fires with <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> set to <xref:FulcrumFS.RepoTransactionCompletionOperation.Rollback>.
 
 ```csharp
 await using var txn = await repo.BeginTransactionAsync();

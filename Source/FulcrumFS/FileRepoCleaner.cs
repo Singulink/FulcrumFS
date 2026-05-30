@@ -19,9 +19,8 @@ public class FileRepoCleaner : IFileRepoCleaner
     /// </summary>
     public FileRepoCleaningOptions Options { get; }
 
+    private readonly RepoFileSystem _fs;
     private readonly IAbsoluteFilePath _infoFile;
-    private readonly IAbsoluteDirectoryPath _filesDirectory;
-    private readonly IAbsoluteDirectoryPath _cleanupDirectory;
     private readonly IAbsoluteFilePath _cleanLockFile;
 
     /// <summary>
@@ -35,10 +34,9 @@ public class FileRepoCleaner : IFileRepoCleaner
         options.Freeze();
         Options = options;
 
+        _fs = new RepoFileSystem(options.BaseDirectory, options.MarkerFileLogging);
         _infoFile = options.BaseDirectory.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None);
-        _filesDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.FilesDirectoryName, PathOptions.None);
-        _cleanupDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.CleanupDirectoryName, PathOptions.None);
-        _cleanLockFile = _cleanupDirectory.CombineFile(FileRepoPaths.CleanupLockFileName, PathOptions.None);
+        _cleanLockFile = _fs.CleanupDirectory.CombineFile(FileRepoPaths.CleanupLockFileName, PathOptions.None);
     }
 
     /// <summary>
@@ -81,8 +79,6 @@ public class FileRepoCleaner : IFileRepoCleaner
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(deleteDelay, TimeSpan.Zero, nameof(deleteDelay));
 
-        var markerFileLogging = Options.MarkerFileLogging;
-
         FileStream cleanLockStream;
 
         try
@@ -90,7 +86,8 @@ public class FileRepoCleaner : IFileRepoCleaner
             cleanLockStream = _cleanLockFile.OpenStream(FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
         }
         catch (IOException ex)
-        {// The optimistic open failed. Diagnose what went wrong by inspecting the directory state. Order of checks: missing base dir > missing repo marker >
+        {
+            // The optimistic open failed. Diagnose what went wrong by inspecting the directory state. Order of checks: missing base dir > missing repo marker >
             // missing cleanup dir > genuine lock contention.
 
             if (Options.BaseDirectory.State is not EntryState.Exists)
@@ -105,7 +102,7 @@ public class FileRepoCleaner : IFileRepoCleaner
                     $"The directory '{Options.BaseDirectory.PathDisplay}' is not an initialized FulcrumFS repository.", ex);
             }
 
-            if (_cleanupDirectory.State is not EntryState.Exists)
+            if (_fs.CleanupDirectory.State is not EntryState.Exists)
             {
                 throw new DirectoryNotFoundException(
                     $"The FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}' is in an incomplete state (the cleanup directory is missing).", ex);
@@ -123,9 +120,9 @@ public class FileRepoCleaner : IFileRepoCleaner
             var deletedFiles = new HashSet<FileId>();
             var indeterminateFiles = new List<(FileId Id, IAbsoluteFilePath Marker)>();
 
-            var elc = new ExceptionListCapture(ex => ex is not (ArgumentException or ObjectDisposedException or TimeoutException));
+            var elc = new ExceptionListCapture(ex => ex is IOException);
 
-            foreach (var markerInfo in _cleanupDirectory.GetChildFilesInfo())
+            foreach (var markerInfo in _fs.CleanupDirectory.GetChildFilesInfo())
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -156,19 +153,19 @@ public class FileRepoCleaner : IFileRepoCleaner
                     if (markerInfo.CreationTimeUtc + deleteDelay > DateTime.UtcNow)
                         continue;
 
-                    if (!FileRepo.TryParseFileIdAndVariant(marker.NameWithoutExtension, out var deleteFileId, out string? variantId))
+                    if (!RepoFileSystem.TryParseFileIdAndVariant(marker.NameWithoutExtension, out var deleteFileId, out string? variantId))
                         continue;
 
                     // Take over exclusive (FileShare.None) ownership of the hint for the duration of the delete attempt. Unlike the probe pattern used for
                     // indeterminate markers, a delete hint is a persistent retry token that may be re-acquired by future cleaner passes or by a foreground
-                    // takeover (Phase 6b reentrancy) — so the cleaner must hold actual ownership through processing, not just verify nobody currently holds it.
+                    // takeover (Phase 6b reentrancy) - so the cleaner must hold actual ownership through processing, not just verify nobody currently holds it.
                     // If acquisition fails with an IOException, either the file has vanished (a previous attempt finished) or another actor holds it: skip.
 
                     FileStream hintStream;
 
                     try
                     {
-                        hintStream = FileRepo.TakeoverExclusiveMarker(marker);
+                        hintStream = RepoFileSystem.TakeoverExclusiveMarker(marker);
                     }
                     catch (IOException)
                     {
@@ -185,25 +182,25 @@ public class FileRepoCleaner : IFileRepoCleaner
 
                         if (variantId is null)
                         {
-                            await elc.TryRunAsync(RunFileDelete()).ConfigureAwait(false);
+                            await elc.TryRunAsync(RunFileDeleteAsync()).ConfigureAwait(false);
 
                             if (deleteSucceeded)
                                 deletedFiles.Add(deleteFileId);
 
-                            async Task RunFileDelete() =>
+                            async Task RunFileDeleteAsync() =>
                                 deleteSucceeded = await DeleteFileAsync(deleteFileId, hintStream, immediate: true).ConfigureAwait(false);
                         }
                         else
                         {
-                            await elc.TryRunAsync(RunVariantDelete()).ConfigureAwait(false);
+                            await elc.TryRunAsync(RunVariantDeleteAsync()).ConfigureAwait(false);
 
-                            async Task RunVariantDelete() =>
+                            async Task RunVariantDeleteAsync() =>
                                 deleteSucceeded = await DeleteVariantAsync(deleteFileId, variantId, hintStream).ConfigureAwait(false);
                         }
                     }
 
                     // Brief window after dispose before TryDelete where another actor could re-acquire the hint. That's harmless: by this point the
-                    // delete marker and data files are gone, so any party that grabs the hint sees "nothing to do" and TryDeletes it itself — idempotent.
+                    // delete marker and data files are gone, so any party that grabs the hint sees "nothing to do" and TryDeletes it itself - idempotent.
                     if (deleteSucceeded)
                         marker.TryDelete(out _);
                 }
@@ -213,7 +210,7 @@ public class FileRepoCleaner : IFileRepoCleaner
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var fileDir = FileRepo.GetFileDirectory(_filesDirectory, indeterminateFile.Id);
+                var fileDir = _fs.GetFileDirectory(indeterminateFile.Id);
                 var fileDirState = fileDir.State;
 
                 if (fileDirState is EntryState.ParentExists || deletedFiles.Contains(indeterminateFile.Id))
@@ -232,7 +229,7 @@ public class FileRepoCleaner : IFileRepoCleaner
 
                 if (resolution is IndeterminateResolution.Keep)
                 {
-                    await elc.TryRunAsync(FileRepo.ClearIndeterminateStateAsync(_cleanupDirectory, indeterminateFile.Id, markerFileLogging)).ConfigureAwait(false);
+                    await elc.TryRunAsync(_fs.TryClearIndeterminateStateAsync(indeterminateFile.Id)).ConfigureAwait(false);
                 }
                 else if (resolution is IndeterminateResolution.Delete)
                 {
@@ -243,13 +240,13 @@ public class FileRepoCleaner : IFileRepoCleaner
                     // instance is forced to back off through the delete attempt, mirroring the cleanup-hint loop above.
 
                     bool immediate = deleteDelay <= TimeSpan.Zero;
-                    var deleteHint = FileRepo.GetDeleteMarker(_cleanupDirectory, indeterminateFile.Id, null);
+                    var deleteHint = _fs.GetDeleteMarker(indeterminateFile.Id, null);
                     IAsyncDisposable hintHandle;
 
                     try
                     {
-                        hintHandle = await FileRepo.CreateOrTakeoverExclusiveMarkerAsync(
-                            deleteHint, "DELETE", "File has been marked for deletion via indeterminate resolution.", markerFileLogging).ConfigureAwait(false);
+                        hintHandle = await _fs.CreateOrTakeoverExclusiveMarkerAsync(
+                            deleteHint, "DELETE", "File has been marked for deletion via indeterminate resolution.").ConfigureAwait(false);
                     }
                     catch (IOException)
                     {
@@ -261,9 +258,9 @@ public class FileRepoCleaner : IFileRepoCleaner
 
                     await using (hintHandle.ConfigureAwait(false))
                     {
-                        await elc.TryRunAsync(RunIndeterminateDelete()).ConfigureAwait(false);
+                        await elc.TryRunAsync(RunIndeterminateDeleteAsync()).ConfigureAwait(false);
 
-                        async Task RunIndeterminateDelete() =>
+                        async Task RunIndeterminateDeleteAsync() =>
                             deleteSucceeded = await DeleteFileAsync(indeterminateFile.Id, (FileStream)hintHandle, immediate).ConfigureAwait(false);
                     }
 
@@ -285,22 +282,19 @@ public class FileRepoCleaner : IFileRepoCleaner
 
     private async Task<bool> DeleteFileAsync(FileId fileId, FileStream hintStream, bool immediate)
     {
-        var fileDir = FileRepo.GetFileDirectory(_filesDirectory, fileId);
-        var indeterminateMarker = FileRepo.GetIndeterminateMarker(_cleanupDirectory, fileId);
+        var fileDir = _fs.GetFileDirectory(fileId);
+        var indeterminateMarker = _fs.GetIndeterminateMarker(fileId);
 
         if (immediate)
         {
-            var elc = default(ExceptionListCapture);
+            var elc = new ExceptionListCapture(ex => ex is IOException);
 
             // Initial alias sweep: delete every alias marker before recursively removing the file group directory. Any failure aborts and keeps the delete
             // marker for the next clean run to retry.
             try
             {
                 foreach (var marker in fileDir.GetChildFiles("*" + FileRepoPaths.AliasMarkerExtension))
-                {
-                    if (!marker.TryDelete(out var markerEx))
-                        elc.AddException(markerEx);
-                }
+                    elc.TryRun(() => marker.Delete());
             }
             catch (DirectoryNotFoundException)
             {
@@ -309,13 +303,13 @@ public class FileRepoCleaner : IFileRepoCleaner
 
             if (elc.HasExceptions)
             {
-                await FileRepo.WriteMarkerEntryAsync(hintStream, "DELETE ATTEMPT FAILED", elc.ResultException, Options.MarkerFileLogging).ConfigureAwait(false);
+                await _fs.WriteMarkerEntryAsync(hintStream, "DELETE ATTEMPT FAILED", elc.ResultException).ConfigureAwait(false);
                 return false;
             }
 
             if ((!fileDir.TryDelete(recursive: true, out var ex) && fileDir.State is EntryState.Exists) || !indeterminateMarker.TryDelete(out ex))
             {
-                await FileRepo.WriteMarkerEntryAsync(hintStream, "DELETE ATTEMPT FAILED", ex, Options.MarkerFileLogging).ConfigureAwait(false);
+                await _fs.WriteMarkerEntryAsync(hintStream, "DELETE ATTEMPT FAILED", ex).ConfigureAwait(false);
                 return false;
             }
 
@@ -332,47 +326,53 @@ public class FileRepoCleaner : IFileRepoCleaner
 
     private async ValueTask<bool> DeleteVariantAsync(FileId fileId, string variantId, FileStream hintStream)
     {
-        var inGroupDeleteMarker = FileRepo.GetInGroupDeleteMarker(_filesDirectory, fileId, variantId);
+        var inGroupDeleteMarker = _fs.GetInGroupDeleteMarker(fileId, variantId);
 
         // Commit gate: a cleanup hint without a committed in-group delete marker means the foreground crashed pre-commit (the operation never happened) or the
-        // retirement already fully completed and the delete marker was torn down. Either way there is nothing to retire — let the stray hint be swept without
+        // retirement already fully completed and the delete marker was torn down. Either way there is nothing to retire - let the stray hint be swept without
         // touching any data. This is the low-overhead "dirty vs. clean" discriminator: absence of the delete marker == not retired.
         if (inGroupDeleteMarker.State is not EntryState.Exists)
             return true;
 
-        var inv = FileRepo.BuildGroupInventory(_filesDirectory, fileId);
-        var elc = ExceptionListCapture.Default;
+        var inv = _fs.BuildGroupInventory(fileId);
+        var elc = new ExceptionListCapture(ex => ex is IOException);
+
+        // Opportunistically remove any orphan rebase markers in this group while we have the inventory open. Orphans have no source data, no chosen data, and
+        // no surviving aliases - they are pure residue from a rebase whose final marker-delete step was lost. Cleaners do not raise corruption events; the
+        // foreground rollforward surfaces the OrphanRebaseMarker event on observation.
+        foreach (var orphan in inv.OrphanRebaseMarkers)
+            orphan.Marker.TryDelete(out _);
 
         if (inv.DataFiles.TryGetValue(variantId, out var data))
         {
-            // Retired real variant. If it is the source of a rebase — indicated by an in-flight rebase marker (crash mid-materialization) or by the presence of
-            // surviving, non-retired alias dependents (crash after commit but before the foreground materialized) — finish/perform that rebase before removing
+            // Retired real variant. If it is the source of a rebase - indicated by an in-flight rebase marker (crash mid-materialization) or by the presence of
+            // surviving, non-retired alias dependents (crash after commit but before the foreground materialized) - finish/perform that rebase before removing
             // the source data. Materialization copies FROM the source, so the source must stay intact until the chosen survivor is fully materialized.
             //
             // In the normal (non-crash) flow the foreground already materialized and re-pointed, leaving no rebase marker and no surviving dependents pointing
             // at this source, so no rebase work happens here and we proceed straight to residue deletion.
             string? chosen = null;
 
-            foreach (var rm in inv.RebaseMarkers)
+            foreach (var rm in inv.ResumableRebases)
             {
-                if (string.Equals(rm.SourceVariantId, variantId, StringComparison.Ordinal))
+                if (rm.Plan.SourceVariantId == variantId)
                 {
-                    chosen = rm.ChosenVariantId;
+                    chosen = rm.Plan.ChosenVariantId;
                     break;
                 }
             }
 
-            var survivors = new List<FileRepo.GroupAliasEntry>();
+            var survivors = new List<RepoFileSystem.GroupAliasEntry>();
 
             foreach (var a in inv.Aliases)
             {
-                if (string.Equals(a.SourceVariantId, variantId, StringComparison.Ordinal) && !inv.Retired.Contains(a.VariantId))
+                if (a.SourceVariantId == variantId && !inv.Retired.Contains(a.VariantId))
                     survivors.Add(a);
             }
 
             if (chosen is null && survivors.Count > 0)
             {
-                // No pinned chosen yet — recompute it deterministically. This matches what the foreground would have selected (earliest by CreationTimeUtc with
+                // No pinned chosen yet - recompute it deterministically. This matches what the foreground would have selected (earliest by CreationTimeUtc with
                 // VariantId as the tiebreaker), so foreground and cleaner always promote the same survivor.
                 survivors.Sort(static (x, y) =>
                 {
@@ -389,31 +389,26 @@ public class FileRepoCleaner : IFileRepoCleaner
 
                 foreach (var s in survivors)
                 {
-                    if (!string.Equals(s.VariantId, chosen, StringComparison.Ordinal))
+                    if (s.VariantId != chosen)
                         repoint.Add(s.VariantId);
                 }
 
-                var plan = new FileRepo.SubtreeRebasePlan(variantId, data.Extension, chosen, repoint);
-                var rebaseEx = await FileRepo.RebaseSubtreeAsync(_filesDirectory, fileId, plan).ConfigureAwait(false);
-
-                if (rebaseEx is not null)
-                    elc.AddException(rebaseEx);
+                var plan = new RepoFileSystem.SubtreeRebasePlan(variantId, data.Extension, chosen, repoint);
+                await elc.TryRunAsync(_fs.RebaseSubtreeAsync(fileId, plan)).ConfigureAwait(false);
             }
 
-            if (!elc.HasExceptions && !data.Path.TryDelete(out var delEx))
-                elc.AddException(delEx);
+            if (!elc.HasExceptions)
+                elc.TryRun(() => data.Path.Delete());
         }
         else
         {
             // Retired alias variant (or its data is already gone from a prior pass). Delete the alias marker if it is still present. Note this only ever
-            // matches a retired dependent — surviving dependents are never given a delete marker, so the cleaner never deletes a survivor's marker.
+            // matches a retired dependent - surviving dependents are never given a delete marker, so the cleaner never deletes a survivor's marker.
             foreach (var a in inv.Aliases)
             {
-                if (string.Equals(a.VariantId, variantId, StringComparison.Ordinal))
+                if (a.VariantId == variantId)
                 {
-                    if (!a.Marker.TryDelete(out var aliasEx))
-                        elc.AddException(aliasEx);
-
+                    elc.TryRun(() => a.Marker.Delete());
                     break;
                 }
             }
@@ -421,12 +416,12 @@ public class FileRepoCleaner : IFileRepoCleaner
 
         if (elc.HasExceptions)
         {
-            await FileRepo.WriteMarkerEntryAsync(hintStream, "DELETE ATTEMPT FAILED", elc.ResultException, Options.MarkerFileLogging).ConfigureAwait(false);
+            await _fs.WriteMarkerEntryAsync(hintStream, "DELETE ATTEMPT FAILED", elc.ResultException).ConfigureAwait(false);
             return false;
         }
 
-        // Residue gone — tear down the in-group delete marker (it only existed to gate fetches while the data file lingered). The cleanup-dir hint is deleted by
-        // the main loop after the held stream is disposed.
+        // Residue gone - tear down the in-group delete marker (it only existed to gate fetches while the data file lingered). The cleanup-dir hint is deleted
+        // by the main loop after the held stream is disposed.
         inGroupDeleteMarker.TryDelete(out _);
         return true;
     }

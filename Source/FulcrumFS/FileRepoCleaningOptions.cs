@@ -40,16 +40,16 @@ public class FileRepoCleaningOptions
     }
 
     /// <summary>
-    /// Gets or sets the logging mode used when writing log entries to marker files during clean operations. Default is <see cref="LoggingMode.HumanReadable"/>.
+    /// Gets or sets the logging mode used when writing log entries to marker files during clean operations. Default is <see cref="RepoLoggingMode.HumanReadable"/>.
     /// </summary>
-    public LoggingMode MarkerFileLogging {
+    public RepoLoggingMode MarkerFileLogging {
         get;
         set {
             EnsureNotFrozen();
             value.ThrowIfNotDefined();
             field = value;
         }
-    } = LoggingMode.HumanReadable;
+    } = RepoLoggingMode.HumanReadable;
 
     internal void Freeze()
     {

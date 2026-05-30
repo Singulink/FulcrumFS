@@ -21,9 +21,8 @@ public sealed partial class FileRepo : IDisposable
     private FileStream? _lockStream;
     private int _lockStreamSize;
 
-    private readonly IAbsoluteDirectoryPath _filesDirectory;
+    private readonly RepoFileSystem _fs;
     private readonly IAbsoluteDirectoryPath _tempDirectory;
-    private readonly IAbsoluteDirectoryPath _cleanupDirectory;
 
     private readonly KeyLocker<(FileId FileId, string? VariantId)> _fileSync = new();
     private readonly AsyncLock _stateSync = new();
@@ -41,33 +40,39 @@ public sealed partial class FileRepo : IDisposable
     /// <summary>
     /// Gets the directory where files are stored.
     /// </summary>
-    public IAbsoluteDirectoryPath FilesDirectory => _filesDirectory;
+    public IAbsoluteDirectoryPath FilesDirectory => _fs.FilesDirectory;
 
     /// <summary>
-    /// Occurs when a commit operation fails. The handler can be used to log errors or perform custom error handling.
+    /// Occurs when a transaction-completion step (commit or rollback) fails. The handler receives a <see cref="RepoTransactionCompletionFailureInfo"/> carrying
+    /// the operation that failed and the underlying exception, and can be used to log errors or perform custom error handling.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The handler receives an <see cref="Exception"/> object that describes the error that occurred. If multiple errors occurred, the exception will be of
-    /// type <see cref="AggregateException"/>.</para>
+    /// This event fires only for failures of the final commit or rollback step itself, not for in-flight exceptions raised while operating on the
+    /// transaction (validation errors, processor failures, etc., which surface directly to the calling code).</para>
     /// <para>
-    /// Exceptions are not thrown automatically for transaction commit failures since added files are still accessible after the commit fails (they are just
-    /// marked as being in an indeterminate state). The handler can throw an exception if throwing behavior is desired.</para>
+    /// If multiple errors occurred during the completion step, <see cref="RepoTransactionCompletionFailureInfo.Exception"/> will be an
+    /// <see cref="AggregateException"/>.</para>
+    /// <para>
+    /// Exceptions are not thrown automatically for completion-step failures since the affected files (added during commit or scheduled for deletion during
+    /// rollback) remain accessible afterwards; they are merely left in an indeterminate state pending repair by the next cleaner pass. The handler can
+    /// throw an exception if throwing behavior is desired.</para>
     /// </remarks>
-    public event Func<Exception, Task>? CommitFailed;
+    public event RepoTransactionCompletionFailedHandler? TransactionCompletionFailed;
 
     /// <summary>
-    /// Occurs when a rollback operation fails. The handler can be used to log errors or perform custom error handling.
+    /// Occurs when repository corruption is detected during a fetch or add operation. Corruption conditions (for example a variant alias whose source data
+    /// file is missing) are surfaced through this event so monitoring and repair tooling can observe them, in addition to any direct exception or
+    /// per-operation handling that already applies.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The event handler receives an <see cref="Exception"/> object that describes the error that occurred. If multiple errors occurred, the exception will be
-    /// of type <see cref="AggregateException"/>.</para>
+    /// The handler receives a <see cref="RepoCorruptionInfo"/> describing the corruption. The event fires every time corruption is encountered (no
+    /// per-process debouncing); handlers can debounce or log as appropriate.</para>
     /// <para>
-    /// Exceptions are not thrown automatically for transaction rollback failures since deleted files are still accessible after the rollback fails (they are
-    /// just marked as being in an indeterminate state). The handler can throw an exception if throwing behavior is desired.</para>
+    /// Handler exceptions are not caught and will propagate out of the operation that detected the corruption.</para>
     /// </remarks>
-    public event Func<Exception, Task>? RollbackFailed;
+    public event RepoCorruptionHandler? CorruptionDetected;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepo"/> class with the specified options.
@@ -82,9 +87,12 @@ public sealed partial class FileRepo : IDisposable
 
         _infoFile = options.BaseDirectory.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None);
         _lockFile = options.BaseDirectory.CombineFile(FileRepoPaths.RepoLockFileName, PathOptions.None);
-        _filesDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.FilesDirectoryName, PathOptions.None);
         _tempDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.TempDirectoryName, PathOptions.None);
-        _cleanupDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.CleanupDirectoryName, PathOptions.None);
+        _fs = new RepoFileSystem(options.BaseDirectory, options.MarkerFileLogging)
+        {
+            GetCorruptionDetectedHandler = () => CorruptionDetected,
+            GetDebugStepHook = () => DebugStepHook,
+        };
     }
 
     /// <summary>
@@ -161,8 +169,8 @@ public sealed partial class FileRepo : IDisposable
                 RepoInfoFile.VerifyFullAccessSupported(_infoFile);
             }
 
-            _filesDirectory.Create();
-            _cleanupDirectory.Create();
+            _fs.FilesDirectory.Create();
+            _fs.CleanupDirectory.Create();
         }
     }
 
@@ -175,23 +183,6 @@ public sealed partial class FileRepo : IDisposable
     {
         using (_stateSync.Lock())
             InitializeCore();
-    }
-
-    /// <summary>
-    /// Disposes of the file repository, releasing any resources and locks held by it.
-    /// </summary>
-    public void Dispose()
-    {
-        using (_stateSync.Lock())
-        {
-            if (_lockStream is not null)
-            {
-                _lockStream.Dispose();
-                _lockStream = null;
-            }
-
-            _isDisposed = true;
-        }
     }
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken = default)
@@ -291,7 +282,7 @@ public sealed partial class FileRepo : IDisposable
 
             RepoInfoFile.VerifyFullAccessSupported(_infoFile);
 
-            if (_filesDirectory.State is not EntryState.Exists || _cleanupDirectory.State is not EntryState.Exists)
+            if (_fs.FilesDirectory.State is not EntryState.Exists || _fs.CleanupDirectory.State is not EntryState.Exists)
             {
                 throw new DirectoryNotFoundException(
                     $"The FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}' is in an incomplete state. " +
@@ -333,13 +324,13 @@ public sealed partial class FileRepo : IDisposable
                 legacyTemp.Delete(recursive: true);
 
             // Legacy cleanup dir contains delete/indeterminate markers - rename to the new name, preserving contents.
-            if (legacyCleanupExists && _cleanupDirectory.State is not EntryState.Exists)
+            if (legacyCleanupExists && _fs.CleanupDirectory.State is not EntryState.Exists)
             {
                 // Strip the hidden attribute from the legacy directory so the new (non-hidden) layout is consistent after migration.
                 try { legacyCleanup.Attributes &= ~FileAttributes.Hidden; }
                 catch (IOException) { /* best-effort */ }
 
-                Directory.Move(legacyCleanup.PathExport, _cleanupDirectory.PathExport);
+                Directory.Move(legacyCleanup.PathExport, _fs.CleanupDirectory.PathExport);
             }
 
             // Legacy repositories pre-date the info marker file. Stamp one now so the migrated repo is identifiable as a v1 FulcrumFS repository and subsequent
@@ -350,31 +341,15 @@ public sealed partial class FileRepo : IDisposable
     }
 
     /// <summary>
-    /// Gets a unique entry name for a given file ID and variant ID which is used to name temp work directories or cleanup files associated with the file.
+    /// Disposes of the file repository, releasing any resources and locks held by it.
     /// </summary>
-    private static string GetFileIdAndVariantString(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
-
-    internal static bool TryParseFileIdAndVariant(string entryName, [MaybeNullWhen(false)] out FileId fileId, out string? variantId)
+    public void Dispose()
     {
-        int separatorIndex = entryName.IndexOf(' ');
-
-        if (separatorIndex < 0)
+        using (_stateSync.Lock())
         {
-            variantId = null;
-            return FileId.TryParseUnsafe(entryName, out fileId);
+            _lockStream?.Dispose();
+            _lockStream = null;
+            _isDisposed = true;
         }
-
-        var fileIdChars = entryName.AsSpan()[..separatorIndex];
-        var variantIdChars = entryName.AsSpan()[(separatorIndex + 1)..];
-
-        if (FileId.TryParse(fileIdChars, out fileId) && VariantId.IsValidAndNormalized(variantIdChars))
-        {
-            variantId = variantIdChars.ToString();
-            return true;
-        }
-
-        fileId = null;
-        variantId = null;
-        return false;
     }
 }

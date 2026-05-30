@@ -3,22 +3,23 @@ using System.Text;
 namespace FulcrumFS;
 
 /// <content>
-/// Contains marker-file helpers for the file repository: creating exclusive/shared marker handles, appending log entries, and clearing indeterminate state.
+/// Marker-file primitives: creating exclusive/shared marker handles, appending log entries, and clearing indeterminate state. The marker file logging mode is
+/// captured at construction so callsites do not pass it on every call.
 /// </content>
-partial class FileRepo
+partial class RepoFileSystem
 {
     /// <summary>
     /// Creates a new marker file, logs an entry to it, and returns a disposable that keeps the marker file open with exclusive access until disposed. The
     /// marker file must not already exist. This is used to indicate that a transaction is actively holding the marker - other operations attempting to open
     /// the marker (e.g. cleanup probing with <see cref="FileShare.None"/>) will receive a sharing violation until the returned disposable is disposed.
     /// </summary>
-    internal static async Task<IAsyncDisposable> CreateExclusiveMarkerAsync(IAbsoluteFilePath markerFile, string header, object message, LoggingMode markerFileLogging)
+    public async Task<IAsyncDisposable> CreateExclusiveMarkerAsync(IAbsoluteFilePath markerFile, string header, object message)
     {
         var stream = markerFile.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.None);
 
         try
         {
-            await WriteMarkerEntryAsync(stream, header, message, markerFileLogging).ConfigureAwait(false);
+            await WriteMarkerEntryAsync(stream, header, message).ConfigureAwait(false);
             return stream;
         }
         catch
@@ -35,17 +36,17 @@ partial class FileRepo
     /// entry is appended. If another holder is currently active (cleaner mid-recovery, or a concurrent foreground), the takeover open throws an
     /// <see cref="IOException"/>; callers must handle that as "another operation is in progress, retry later".
     /// </summary>
-    internal static async Task<IAsyncDisposable> CreateOrTakeoverExclusiveMarkerAsync(IAbsoluteFilePath markerFile, string header, object message, LoggingMode markerFileLogging)
+    public async Task<IAsyncDisposable> CreateOrTakeoverExclusiveMarkerAsync(IAbsoluteFilePath markerFile, string header, object message)
     {
         // Open exclusively, creating the file if it doesn't exist (e.g. first attempt) or taking it over if a prior crashed attempt left it behind. If
-        // another holder is currently active, this throws IOException — the caller treats that as a transient "operation in progress" condition. Seek to
+        // another holder is currently active, this throws IOException - the caller treats that as a transient "operation in progress" condition. Seek to
         // end so any prior crashed-attempt content is preserved and the new entry is appended.
         var stream = markerFile.OpenAsyncStream(FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
         stream.Seek(0, SeekOrigin.End);
 
         try
         {
-            await WriteMarkerEntryAsync(stream, header, message, markerFileLogging).ConfigureAwait(false);
+            await WriteMarkerEntryAsync(stream, header, message).ConfigureAwait(false);
             return stream;
         }
         catch
@@ -65,7 +66,7 @@ partial class FileRepo
     /// This is the no-create, no-write sibling of <see cref="CreateOrTakeoverExclusiveMarkerAsync"/>. Used by the cleaner to acquire ownership of a delete
     /// hint for the duration of a delete attempt without polluting the marker file with a "clean attempt" entry on every pass.
     /// </remarks>
-    internal static FileStream TakeoverExclusiveMarker(IAbsoluteFilePath markerFile)
+    public static FileStream TakeoverExclusiveMarker(IAbsoluteFilePath markerFile)
     {
         var stream = markerFile.OpenAsyncStream(FileMode.Open, FileAccess.Write, FileShare.None);
         stream.Seek(0, SeekOrigin.End);
@@ -77,13 +78,13 @@ partial class FileRepo
     /// Multiple callers may concurrently hold the returned handle on the same marker, and any holder may delete the marker while another still has it open.
     /// Cleanup operations attempting to open the marker exclusively (with <see cref="FileShare.None"/>) will be blocked while any handle remains open.
     /// </summary>
-    internal static async Task<IAsyncDisposable> OpenOrCreateSharedMarkerAsync(IAbsoluteFilePath markerFile, string header, object message, LoggingMode markerFileLogging)
+    public async Task<IAsyncDisposable> OpenOrCreateSharedMarkerAsync(IAbsoluteFilePath markerFile, string header, object message)
     {
         var stream = markerFile.OpenAsyncStream(FileMode.Append, FileAccess.Write, FileShare.Read | FileShare.Write | FileShare.Delete);
 
         try
         {
-            await WriteMarkerEntryAsync(stream, header, message, markerFileLogging).ConfigureAwait(false);
+            await WriteMarkerEntryAsync(stream, header, message).ConfigureAwait(false);
             return stream;
         }
         catch
@@ -96,10 +97,10 @@ partial class FileRepo
     /// <summary>
     /// Logs an entry to a marker file, if it already exists. Errors are silently swallowed - the marker may or may not end up existing on disk.
     /// </summary>
-    internal static async Task LogToOptionalMarkerAsync(IAbsoluteFilePath markerFile, string header, object message, LoggingMode markerFileLogging)
+    public async Task LogToOptionalMarkerAsync(IAbsoluteFilePath markerFile, string header, object message)
     {
-        // Nothing to log and we don't need to ensure the marker exists (caller said "optional") — skip the open entirely.
-        if (markerFileLogging is not LoggingMode.HumanReadable)
+        // Nothing to log and we don't need to ensure the marker exists (caller said "optional") - skip the open entirely.
+        if (MarkerFileLogging is not RepoLoggingMode.HumanReadable)
             return;
 
         FileStream? stream = await TryOpenForLoggingAsync(markerFile, FileMode.Open).ConfigureAwait(false);
@@ -109,7 +110,7 @@ partial class FileRepo
 
         try
         {
-            await SeekAndWriteMarkerEntryWithLockAsync(stream, header, message, markerFileLogging).ConfigureAwait(false);
+            await SeekAndWriteMarkerEntryWithLockAsync(stream, header, message).ConfigureAwait(false);
         }
         catch (IOException) { }
         finally
@@ -122,7 +123,7 @@ partial class FileRepo
     /// Logs an entry to a marker file. Errors are silently swallowed only if the marker file ends up existing on disk; otherwise the exception is propagated to
     /// the caller.
     /// </summary>
-    internal static async Task LogToMarkerAsync(IAbsoluteFilePath markerFile, string header, object message, LoggingMode markerFileLogging)
+    public async Task LogToMarkerAsync(IAbsoluteFilePath markerFile, string header, object message)
     {
         FileStream? stream = await TryOpenForLoggingAsync(markerFile, FileMode.Append).ConfigureAwait(false);
 
@@ -130,7 +131,7 @@ partial class FileRepo
         {
             // Couldn't open after retries. If the marker exists on disk, swallow (the entry is best-effort); otherwise propagate so the caller knows the
             // marker was never written. Reaching this branch with markerFile.State == DoesNotExist requires a transient open failure that cleared by the
-            // time we re-probed, which is essentially impossible — the existence check exists to preserve the original contract that LogToMarkerAsync
+            // time we re-probed, which is essentially impossible - the existence check exists to preserve the original contract that LogToMarkerAsync
             // surfaces "marker does not exist" failures to the caller.
             if (markerFile.State is EntryState.Exists)
                 return;
@@ -140,7 +141,7 @@ partial class FileRepo
 
         try
         {
-            await WriteMarkerEntryAsync(stream, header, message, markerFileLogging).ConfigureAwait(false);
+            await WriteMarkerEntryAsync(stream, header, message).ConfigureAwait(false);
         }
         catch (IOException) { }
         finally
@@ -170,7 +171,7 @@ partial class FileRepo
             }
             catch (FileNotFoundException)
             {
-                // Permanent condition for FileMode.Open — no point retrying. (FileMode.Append cannot raise this since it creates on absence.)
+                // Permanent condition for FileMode.Open - no point retrying. (FileMode.Append cannot raise this since it creates on absence.)
                 return null;
             }
             catch (IOException) { }
@@ -193,9 +194,9 @@ partial class FileRepo
     /// writers and seeks to real EOF on every write) OR when the caller holds the file with <see cref="FileShare.None"/> (no concurrent writers possible).
     /// For shared non-append streams use <see cref="SeekAndWriteMarkerEntryWithLockAsync"/> instead.
     /// </summary>
-    internal static async Task WriteMarkerEntryAsync(FileStream stream, string header, object message, LoggingMode markerFileLogging)
+    public async Task WriteMarkerEntryAsync(FileStream stream, string header, object message)
     {
-        if (markerFileLogging is not LoggingMode.HumanReadable)
+        if (MarkerFileLogging is not RepoLoggingMode.HumanReadable)
             return;
 
         string entry =
@@ -215,9 +216,9 @@ partial class FileRepo
     /// because <see cref="FileStream.Lock"/> is not implemented there; on macOS this becomes best-effort (acceptable for the only current caller,
     /// <see cref="LogToOptionalMarkerAsync"/>, whose contract already tolerates lost entries).
     /// </summary>
-    internal static async Task SeekAndWriteMarkerEntryWithLockAsync(FileStream stream, string header, object message, LoggingMode markerFileLogging)
+    private async Task SeekAndWriteMarkerEntryWithLockAsync(FileStream stream, string header, object message)
     {
-        if (markerFileLogging is not LoggingMode.HumanReadable)
+        if (MarkerFileLogging is not RepoLoggingMode.HumanReadable)
             return;
 
         const int MaxLockAttempts = 4;
@@ -248,7 +249,7 @@ partial class FileRepo
         try
         {
             stream.Seek(0, SeekOrigin.End);
-            await WriteMarkerEntryAsync(stream, header, message, markerFileLogging).ConfigureAwait(false);
+            await WriteMarkerEntryAsync(stream, header, message).ConfigureAwait(false);
         }
         finally
         {
@@ -263,12 +264,9 @@ partial class FileRepo
     /// Clears the indeterminate state for the specified file by deleting its indeterminate marker. This is a best-effort operation - if the marker cannot be
     /// deleted, the failure is logged to the marker itself and the file remains in indeterminate state for a later cleanup attempt.
     /// </summary>
-    internal static async ValueTask ClearIndeterminateStateAsync(IAbsoluteDirectoryPath cleanupDirectory, FileId fileId, LoggingMode markerFileLogging)
+    public async ValueTask TryClearIndeterminateStateAsync(FileId fileId)
     {
-        var indeterminateMarker = GetIndeterminateMarker(cleanupDirectory, fileId);
-
-        // If we can't delete the indeterminate marker, log the error but continue.
-        // This only needs to be a "best effort" - file will stay in indeterminate state and another attempt to delete the marker will be made later.
+        var indeterminateMarker = GetIndeterminateMarker(fileId);
 
         try
         {
@@ -276,7 +274,7 @@ partial class FileRepo
         }
         catch (IOException ex)
         {
-            await LogToOptionalMarkerAsync(indeterminateMarker, "DELETE MARKER ATTEMPT FAILED", ex, markerFileLogging).ConfigureAwait(false);
+            await LogToOptionalMarkerAsync(indeterminateMarker, "DELETE MARKER ATTEMPT FAILED", ex).ConfigureAwait(false);
         }
     }
 }

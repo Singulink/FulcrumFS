@@ -25,6 +25,20 @@ This guarantees:
 - **O(1) resolution.** Reading a variant is a single direct path construction plus one stat, with no directory scan.
 - **Stable behavior under retirement.** When a source variant is retired, the survivor-promotion rule (see [File Variants](../guides/file-variants.md#retiring-variants)) re-points dependents at the new root in one rebase, not through a multi-hop chain.
 
+## Dangling Aliases
+
+A *dangling alias* is an alias marker whose source data file is missing. A closely related condition is a *malformed alias* - an alias marker whose filename cannot be parsed or otherwise violates a structural invariant. Both are corruption states: they cannot occur during normal operation through the documented API and indicate external interference with the repository (e.g. a backup restore that missed files, manual deletion of files on disk, or a crash recovery failure).
+
+The repository surfaces dangling aliases consistently:
+
+- <xref:FulcrumFS.FileRepo.GetVariantAsync*> and <xref:FulcrumFS.FileRepo.OpenVariantAsync*> throw <xref:FulcrumFS.DanglingAliasException> (a subtype of <xref:FulcrumFS.RepoFileNotFoundException>) when the requested variant is a dangling alias. The exception exposes the variant ID, the source variant ID, and the source extension parsed from the marker.
+- <xref:FulcrumFS.FileRepo.GetGroupAsync*> omits the dangling alias from <xref:FulcrumFS.RepoFileGroupInfo.VariantFiles> and reports it via <xref:FulcrumFS.RepoFileGroupInfo.DanglingAliases>. This keeps the invariant that every <xref:FulcrumFS.RepoFileInfo> in `VariantFiles` resolves to readable bytes, while still surfacing the corruption to callers that want to inspect or repair it.
+- Adding a variant over a dangling alias is a self-healing operation: the dangling marker is deleted under the variant lock and the add proceeds as if the slot had been empty, producing the new data file (or new alias) in its place.
+- Every dangling alias detected fires the <xref:FulcrumFS.FileRepo.CorruptionDetected> event with a <xref:FulcrumFS.RepoCorruptionInfo> carrying <xref:FulcrumFS.RepoCorruptionKind.DanglingAlias>, the file ID, the variant ID, and a descriptive message. Malformed alias markers are silently treated as nonexistent but also fire the event with <xref:FulcrumFS.RepoCorruptionKind.MalformedAlias>. Subscribe to this event for centralized logging, alerting, or automated repair.
+
+> [!NOTE]
+> Transient alias residue from in-progress retirement cleanup (alias marker still on disk while its source has just been retired) is *not* corruption: it is reported as a plain <xref:FulcrumFS.RepoFileNotFoundException> from per-variant fetches and silently omitted from group fetches. The cleaner sweeps these markers automatically.
+
 ## Further Reading
 
 - [File Variants](../guides/file-variants.md) - Declaring, adding, and retiring variants.

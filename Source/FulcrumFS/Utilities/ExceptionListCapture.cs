@@ -7,8 +7,6 @@ namespace FulcrumFS.Utilities;
 [NonCopyable]
 internal struct ExceptionListCapture(Func<Exception, bool>? catchExceptionFilter)
 {
-    public static ExceptionListCapture Default => default;
-
     private readonly Func<Exception, bool>? _catchExceptionFilter = catchExceptionFilter;
     private List<Exception>? _exceptions;
 
@@ -33,17 +31,6 @@ internal struct ExceptionListCapture(Func<Exception, bool>? catchExceptionFilter
                 return aex;
             }
         }
-    }
-
-    [MemberNotNullWhen(true, nameof(ResultException))]
-    public bool AddException(Exception exception, bool skipFilter = false)
-    {
-        if (!skipFilter && _catchExceptionFilter?.Invoke(exception) is false)
-            return false;
-
-        (_exceptions ??= []).Add(exception);
-        Debug.Assert(HasExceptions, "Should have exception");
-        return true;
     }
 
     [MemberNotNullWhen(false, nameof(ResultException))]

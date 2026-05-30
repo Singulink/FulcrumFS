@@ -232,7 +232,7 @@ public sealed class VariantAliasTests
     }
 
     [TestMethod]
-    public async Task DanglingAlias_SourceRemovedOutOfBand_GetVariantThrows_GroupOmits()
+    public async Task DanglingAlias_SourceRemovedOutOfBand_GetVariantThrows_GroupReportsBroken()
     {
         using var repo = CreateRepo();
         var fileId = await AddBaseFileAsync(repo);
@@ -241,17 +241,31 @@ public sealed class VariantAliasTests
         var pipeline = VariantPipelines.RealData().WithVariant("b", VariantPipelines.Alias());
         await repo.AddVariantAsync(fileId, "a", pipeline, TestContext.CancellationToken);
 
+        // Capture 'a's extension before deletion so the broken-alias assertion can verify the parsed marker source-extension field.
+        var aBeforeDelete = await repo.GetVariantAsync(fileId, "a");
+        string aExt = aBeforeDelete.Path.Extension;
+
         // Remove 'a's data file out-of-band (no delete marker / retirement marker written), leaving 'b's alias marker orphaned on disk.
-        var a = await repo.GetVariantAsync(fileId, "a");
-        a.Path.Delete();
+        aBeforeDelete.Path.Delete();
 
-        // The alias can no longer resolve its source: GetVariantAsync must fail-fast as not-found.
-        await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "b"));
+        // GetVariantAsync on the dangling alias must fail-fast with DanglingAliasException carrying the parsed source fields.
+        var ex = await Should.ThrowAsync<DanglingAliasException>(async () => await repo.GetVariantAsync(fileId, "b"));
+        ex.FileId.ShouldBe(fileId);
+        ex.VariantId.ShouldBe("b");
+        ex.SourceVariantId.ShouldBe("a");
+        ex.SourceExtension.ShouldBe(aExt);
 
-        // GetGroupAsync omits the dangling alias (and the now-missing 'a' real data) rather than throwing.
+        // GetGroupAsync omits the dangling alias from VariantFiles and surfaces it through DanglingAliases instead. 'a's data file is also gone so it does not
+        // appear in VariantFiles either.
         var group = await repo.GetGroupAsync(fileId);
         group.VariantFiles.Select(v => v.VariantId).ShouldNotContain("b");
         group.VariantFiles.Select(v => v.VariantId).ShouldNotContain("a");
+
+        group.DanglingAliases.Count.ShouldBe(1);
+        var broken = group.DanglingAliases[0];
+        broken.VariantId.ShouldBe("b");
+        broken.SourceVariantId.ShouldBe("a");
+        broken.SourceExtension.ShouldBe(aExt);
     }
 
     [TestMethod]
@@ -301,7 +315,7 @@ public sealed class VariantAliasTests
             // Regardless of ordering, 'a' is gone afterwards.
             await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
 
-            // 'c' is either absent (delete won the race) or, if the add committed first, it was promoted to real data by the delete's rebase — never a dangling
+            // 'c' is either absent (delete won the race) or, if the add committed first, it was promoted to real data by the delete's rebase - never a dangling
             // alias pointing at the deleted 'a'.
             try
             {

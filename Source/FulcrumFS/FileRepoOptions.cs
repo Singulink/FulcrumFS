@@ -110,16 +110,16 @@ public class FileRepoOptions
 
     /// <summary>
     /// Gets or sets the logging mode used to log information and errors to indeterminate and delete marker files. Default is <see
-    /// cref="LoggingMode.HumanReadable"/>.
+    /// cref="RepoLoggingMode.HumanReadable"/>.
     /// </summary>
-    public LoggingMode MarkerFileLogging {
+    public RepoLoggingMode MarkerFileLogging {
         get;
         set {
             EnsureNotFrozen();
             value.ThrowIfNotDefined();
             field = value;
         }
-    } = LoggingMode.HumanReadable;
+    } = RepoLoggingMode.HumanReadable;
 
     /// <summary>
     /// Gets or sets the maximum time that repository operations will wait for successful I/O access to the repository before throwing a <see

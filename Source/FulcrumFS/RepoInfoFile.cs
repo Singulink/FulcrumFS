@@ -62,6 +62,7 @@ internal static class RepoInfoFile
         using (var reader = new StreamReader(stream))
         {
             string? line;
+
             while ((line = reader.ReadLine()) is not null)
             {
                 if (line.Length is 0 || line[0] is '#')
@@ -72,8 +73,7 @@ internal static class RepoInfoFile
                     continue;
 
                 string key = line[..eq].Trim();
-                string value = line[(eq + 1)..].Trim();
-                values[key] = value;
+                values[key] = line[(eq + 1)..].Trim();
             }
         }
 

@@ -121,7 +121,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         }
 
         if (elc.HasExceptions)
-            await Repository.OnTxnCommitErrorAsync(elc.ResultException).ConfigureAwait(false);
+            await Repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Commit, elc.ResultException).ConfigureAwait(false);
 
         async Task CommitAddAsync(FileId fileId)
         {
@@ -194,7 +194,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
         }
 
         if (elc.HasExceptions)
-            await repository.OnTxnRollbackErrorAsync(elc.ResultException).ConfigureAwait(false);
+            await repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Rollback, elc.ResultException).ConfigureAwait(false);
 
         async Task RollbackAddAsync(FileId fileId)
         {

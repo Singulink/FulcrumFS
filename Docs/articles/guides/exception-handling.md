@@ -66,23 +66,58 @@ See [File Variants](file-variants.md).
 
 ## Commit and Rollback Failures
 
-Commit and rollback do not throw on failure. Instead, the affected files are marked indeterminate and remain readable, and the failure is reported through events:
+Commit and rollback do not throw on failure. Instead, the affected files are marked indeterminate and remain readable, and the failure is reported through a single event:
 
-- <xref:FulcrumFS.FileRepo.CommitFailed> fires when a <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> cannot fully complete.
-- <xref:FulcrumFS.FileRepo.RollbackFailed> fires when a rollback (explicit or via disposal) cannot fully complete.
+- <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> fires when either a <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> or a rollback (explicit or via disposal) cannot fully complete. The handler receives a <xref:FulcrumFS.RepoTransactionCompletionFailureInfo> exposing the failed <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> (a <xref:FulcrumFS.RepoTransactionCompletionOperation> value of `Commit` or `Rollback`) and the underlying <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Exception> (an <xref:System.AggregateException> if multiple errors occurred during the step).
 
-Subscribe to these to log or alert. If you want throwing behavior at the call site, a handler can raise an exception itself.
+Subscribe to log or alert. If you want throwing behavior at the call site, the handler can raise an exception itself - handler exceptions are not caught and will propagate out of the completion call.
 
 ```csharp
-repo.CommitFailed += (sender, e) =>
-    logger.LogError("Repository commit failed; affected files are indeterminate and will be resolved during cleanup.");
+repo.TransactionCompletionFailed += failure =>
+{
+    if (failure.Operation is RepoTransactionCompletionOperation.Commit)
+        logger.LogError(failure.Exception, "Repository commit failed; affected files are indeterminate and will be resolved during cleanup.");
+    else
+        logger.LogWarning(failure.Exception, "Repository rollback failed; affected files are indeterminate.");
 
-repo.RollbackFailed += (sender, e) =>
-    logger.LogWarning("Repository rollback failed; affected files are indeterminate.");
+    return Task.CompletedTask;
+};
 ```
 
 > [!IMPORTANT]
 > Indeterminate files left by these failures are resolved later during cleanup, where a callback decides per <xref:FulcrumFS.FileId> whether to <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> each one. This is what closes the loop on commit failures, so make sure cleanup is scheduled in any environment that runs the repository. See [Repository Cleanup](cleanup.md) and [Transactional Commit Model](../concepts/commit-model.md).
+
+## Corruption Detection
+
+FulcrumFS surfaces detected repository corruption through the <xref:FulcrumFS.FileRepo.CorruptionDetected> event. The handler is a <xref:FulcrumFS.RepoCorruptionHandler> that receives a <xref:FulcrumFS.RepoCorruptionInfo> describing the issue: a <xref:FulcrumFS.RepoCorruptionKind>, the affected <xref:FulcrumFS.FileId>, an optional variant ID, and a descriptive message. Every code path that throws because of repository corruption fires this event first, so consumers can observe and repair corruption regardless of which entry point detected it.
+
+The currently detected kinds are:
+
+- <xref:FulcrumFS.RepoCorruptionKind.DanglingAlias> - an alias marker whose source data file is missing. Cannot occur during normal API usage; indicates external interference (a partial backup restore, manual file deletion, a crash recovery failure). Surfaced at the call site as <xref:FulcrumFS.DanglingAliasException> (a subtype of <xref:FulcrumFS.RepoFileNotFoundException>).
+- <xref:FulcrumFS.RepoCorruptionKind.MalformedAlias> - an alias marker whose filename cannot be parsed or otherwise violates a structural invariant. The repository treats malformed alias markers as nonexistent.
+- <xref:FulcrumFS.RepoCorruptionKind.DuplicateVariantEntry> - more than one file in a file group directory maps to the same logical variant slot (for example, two data files for the main file, or two alias markers for the same variant ID). The slot cannot be safely resolved without manual intervention; throws <xref:FulcrumFS.RepoCorruptedException>.
+- <xref:FulcrumFS.RepoCorruptionKind.RebaseInconsistency> - a rebase operation cannot be resumed because required files are missing (the chosen survivor has neither a materialized data file nor an alias marker, or the source data file is missing while the chosen variant is still an unmaterialized alias). Throws <xref:FulcrumFS.RepoCorruptedException>.
+- <xref:FulcrumFS.RepoCorruptionKind.OrphanRebaseMarker> - a rebase marker observed with no source data, chosen data, or surviving alias dependents - residue from a rebase whose final marker-delete step was lost. Surfaced for visibility only; no exception is thrown and the marker is physically removed inline.
+
+The handler is asynchronous (`Task`-returning) so consumers can perform I/O-bound logging or alerting work without resorting to sync-over-async. Handlers are awaited sequentially before the detecting operation returns, so keep them fast; any handler exception is not caught and will propagate out of the operation that fired the event.
+
+```csharp
+repo.CorruptionDetected += info =>
+{
+    logger.LogError(
+        "Repository corruption detected: kind={Kind}, fileId={FileId}, variantId={VariantId}, message={Message}",
+        info.Kind, info.FileId, info.VariantId, info.Message);
+    return Task.CompletedTask;
+};
+```
+
+In addition to the event, dangling aliases are surfaced at the call site:
+
+- <xref:FulcrumFS.FileRepo.GetVariantAsync*> and <xref:FulcrumFS.FileRepo.OpenVariantAsync*> throw <xref:FulcrumFS.DanglingAliasException> (a subtype of <xref:FulcrumFS.RepoFileNotFoundException>).
+- <xref:FulcrumFS.FileRepo.GetGroupAsync*> omits the dangling alias from <xref:FulcrumFS.RepoFileGroupInfo.VariantFiles> and exposes it via <xref:FulcrumFS.RepoFileGroupInfo.DanglingAliases>.
+- Adding a variant over a dangling alias self-heals: the dangling marker is removed and the add proceeds normally.
+
+See [Variant Aliasing](../concepts/variant-aliasing.md#dangling-aliases) for the full dangling-alias model.
 
 ## Next Steps
 

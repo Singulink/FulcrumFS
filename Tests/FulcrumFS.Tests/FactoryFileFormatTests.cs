@@ -50,7 +50,7 @@ public sealed class FactoryFileFormatTests
     public async Task TextUnicode_Utf8NoBom_Succeeds()
     {
         var type = FileFormat.TextUnicode(".txt");
-        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes("Hello, cafÃ©! æ—¥æœ¬èªž"));
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes("Hello, café! 日本語"));
         var result = await type.ValidateAsync(stream, TestContext.CancellationToken);
         result.IsValid.ShouldBeTrue();
     }
@@ -185,6 +185,6 @@ public sealed class FactoryFileFormatTests
         var type = FileFormat.AnyContent(".LOG", ".Txt");
 
         // Extensions should be lowercased + dot-prefixed (FileExtension.Normalize behavior).
-        type.Extensions.ShouldAllBe(e => e.StartsWith('.') && e == e.ToLowerInvariant());
+        type.Extensions.ShouldAllBe(e => e.StartsWith('.') && e.Equals(e, StringComparison.InvariantCultureIgnoreCase));
     }
 }

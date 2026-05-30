@@ -3,7 +3,7 @@ namespace FulcrumFS;
 /// <summary>
 /// Represents the logging mode used to write information and errors.
 /// </summary>
-public enum LoggingMode
+public enum RepoLoggingMode
 {
     /// <summary>
     /// No logging is performed.

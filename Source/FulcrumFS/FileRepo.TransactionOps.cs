@@ -47,10 +47,10 @@ partial class FileRepo
                     continue;
                 }
 
-                var fileDir = GetFileDirectory(_filesDirectory, fileId);
+                var fileDir = _fs.GetFileDirectory(fileId);
                 var fileDirState = fileDir.State;
 
-                var deleteMarker = GetDeleteMarker(_cleanupDirectory, fileId, null);
+                var deleteMarker = _fs.GetDeleteMarker(fileId, null);
                 var deleteMarkerState = deleteMarker.State;
 
                 if (fileDirState is EntryState.Exists || deleteMarkerState is EntryState.Exists)
@@ -82,8 +82,8 @@ partial class FileRepo
         // already moved the file into _filesDirectory and the in-process add reservation lock has been released. Concurrent TxnDeleteAsync calls on the
         // same id are supported by design via the shared indeterminate marker (multiple holders, FileShare allowed).
 
-        var fileDir = GetFileDirectory(_filesDirectory, fileId);
-        var deleteMarker = GetDeleteMarker(_cleanupDirectory, fileId, null);
+        var fileDir = _fs.GetFileDirectory(fileId);
+        var deleteMarker = _fs.GetDeleteMarker(fileId, null);
 
         switch (fileDir.State, deleteMarker.State)
         {
@@ -97,9 +97,9 @@ partial class FileRepo
         // concurrent transactions are allowed to share the marker, but cleanup operations probing it with an exclusive (FileShare.None) handle will be
         // blocked while any transaction is still holding it.
 
-        var indeterminateMarker = GetIndeterminateMarker(_cleanupDirectory, fileId);
+        var indeterminateMarker = _fs.GetIndeterminateMarker(fileId);
         const string message = "A transaction tentatively has marked this file for deletion.";
-        return await OpenOrCreateSharedMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message, Options.MarkerFileLogging).ConfigureAwait(false);
+        return await _fs.OpenOrCreateSharedMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message).ConfigureAwait(false);
     }
 
     internal async ValueTask TxnCommitAddAsync(FileId fileId)
@@ -107,7 +107,7 @@ partial class FileRepo
         await EnsureInitializedAsync().ConfigureAwait(false);
 
         using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
-            await ClearIndeterminateStateAsync(_cleanupDirectory, fileId, Options.MarkerFileLogging).ConfigureAwait(false);
+            await _fs.TryClearIndeterminateStateAsync(fileId).ConfigureAwait(false);
     }
 
     internal async ValueTask TxnCommitDeleteAsync(FileId fileId) =>
@@ -121,18 +121,23 @@ partial class FileRepo
         await EnsureInitializedAsync().ConfigureAwait(false);
 
         using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
-            await ClearIndeterminateStateAsync(_cleanupDirectory, fileId, Options.MarkerFileLogging).ConfigureAwait(false);
+            await _fs.TryClearIndeterminateStateAsync(fileId).ConfigureAwait(false);
     }
 
-    internal async Task OnTxnCommitErrorAsync(Exception ex)
+    internal async Task OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation operation, Exception ex)
     {
-        if (CommitFailed is { } handler)
-            await handler.Invoke(ex).ConfigureAwait(false);
-    }
+        if (TransactionCompletionFailed is not { } handler)
+            return;
 
-    internal async Task OnTxnRollbackErrorAsync(Exception ex)
-    {
-        if (RollbackFailed is { } handler)
-            await handler.Invoke(ex).ConfigureAwait(false);
+        var failure = new RepoTransactionCompletionFailureInfo(operation, ex);
+
+        if (handler.HasSingleTarget)
+        {
+            await handler.Invoke(failure).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var singleHandler in handler.GetInvocationList().Cast<RepoTransactionCompletionFailedHandler>())
+            await singleHandler.Invoke(failure).ConfigureAwait(false);
     }
 }

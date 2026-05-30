@@ -12,7 +12,7 @@ partial class FileRepo
     public async ValueTask<RepoFileGroupInfo> GetGroupAsync(FileId fileId)
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
-        var fileDir = GetFileDirectory(_filesDirectory, fileId);
+        var fileDir = _fs.GetFileDirectory(fileId);
 
         IAbsoluteFilePath? mainFile = null;
         var variants = new List<RepoFileInfo>();
@@ -70,19 +70,22 @@ partial class FileRepo
         if (retiredVariantIds is not null)
             variants.RemoveAll(v => v.VariantId is not null && retiredVariantIds.Contains(v.VariantId));
 
+        List<DanglingAliasInfo>? danglingAliases = null;
+
         if (aliasMarkers is not null)
         {
             foreach (var marker in aliasMarkers)
             {
-                if (!TryParseAliasMarker(marker, out string? variantId, out string? sourceVariantId, out _))
+                if (!RepoFileSystem.TryParseAliasMarker(marker, out string? variantId, out string? sourceVariantId, out string? sourceExtension))
+                {
+                    // Malformed marker: treat as nonexistent. Fire the corruption event so monitoring/repair tooling sees it, but do not surface it through
+                    // VariantFiles or DanglingAliases.
+                    await CorruptionDetected.RaiseMalformedAliasAsync(fileId, marker.Name).ConfigureAwait(false);
                     continue;
+                }
 
                 // Skip aliases whose own variant ID has been retired.
                 if (retiredVariantIds is not null && retiredVariantIds.Contains(variantId))
-                    continue;
-
-                // Skip aliases whose source variant has been retired (the alias is dangling-by-retirement).
-                if (sourceVariantId is not null && retiredVariantIds is not null && retiredVariantIds.Contains(sourceVariantId))
                     continue;
 
                 IAbsoluteFilePath? sourceFile;
@@ -91,13 +94,22 @@ partial class FileRepo
                 {
                     sourceFile = mainFile;
                 }
+                else if (retiredVariantIds is not null && retiredVariantIds.Contains(sourceVariantId))
+                {
+                    // Source variant is retired but cleanup has not yet removed this alias. Transient retirement state, not corruption - omit silently and
+                    // let the cleaner sweep.
+                    continue;
+                }
                 else if (dataByVariantId is not null && dataByVariantId.TryGetValue(sourceVariantId, out var found))
                 {
                     sourceFile = found;
                 }
                 else
                 {
-                    // Dangling alias: source missing from the listing. Omit from results; cleaner will sweep.
+                    // Dangling alias: source data file is missing from the listing. Omit from VariantFiles, surface via DanglingAliases, and notify the
+                    // corruption event so monitoring/repair tooling can react.
+                    (danglingAliases ??= []).Add(new DanglingAliasInfo(variantId, sourceVariantId, sourceExtension));
+                    await CorruptionDetected.RaiseDanglingAliasAsync(fileId, variantId, sourceVariantId).ConfigureAwait(false);
                     continue;
                 }
 
@@ -105,7 +117,7 @@ partial class FileRepo
             }
         }
 
-        return new RepoFileGroupInfo(new RepoFileInfo(fileId, variantId: null, mainFile), variants);
+        return new RepoFileGroupInfo(new RepoFileInfo(fileId, variantId: null, mainFile), variants, danglingAliases);
     }
 
     /// <summary>
@@ -115,7 +127,9 @@ partial class FileRepo
     public async ValueTask<RepoFileInfo> GetAsync(FileId fileId)
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
-        var file = FindDataFile(_filesDirectory, fileId, variantId: null, out _) ?? throw new RepoFileNotFoundException($"File ID '{fileId}' was not found.");
+        var (file, _, _) = await _fs.FindDataFileAsync(fileId, variantId: null).ConfigureAwait(false);
+        if (file is null)
+            throw new RepoFileNotFoundException($"File ID '{fileId}' was not found.");
         return new RepoFileInfo(fileId, variantId: null, file);
     }
 
@@ -140,7 +154,7 @@ partial class FileRepo
 
         // Single enumeration captures both the data file/alias marker and the in-group delete marker state. A retired variant must fail-fast even if its data
         // file still lingers on disk in deferred-delete mode.
-        var file = FindDataFile(_filesDirectory, fileId, variantId, out bool isRetired);
+        var (file, isRetired, _) = await _fs.FindDataFileAsync(fileId, variantId).ConfigureAwait(false);
 
         // A retired variant must fail-fast as not-found even if its data file still lingers on disk in deferred-delete mode.
         if (isRetired || file is null)
@@ -148,13 +162,26 @@ partial class FileRepo
 
         if (file.Extension is FileRepoPaths.AliasMarkerExtension)
         {
-            // If the alias's source has been retired, the alias is dangling-by-retirement — surface the same not-found behavior. The source check is a
-            // cheap single-file probe (vs. a directory glob enumeration), so we use IsVariantRetired directly rather than another FindDataFile call.
-            if (TryParseAliasMarker(file, out _, out string? srcVid, out _) && srcVid is not null && IsVariantRetired(_filesDirectory, fileId, srcVid))
-                throw new RepoFileNotFoundException($"File ID '{fileId}' variant '{variantId}' alias source '{srcVid}' was not found.");
+            if (!RepoFileSystem.TryParseAliasMarker(file, out _, out string? srcVid, out string? srcExt))
+            {
+                // Marker is malformed: treat as nonexistent. Fire the corruption event and surface a plain not-found to the caller.
+                await CorruptionDetected.RaiseMalformedAliasAsync(fileId, file.Name).ConfigureAwait(false);
+                throw new RepoFileNotFoundException($"File ID '{fileId}' or its variant '{variantId}' was not found.");
+            }
 
-            var resolved = ResolveAlias(_filesDirectory, fileId, file)
-                ?? throw new RepoFileNotFoundException($"File ID '{fileId}' or its variant '{variantId}' was not found.");
+            // If the alias's source has been retired, the alias is transient retirement residue (cleanup has not yet swept it). Surface as plain not-found
+            // since the variant is conceptually gone - this is not corruption, just retirement in flight. The source check is a cheap single-file probe
+            // (vs. a directory glob enumeration), so we use IsVariantRetired directly rather than another FindDataFile call.
+            if (srcVid is not null && _fs.IsVariantRetired(fileId, srcVid))
+                throw new RepoFileNotFoundException($"File ID '{fileId}' or its variant '{variantId}' was not found.");
+
+            var resolved = _fs.ResolveAlias(fileId, file);
+
+            if (resolved is null)
+            {
+                await CorruptionDetected.RaiseDanglingAliasAsync(fileId, variantId, srcVid).ConfigureAwait(false);
+                throw new DanglingAliasException(fileId, variantId, srcVid, srcExt);
+            }
 
             file = resolved;
         }

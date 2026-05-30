@@ -34,12 +34,12 @@ public sealed class VariantCrashRecoveryTests
         // Crash right after the rebase marker is pinned but before the chosen survivor is materialized.
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.RebaseMarkerWritten)
+            if (step is DebugStep.RebaseMarkerWritten)
                 throw new SimulatedCrashException();
         };
 
-        // The crash occurs inside the rebase, which converts it to an early return (forward-only), so the call completes without throwing.
-        await repo.DeleteVariantsAsync(fileId, "a");
+        // The crash propagates out of the rebase, so the call throws. The committed delete marker and the pinned rebase marker are left behind for the cleaner.
+        await Should.ThrowAsync<SimulatedCrashException>(async () => await repo.DeleteVariantsAsync(fileId, "a"));
         repo.DebugStepHook = null;
 
         var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
@@ -61,11 +61,11 @@ public sealed class VariantCrashRecoveryTests
 
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.RebaseMaterialized)
+            if (step is DebugStep.RebaseMaterialized)
                 throw new SimulatedCrashException();
         };
 
-        await repo.DeleteVariantsAsync(fileId, "a");
+        await Should.ThrowAsync<SimulatedCrashException>(async () => await repo.DeleteVariantsAsync(fileId, "a"));
         repo.DebugStepHook = null;
 
         var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
@@ -87,7 +87,7 @@ public sealed class VariantCrashRecoveryTests
         // This checkpoint is outside the rebase try/catch, so the crash propagates out of the delete call.
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.DeleteResidueAboutToDelete)
+            if (step is DebugStep.DeleteResidueAboutToDelete)
                 throw new SimulatedCrashException();
         };
 
@@ -112,11 +112,11 @@ public sealed class VariantCrashRecoveryTests
 
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.RebaseMaterialized)
+            if (step is DebugStep.RebaseMaterialized)
                 throw new SimulatedCrashException();
         };
 
-        await repo.DeleteVariantsAsync(fileId, "a");
+        await Should.ThrowAsync<SimulatedCrashException>(async () => await repo.DeleteVariantsAsync(fileId, "a"));
         repo.DebugStepHook = null;
 
         var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
@@ -158,11 +158,11 @@ public sealed class VariantCrashRecoveryTests
         int markerWrites = 0;
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.RebaseMarkerWritten && ++markerWrites is 2)
+            if (step is DebugStep.RebaseMarkerWritten && ++markerWrites is 2)
                 throw new SimulatedCrashException();
         };
 
-        await repo.DeleteVariantsAsync(fileId, "a", "x");
+        await Should.ThrowAsync<SimulatedCrashException>(async () => await repo.DeleteVariantsAsync(fileId, "a", "x"));
         repo.DebugStepHook = null;
 
         var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
@@ -197,11 +197,11 @@ public sealed class VariantCrashRecoveryTests
         // Crash right after the rebase marker is pinned but before any survivor is materialized: both 'b' and 'c' still alias the doomed 'a'.
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.RebaseMarkerWritten)
+            if (step is DebugStep.RebaseMarkerWritten)
                 throw new SimulatedCrashException();
         };
 
-        await repo.DeleteVariantsAsync(fileId, "a");
+        await Should.ThrowAsync<SimulatedCrashException>(async () => await repo.DeleteVariantsAsync(fileId, "a"));
         repo.DebugStepHook = null;
 
         var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
@@ -233,10 +233,10 @@ public sealed class VariantCrashRecoveryTests
         var (fileId, originalData) = await AddRealWithTwoAliasesAsync(repo);
 
         // Crash after the cleanup-dir hints are written but before the in-group delete markers (the commit point). This checkpoint is outside the rebase
-        // try/catch, so it propagates out of the delete call. A hint alone means nothing — without a matching delete marker the variant is NOT retired.
+        // try/catch, so it propagates out of the delete call. A hint alone means nothing - without a matching delete marker the variant is NOT retired.
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.DeleteHintsWritten)
+            if (step is DebugStep.DeleteHintsWritten)
                 throw new SimulatedCrashException();
         };
 
@@ -266,18 +266,18 @@ public sealed class VariantCrashRecoveryTests
         // Crash mid-rebase of 'a's subtree, leaving a pending rebase marker (and committed delete marker + stale cleanup hint for 'a').
         repo.DebugStepHook = step =>
         {
-            if (step is FileRepo.DebugStep.RebaseMaterialized)
+            if (step is DebugStep.RebaseMaterialized)
                 throw new SimulatedCrashException();
         };
 
-        await repo.DeleteVariantsAsync(fileId, "a");
+        await Should.ThrowAsync<SimulatedCrashException>(async () => await repo.DeleteVariantsAsync(fileId, "a"));
         repo.DebugStepHook = null;
 
         var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
         groupDir.GetChildFiles($"*{FileRepoPaths.RebaseMarkerExtension}").ShouldNotBeEmpty();
 
         // A brand-new delete of an UNRELATED variant ('x') must, on entry, detect the pending rebase from the crashed op and roll it forward to completion
-        // before planning its own retirement — the foreground reentrancy takeover. Afterwards both operations are fully settled.
+        // before planning its own retirement - the foreground reentrancy takeover. Afterwards both operations are fully settled.
         await repo.DeleteVariantsAsync(fileId, "x");
 
         groupDir.GetChildFiles($"*{FileRepoPaths.RebaseMarkerExtension}").ShouldBeEmpty();

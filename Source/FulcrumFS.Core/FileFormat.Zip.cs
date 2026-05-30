@@ -117,7 +117,7 @@ public abstract partial class FileFormat
                     mimetype = (await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false)).Trim();
                 }
 
-                if (!string.Equals(mimetype, expectedMimetype, StringComparison.Ordinal))
+                if (mimetype != expectedMimetype)
                     return FileFormatValidationResult.Invalid($"File's mimetype '{mimetype}' does not match expected '{expectedMimetype}' for {Name}.");
             }
 

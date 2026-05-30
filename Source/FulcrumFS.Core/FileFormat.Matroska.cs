@@ -25,7 +25,7 @@ public abstract partial class FileFormat
             if (docType is null)
                 return FileFormatValidationResult.Invalid($"File does not contain an EBML DocType element (required for {Name}).");
 
-            if (!string.Equals(docType, expectedDocType, StringComparison.Ordinal))
+            if (docType != expectedDocType)
                 return FileFormatValidationResult.Invalid($"File's EBML DocType '{docType}' does not match expected '{expectedDocType}' for {Name}.");
 
             return FileFormatValidationResult.Success;
