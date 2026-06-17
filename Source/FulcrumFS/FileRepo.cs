@@ -330,7 +330,7 @@ public sealed partial class FileRepo : IDisposable
                 try { legacyCleanup.Attributes &= ~FileAttributes.Hidden; }
                 catch (IOException) { /* best-effort */ }
 
-                Directory.Move(legacyCleanup.PathExport, _fs.CleanupDirectory.PathExport);
+                legacyCleanup.MoveTo(_fs.CleanupDirectory);
             }
 
             // Legacy repositories pre-date the info marker file. Stamp one now so the migrated repo is identifiable as a v1 FulcrumFS repository and subsequent

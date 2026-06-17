@@ -26,7 +26,7 @@ In practice, this is what lets a fetch in progress when a delete commits keep st
 Two distinct markers cooperate to make deletion crash-safe, as introduced in [Repository Layout](repository-layout.md):
 
 - The **in-group delete marker** `{variantId}.del` is the authoritative commit record. If it exists, the deletion is logically committed.
-- The **cleanup hint** `cleanup/{shard}/{fileId}.{variantId}.del` is the cleaner's re-entry token. It can exist before the commit point is reached.
+- The **cleanup hint** `cleanup/{fileId}.{variantId}.del` is the cleaner's re-entry token. It can exist before the commit point is reached.
 
 The relationship between the two is what disambiguates a crash:
 

@@ -34,7 +34,7 @@ public sealed record RepoFileGroupInfo
     internal RepoFileGroupInfo(RepoFileInfo main, IEnumerable<RepoFileInfo> variants, IEnumerable<DanglingAliasInfo>? danglingAliases = null)
     {
         MainFile = main;
-        VariantFiles = EquatableArray.Create(variants);
+        VariantFiles = variants.ToEquatableArray();
         DanglingAliases = danglingAliases?.ToEquatableArray() ?? [];
 
         Debug.Assert(VariantFiles.All(v => v.FileId == MainFile.FileId), "All files in the group must have the same file ID.");

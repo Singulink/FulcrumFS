@@ -57,7 +57,7 @@ A rebase plan marker is named `{sourceVariantId}.{chosenVariantId}.rebase`. It p
 
 ## Cleanup Hints
 
-Separate from in-group delete markers, the cleaner uses hint files under `cleanup/{shard}/{fileId}.{variantId}.del` as its re-entry token. A hint without a matching in-group delete marker means nothing committed, so the cleaner simply sweeps the stray hint and leaves the variant live. This separation is central to crash recovery, covered in [Crash Recovery and Invariants](crash-recovery.md).
+Separate from in-group delete markers, the cleaner uses hint files under `cleanup/{fileId}.{variantId}.del` as its re-entry token. A hint without a matching in-group delete marker means nothing committed, so the cleaner simply sweeps the stray hint and leaves the variant live. This separation is central to crash recovery, covered in [Crash Recovery and Invariants](crash-recovery.md).
 
 ## Further Reading
 
