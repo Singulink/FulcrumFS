@@ -30,7 +30,7 @@ Currently the following sets of cases test the following functionality of our ff
 - Zero streams: 168
 - Over/under-sized streams: 171-174
 - Invalid (only when validating) file: 175
-- Misc. sizes for unit testing: 176-187, 197-200
+- Misc. sizes for unit testing: 176-187, 197-203
 - Misc. files for SelectSmallest unit testing: 188-195
 
 The following files are also explicitly used for tests in `Tests.cs`: 1-21, 30-54, 57, 60, 67-82, 95, 100-103, 111, 114, 133-136, 143, 158-164, 166-200
