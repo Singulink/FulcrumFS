@@ -3,11 +3,36 @@ name: build and test
 on:
   push:
     branches: [ main ]
-  pull_request_target:
+  pull_request:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  build-ffmpeg:
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cachekey.outputs.key }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Compute ffmpeg cache key
+      id: cachekey
+      # Key changes when anything in the build-ffmpeg script dir changes, and once per day (UTC) so the binaries are rebuilt regularly.
+      run: echo "key=ffmpeg-${{ hashFiles('.github/scripts/build-ffmpeg/**') }}-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+    - name: Restore ffmpeg cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ffmpeg-out
+        key: ${{ steps.cachekey.outputs.key }}
+    - name: Build ffmpeg binaries
+      if: steps.cache.outputs.cache-hit != 'true'
+      env:
+        FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/ffmpeg-out
+      run: |
+        mkdir -p "$FFMPEG_OUTPUT_DIR"
+        bash .github/scripts/build-ffmpeg/build.sh
+
+  build-and-test-core:
     strategy:
       fail-fast: false
       matrix:
@@ -15,52 +40,67 @@ jobs:
         configuration: [Debug, Release]
 
     runs-on: ${{ matrix.os }}
-    environment: ${{ matrix.os == 'windows-latest' && 'test-windows-x64' || 'test-linux-x64' }}
+    environment: ${{ matrix.os == 'windows-latest' && 'test-core-windows-x64' || 'test-core-linux-x64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
 
     steps:
-    - name: Checkout (push)
-      if: github.event_name == 'push'
+    - name: Checkout
       uses: actions/checkout@v6
-    - name: Checkout base branch (pull_request_target)
-      if: github.event_name == 'pull_request_target'
-      uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.pull_request.base.ref }}
-    - name: Download ffmpeg binaries
-      run: |
-        curl -L "${{ secrets.FFMPEG_BINARIES_URL }}" -o file.zip
-    - name: Unzip ffmpeg binaries on Linux
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y unzip
-        unzip file.zip -d Binaries
-        chmod +x Binaries/ffmpeg
-        chmod +x Binaries/ffprobe
-        rm file.zip
-    - name: Unzip ffmpeg binaries on Windows
-      if: runner.os == 'Windows'
-      run: |
-        Expand-Archive -Path file.zip -DestinationPath Binaries
-        Remove-Item file.zip
-    - name: Checkout PR head (pull_request_target)
-      if: github.event_name == 'pull_request_target'
-      uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-        clean: false
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: |
           10.0.x
     - name: Clean
-      run: dotnet clean --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
+      run: dotnet clean FulcrumFS.slnx --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
     - name: Install dependencies
-      run: dotnet restore
+      run: dotnet restore FulcrumFS.slnx
     - name: Build
-      run: dotnet build --configuration ${{ matrix.configuration }} --no-restore
+      run: dotnet build FulcrumFS.slnx --configuration ${{ matrix.configuration }} --no-restore
     - name: Test
-      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+      run: dotnet test FulcrumFS.NoVideos.slnf --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+
+  build-and-test-video:
+    needs: build-ffmpeg
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        configuration: [Debug, Release]
+
+    runs-on: ${{ matrix.os }}
+    environment: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || 'test-video-linux-x64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Restore ffmpeg cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ffmpeg-out
+        key: ${{ needs.build-ffmpeg.outputs.cache-key }}
+        fail-on-cache-miss: true
+    - name: Unzip ffmpeg binaries (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y unzip
+        unzip ffmpeg-out/ffmpeg-linux-x64.zip -d Binaries
+        chmod +x Binaries/**/*
+    - name: Unzip ffmpeg binaries (Windows)
+      if: runner.os == 'Windows'
+      run: Expand-Archive -Path ffmpeg-out/ffmpeg-windows-x64.zip -DestinationPath Binaries
+    - name: Clean
+      run: dotnet clean FulcrumFS.slnx --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore FulcrumFS.slnx
+    - name: Build
+      run: dotnet build FulcrumFS.slnx --configuration ${{ matrix.configuration }} --no-restore
+    - name: Test
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration ${{ matrix.configuration }} --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
