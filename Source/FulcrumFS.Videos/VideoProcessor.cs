@@ -1062,6 +1062,7 @@ public sealed class VideoProcessor : FileProcessor
         List<(char Kind, int InputIndex, int OutputIndex, bool MapMetadata, FFmpegUtils.PerStreamMetadataOverride? MetadataOverrides)> streamMapping = [];
         List<(int StreamMappingIndex, string SourceValidFileExtension, bool RequiresReencodeForMP4)> streamsToCheckSize = [];
 
+        bool requiresLevel85ForX265 = false;
         foreach (var stream in sourceInfo.Streams)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
@@ -1424,6 +1425,9 @@ public sealed class VideoProcessor : FileProcessor
                             }
 
                             filterOverride.ResizeTo = (resultWidth, resultHeight);
+
+                            // If resolution is above level 7.2 limit, enable level 8.5 support:
+                            if ((long)resultWidth * resultHeight > 142_606_336) requiresLevel85ForX265 = true;
                         }
                     }
                 }
@@ -1936,6 +1940,16 @@ public sealed class VideoProcessor : FileProcessor
         }
 
         FinishedValidation();
+
+        // Add any global metadata overrides:
+
+        if (requiresLevel85ForX265)
+        {
+            // level 8.5 support is now under allow-non-conformance=1 on some builds of x265
+            // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).
+            perOutputStreamOverrides.Add(
+                new FFmpegUtils.PerStreamX265ParamsOverride(streamKind: 'v', streamIndexWithinKind: -1, paramsToPass: "allow-non-conformance=1"));
+        }
 
         // Finish setting up & running the main FFmpeg command:
 
@@ -2611,38 +2625,6 @@ public sealed class VideoProcessor : FileProcessor
             // If our video is smaller than the new minimum size, try again:
             if (newMin && (resultWidth < minDimension || resultHeight < minDimension))
             {
-                continue;
-            }
-
-            // Apply the per-codec maximum encodable frame area. Both H.264 and H.265 are limited to Level 6.2's max frame size of 35,651,584 pixels
-            // (139,264 macroblocks for H.264, or equivalent luma samples for HEVC). Frames larger than this cannot be encoded by libx264 / libx265
-            // (the encoders reject the allocation internally, surfacing as AVERROR_EXTERNAL), so we scale down here to fit within the codec limit.
-            const long maxFrameArea = 35_651_584L;
-            if ((long)resultWidth * resultHeight > maxFrameArea)
-            {
-                // If one dimension is equal to the min, we can't reduce further, so throw an error:
-                if (maxW == minDimension || maxH == minDimension)
-                {
-                    return (1, -1, -1);
-                }
-
-                // Set max dimensions to current size first:
-                maxW = resultWidth;
-                maxH = resultHeight;
-
-                // Now, reduce the max dimensions to what should be correct approximately, and ensure at least 1 dimension is reduced:
-                double areaScaleFactor = double.Sqrt(maxFrameArea / ((double)resultWidth * resultHeight));
-                int newAreaMaxW = int.Min((int)double.Ceiling(resultWidth * areaScaleFactor), maxW);
-                int newAreaMaxH = int.Min((int)double.Ceiling(resultHeight * areaScaleFactor), maxH);
-                if (newAreaMaxW == maxW && newAreaMaxH == maxH)
-                {
-                    if (newAreaMaxW > newAreaMaxH) newAreaMaxW--;
-                    else newAreaMaxH--;
-                }
-
-                // Update our max dimensions and try again:
-                maxW = newAreaMaxW;
-                maxH = newAreaMaxH;
                 continue;
             }
 

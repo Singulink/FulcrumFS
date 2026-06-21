@@ -422,7 +422,7 @@ partial class Tests
         return equal;
     }
 
-    public static IEnumerable<object[]> VideosToCheck => field ??= [.. Enumerable.Range(1, 200).Select((x) => (object[])[
+    public static IEnumerable<object[]> VideosToCheck => field ??= [.. Enumerable.Range(1, 203).Select((x) => (object[])[
         ((IEnumerable<string>)[".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".mpeg", ".3gp"])
             .Select((y) => "video" + x.ToString(CultureInfo.InvariantCulture) + y).Single((y) => _videoFilesDir.CombineFile(y).Exists)
     ])];
