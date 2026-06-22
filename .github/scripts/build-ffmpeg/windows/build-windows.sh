@@ -17,11 +17,11 @@ cd ~/Clones
 git clone https://github.com/rdp/ffmpeg-windows-build-helpers.git
 cd ffmpeg-windows-build-helpers
 sudo apt-get update
-sudo apt-get -y install subversion ragel curl texinfo g++ ed bison flex cvs yasm automake libtool autoconf gcc cmake git make pkg-config zlib1g-dev unzip zip pax nasm gperf autogen bzip2 autoconf-archive p7zip-full meson clang python3 python3-distutils-extra python3-setuptools libfreetype6-dev
+sudo apt-get -y install subversion ragel curl texinfo g++ ed bison flex cvs yasm automake libtool autoconf gcc cmake git make pkg-config zlib1g-dev unzip zip pax nasm gperf autogen bzip2 autoconf-archive p7zip-full meson clang python3 python3-distutils-extra python3-setuptools
 sudo rm /usr/bin/python
 sudo ln -s /usr/bin/python3 /usr/bin/python
 cp --update=none cross_compile_ffmpeg.sh cross_compile_ffmpeg.sh.bak # make a copy of the original file before we add our workarounds
-sed -i -e '/^[[:space:]]*config_options+=" --enable-libharfbuzz"[[:space:]]*$/d' -e '/^[[:space:]]*build_harfbuzz[[:space:]]*$/d' cross_compile_ffmpeg.sh # libharfbuzz doesn't seem to build successfully, just disable it for now
+sed -i -e '/^[[:space:]]*config_options+=" --enable-libharfbuzz"[[:space:]]*$/d' -e '/^[[:space:]]*build_harfbuzz[[:space:]]*$/c\build_freetype "--without-harfbuzz"' cross_compile_ffmpeg.sh # libharfbuzz doesn't seem to build successfully, just disable it for now - but we still need to build freetype
 sed -i -e '/^[[:space:]]*config_options+=" --enable-libbluray"[[:space:]]*$/d' -e '/^[[:space:]]*build_libbluray # Needs libxml >= 2.6, freetype, fontconfig. Uses dlfcn.[[:space:]]*$/d' cross_compile_ffmpeg.sh # libbluray doesn't seem to build successfully, just disable it for now
 sed -i -e '/^[[:space:]]*config_options+=" --enable-libflite"[[:space:]]*$/d' -e '/^[[:space:]]*build_libflite[[:space:]]*$/d' cross_compile_ffmpeg.sh # libflite doesn't seem to download successfully, just disable it for now
 sed -i -e "/^[[:space:]]*build_vamp_plugin # Needs libsndfile for 'vamp-simple-host.exe' \[disabled\].[[:space:]]*$/d" cross_compile_ffmpeg.sh # vamp doesn't seem to download successfully, just disable it for now
