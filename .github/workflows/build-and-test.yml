@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build-ffmpeg:
+  build-ffmpeg-linux:
     runs-on: ubuntu-latest
     outputs:
       cache-key: ${{ steps.cachekey.outputs.key }}
@@ -16,8 +16,8 @@ jobs:
       uses: actions/checkout@v6
     - name: Compute ffmpeg cache key
       id: cachekey
-      # Key changes when anything in the build-ffmpeg script dir changes, and once per day (UTC) so the binaries are rebuilt regularly.
-      run: echo "key=ffmpeg-${{ hashFiles('.github/scripts/build-ffmpeg/**') }}-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      # Key changes when the Linux build script changes, and once per day (UTC) so the binaries are rebuilt regularly.
+      run: echo "key=ffmpeg-linux-${{ hashFiles('.github/scripts/build-ffmpeg/linux/**') }}-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
     - name: Restore ffmpeg cache
       id: cache
       uses: actions/cache@v4
@@ -30,7 +30,32 @@ jobs:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/ffmpeg-out
       run: |
         mkdir -p "$FFMPEG_OUTPUT_DIR"
-        bash .github/scripts/build-ffmpeg/build.sh
+        bash .github/scripts/build-ffmpeg/linux/build-linux.sh
+
+  build-ffmpeg-windows:
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cachekey.outputs.key }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Compute ffmpeg cache key
+      id: cachekey
+      # Key changes when the Windows build script changes, and once per day (UTC) so the binaries are rebuilt regularly.
+      run: echo "key=ffmpeg-windows-${{ hashFiles('.github/scripts/build-ffmpeg/windows/**') }}-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+    - name: Restore ffmpeg cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ffmpeg-out
+        key: ${{ steps.cachekey.outputs.key }}
+    - name: Build ffmpeg binaries
+      if: steps.cache.outputs.cache-hit != 'true'
+      env:
+        FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/ffmpeg-out
+      run: |
+        mkdir -p "$FFMPEG_OUTPUT_DIR"
+        bash .github/scripts/build-ffmpeg/windows/build-windows.sh
 
   build-and-test-core:
     strategy:
@@ -59,16 +84,15 @@ jobs:
     - name: Test
       run: dotnet test FulcrumFS.NoVideos.slnf --configuration ${{ matrix.configuration }} --no-build --verbosity normal
 
-  build-and-test-video:
-    needs: build-ffmpeg
+  build-and-test-video-linux:
+    needs: build-ffmpeg-linux
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
         configuration: [Debug, Release]
 
-    runs-on: ${{ matrix.os }}
-    environment: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || 'test-video-linux-x64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
+    runs-on: ubuntu-latest
+    environment: test-video-linux-x64-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
 
     steps:
     - name: Checkout
@@ -82,17 +106,50 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ffmpeg-out
-        key: ${{ needs.build-ffmpeg.outputs.cache-key }}
+        key: ${{ needs.build-ffmpeg-linux.outputs.cache-key }}
         fail-on-cache-miss: true
-    - name: Unzip ffmpeg binaries (Linux)
-      if: runner.os == 'Linux'
+    - name: Unzip ffmpeg binaries
       run: |
         sudo apt-get update
         sudo apt-get install -y unzip
         unzip ffmpeg-out/ffmpeg-linux-x64.zip -d Binaries
         chmod +x Binaries/**/*
-    - name: Unzip ffmpeg binaries (Windows)
-      if: runner.os == 'Windows'
+    - name: Clean
+      run: dotnet clean FulcrumFS.slnx --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore FulcrumFS.slnx
+    - name: Build
+      run: dotnet build FulcrumFS.slnx --configuration ${{ matrix.configuration }} --no-restore
+    - name: Test
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+
+  build-and-test-video-windows:
+    needs: build-ffmpeg-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    runs-on: windows-latest
+    environment: test-video-windows-x64-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Restore ffmpeg cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ffmpeg-out
+        key: ${{ needs.build-ffmpeg-windows.outputs.cache-key }}
+        fail-on-cache-miss: true
+    - name: Unzip ffmpeg binaries
       run: Expand-Archive -Path ffmpeg-out/ffmpeg-windows-x64.zip -DestinationPath Binaries
     - name: Clean
       run: dotnet clean FulcrumFS.slnx --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
