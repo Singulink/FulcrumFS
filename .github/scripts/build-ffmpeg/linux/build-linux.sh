@@ -5,6 +5,9 @@
 # Exit on any error, unset variable, or failed pipe.
 set -euo pipefail
 
+# Get directory of this script.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Fail early if the workflow did not provide the output directory.
 : "${FFMPEG_OUTPUT_DIR:?FFMPEG_OUTPUT_DIR must be set by the workflow}"
 
@@ -17,7 +20,7 @@ mkdir -p ~/Clones
 cd ~/Clones
 git clone https://github.com/markus-perl/ffmpeg-build-script.git
 cd ffmpeg-build-script
-git apply "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/build-ffmpeg.patch" # temorary workaround to ensure we're using a new enough version of x265
+git apply "$script_dir/build-ffmpeg.patch" # temorary workaround to ensure we're using a new enough version of x265
 cd ~/Clones
 mkdir -p ffmpeg-build
 cd ffmpeg-build
