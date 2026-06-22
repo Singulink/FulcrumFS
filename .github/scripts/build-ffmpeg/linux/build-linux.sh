@@ -17,7 +17,7 @@ mkdir -p ~/Clones
 cd ~/Clones
 git clone https://github.com/markus-perl/ffmpeg-build-script.git
 cd ffmpeg-build-script
-git patch "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/build-ffmpeg.patch" # temorary workaround to ensure we're using a new enough version of x265
+git apply "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/build-ffmpeg.patch" # temorary workaround to ensure we're using a new enough version of x265
 cd ~/Clones
 mkdir -p ffmpeg-build
 cd ffmpeg-build

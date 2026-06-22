@@ -18,6 +18,7 @@ git clone https://github.com/rdp/ffmpeg-windows-build-helpers.git
 cd ffmpeg-windows-build-helpers
 sudo apt-get update
 sudo apt-get -y install subversion ragel curl texinfo g++ ed bison flex cvs yasm automake libtool autoconf gcc cmake git make pkg-config zlib1g-dev unzip zip pax nasm gperf autogen bzip2 autoconf-archive p7zip-full meson clang python3 python3-distutils-extra python3-setuptools
+sudo rm /usr/bin/python
 sudo ln -s /usr/bin/python3 /usr/bin/python
 cp --update=none cross_compile_ffmpeg.sh cross_compile_ffmpeg.sh.bak # make a copy of the original file before we add our workarounds
 sed -i -e '/^[[:space:]]*config_options+=" --enable-libharfbuzz"[[:space:]]*$/d' -e '/^[[:space:]]*build_harfbuzz[[:space:]]*$/d' cross_compile_ffmpeg.sh # libharfbuzz doesn't seem to build successfully, just disable it for now
