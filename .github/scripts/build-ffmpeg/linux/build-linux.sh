@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Writes ffmpeg-linux-x64.zip (ffmpeg + ffprobe at the zip root) into $FFMPEG_OUTPUT_DIR.
+# Copies the ffmpeg and ffprobe binaries into $FFMPEG_OUTPUT_DIR.
 
 # Exit on any error, unset variable, or failed pipe.
 set -euo pipefail
@@ -33,5 +33,5 @@ if [[ -z "$ffmpeg_package_dir" ]]; then
   exit 1
 fi
 
-# Zip ffmpeg and ffprobe at the zip root for Linux.
-zip -j "$FFMPEG_OUTPUT_DIR/ffmpeg-linux-x64.zip" "$ffmpeg_package_dir/ffmpeg" "$ffmpeg_package_dir/ffprobe"
+# Copy ffmpeg and ffprobe into the output directory.
+cp "$ffmpeg_package_dir/ffmpeg" "$ffmpeg_package_dir/ffprobe" "$FFMPEG_OUTPUT_DIR/"
