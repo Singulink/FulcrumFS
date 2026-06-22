@@ -30,7 +30,7 @@ jobs:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/ffmpeg-out
       run: |
         mkdir -p "$FFMPEG_OUTPUT_DIR"
-        bash .github/scripts/build-ffmpeg/linux/build-linux.sh
+        bash .github/scripts/build-ffmpeg/linux/build-linuxd.sh
 
   build-ffmpeg-windows:
     runs-on: ubuntu-latest
@@ -55,7 +55,7 @@ jobs:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/ffmpeg-out
       run: |
         mkdir -p "$FFMPEG_OUTPUT_DIR"
-        bash .github/scripts/build-ffmpeg/windows/build-windows.sh
+        bash .github/scripts/build-ffmpeg/windows/build-windowsd.sh
 
   build-and-test-core:
     strategy:
