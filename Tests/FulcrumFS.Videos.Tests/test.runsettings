@@ -11,6 +11,5 @@
     </Parallelize>
     <CaptureTraceOutput>false</CaptureTraceOutput>
     <TestTimeout>120000</TestTimeout>
-    <MapInconclusiveToFailed>False</MapInconclusiveToFailed>
   </MSTest>
 </RunSettings>
