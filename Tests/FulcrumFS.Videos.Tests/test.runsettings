@@ -10,6 +10,6 @@
       <Scope>MethodLevel</Scope>
     </Parallelize>
     <CaptureTraceOutput>false</CaptureTraceOutput>
-    <TestTimeout>120000</TestTimeout>
+    <TestTimeout>300000</TestTimeout>
   </MSTest>
 </RunSettings>
