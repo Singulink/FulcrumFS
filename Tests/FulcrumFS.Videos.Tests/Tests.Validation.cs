@@ -922,15 +922,15 @@ partial class Tests
     }
 
     [TestMethod]
-    [DataRow("video1.mp4", ".mp4")]
-    [DataRow("video2.mkv", ".mkv")]
-    [DataRow("video3.mov", ".mov")]
-    [DataRow("video4.webm", ".webm")]
-    [DataRow("video5.avi", ".avi")]
-    [DataRow("video6.ts", ".ts")]
-    [DataRow("video7.mpeg", ".mpeg")]
-    [DataRow("video8.3gp", ".3gp")]
-    public async Task TestSourceFormatDetection(string fileName, string expectedFormatPrimaryExtension)
+    [DataRow("video1.mp4", ".mp4", new string[] { })]
+    [DataRow("video2.mkv", ".mkv", new string[] { })]
+    [DataRow("video3.mov", ".mov", new string[] { })]
+    [DataRow("video4.webm", ".webm", new string[] { })]
+    [DataRow("video5.avi", ".avi", new string[] { })]
+    [DataRow("video6.ts", ".ts", new string[] { })]
+    [DataRow("video7.mpeg", ".mpeg", new string[] { })]
+    [DataRow("video8.3gp", ".3gp", new string[] { ".mp4" })]
+    public async Task TestSourceFormatDetection(string fileName, string expectedFormatPrimaryExtension, string[] otherValidExtensions)
     {
         // Tests that SourceFormats correctly identifies container formats by iterating through all known formats.
         // Each test file should only match its expected format singleton (identified by primary extension) and reject all others.
@@ -939,7 +939,8 @@ partial class Tests
 
         foreach (var format in MediaContainerFormat.AllSourceFormats)
         {
-            bool isCorrect = format.PrimaryExtension == expectedFormatPrimaryExtension;
+            bool isPrimary = format.FileFormat.Extensions.Contains(expectedFormatPrimaryExtension);
+            bool isCorrect = isPrimary || otherValidExtensions.Contains(format.PrimaryExtension);
 
             if (isCorrect)
             {
@@ -947,6 +948,14 @@ partial class Tests
                 IReadOnlyList<MediaContainerFormat> resultFormats = format == MediaContainerFormat.MP4
                     ? [MediaContainerFormat.MP4]
                     : [MediaContainerFormat.MP4, format];
+
+                string? fullPath = null;
+                if (!isPrimary)
+                {
+                    // Copy to temp file with the other valid extension:
+                    fullPath = GetUniqueTempFilePath(format.PrimaryExtension);
+                    File.Copy(_videoFilesDir.CombineFile(fileName).PathExport, fullPath);
+                }
 
                 await CheckProcessing(
                     repo,
@@ -956,9 +965,10 @@ partial class Tests
                         SourceFormats = [format],
                         ResultFormats = resultFormats,
                     },
-                    fileName,
+                    fullPath ?? fileName,
                     exceptionMessage: null,
-                    expectedChanges: null);
+                    expectedChanges: null,
+                    pathIsAbsolute: fullPath != null);
             }
             else
             {
