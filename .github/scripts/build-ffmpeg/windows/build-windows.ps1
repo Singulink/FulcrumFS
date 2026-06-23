@@ -40,6 +40,7 @@ try {
 finally {
     Pop-Location
 }
+Write-Host "media-autobuild_suite.bat exited with code $LASTEXITCODE; verifying build output (exit code is ignored - success is determined by the checks below)."
 
 # Check if compilation failed.
 if (Test-Path (Join-Path $buildDir 'compilation_failed')) {
@@ -52,4 +53,10 @@ foreach ($exe in 'ffmpeg.exe', 'ffprobe.exe') {
     $source = Join-Path $binVideoDir $exe
     if (-not (Test-Path $source)) { throw "Could not find Windows $exe in $binVideoDir" }
     Copy-Item -Force -Path $source -Destination $env:FFMPEG_OUTPUT_DIR
+    Write-Host "Copied $exe to $env:FFMPEG_OUTPUT_DIR."
 }
+
+# media-autobuild_suite.bat exits non-zero even on success, leaving $LASTEXITCODE set. The GitHub
+# Actions pwsh wrapper exits with $LASTEXITCODE, which would fail the step despite a good build.
+# Success is already verified above (compilation_failed marker + binary existence), so exit cleanly.
+exit 0
