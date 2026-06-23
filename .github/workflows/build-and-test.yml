@@ -63,9 +63,13 @@ jobs:
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    # Always run the Release build and tests even if the Debug tests failed (only skip if the run
+    # was cancelled), so failures from both configurations are reported in a single run.
     - name: Build (Release)
+      if: ${{ !cancelled() }}
       run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
     - name: Test (Release)
+      if: ${{ !cancelled() }}
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
@@ -98,9 +102,13 @@ jobs:
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    # Always run the Release build and tests even if the Debug tests failed (only skip if the run
+    # was cancelled), so failures from both configurations are reported in a single run.
     - name: Build (Release)
+      if: ${{ !cancelled() }}
       run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
     - name: Test (Release)
+      if: ${{ !cancelled() }}
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries

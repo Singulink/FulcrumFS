@@ -17,6 +17,13 @@ public sealed class FFprobeUtilsTests
     private static readonly IAbsoluteDirectoryPath _videosDir = _appDir.CombineDirectory("Videos");
 
     [TestMethod]
+    public void EnsureAllFeaturesPresent()
+    {
+        // Throws if the configured ffmpeg/ffprobe build is missing anything the tests may rely on.
+        FFprobeUtils.EnsureAllFeaturesPresent();
+    }
+
+    [TestMethod]
     [DynamicData(nameof(VideosToCheck))]
     internal async Task ValidateReading(string file, FFprobeUtils.VideoFileInfo expectedInfo)
     {

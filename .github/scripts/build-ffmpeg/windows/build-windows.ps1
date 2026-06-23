@@ -1,9 +1,5 @@
-# Builds ffmpeg/ffprobe for Windows x64 natively (on Windows) using media-autobuild_suite.
-# Copies the resulting binaries (ffmpeg.exe, ffprobe.exe, and their required DLLs - they are
-# NOT self-contained) into $env:FFMPEG_OUTPUT_DIR.
-#
-# See ..\linux\build-linux.sh for the (recommended) cross-compile-from-Linux approach, which
-# produces a smaller, fully self-contained executable.
+# Builds self-contained (statically linked) ffmpeg.exe/ffprobe.exe for Windows x64 natively using
+# media-autobuild_suite, copying them into $env:FFMPEG_OUTPUT_DIR.
 
 # Fail on any error.
 $ErrorActionPreference = 'Stop'
@@ -27,26 +23,33 @@ New-Item -ItemType Directory -Force -Path $suiteRoot | Out-Null
 git clone https://github.com/m-ab-s/media-autobuild_suite $suiteDir
 if ($LASTEXITCODE -ne 0) { throw 'Failed to clone media-autobuild_suite' }
 
-# Copy our pre-seeded answers file into the suite's build folder so it runs unattended.
+# Pre-seed the answers (.ini) and option files so the suite runs unattended. It only writes (and
+# pauses on) the option files when they are missing, so providing them keeps the run silent.
 $buildDir = Join-Path $suiteDir 'build'
 New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
-Copy-Item -Force -Path (Join-Path $PSScriptRoot 'media-autobuild_suite.ini') -Destination (Join-Path $buildDir 'media-autobuild_suite.ini')
+foreach ($f in 'media-autobuild_suite.ini', 'ffmpeg_options.txt', 'mpv_options.txt') {
+    Copy-Item -Force -Path (Join-Path $PSScriptRoot $f) -Destination (Join-Path $buildDir $f)
+}
 
-# Run the suite. It bootstraps MSYS2 and builds everything selected in the .ini; this can take a while.
+# Run the suite.
+$PSNativeCommandUseErrorActionPreference = $false
 Push-Location $suiteDir
 try {
     & cmd.exe /c 'media-autobuild_suite.bat'
-    if ($LASTEXITCODE -ne 0) { throw "media-autobuild_suite.bat exited with code $LASTEXITCODE" }
 }
 finally {
     Pop-Location
 }
 
-# The built binaries land here. They are NOT self-contained, so we keep the whole directory's contents.
-$binVideoDir = Join-Path $suiteDir 'local64\bin-video'
-if (-not (Test-Path (Join-Path $binVideoDir 'ffmpeg.exe'))) {
-    throw "Could not find Windows ffmpeg.exe in $binVideoDir"
+# Check if compilation failed.
+if (Test-Path (Join-Path $buildDir 'compilation_failed')) {
+    throw 'media-autobuild_suite reported a build failure (build\compilation_failed was created).'
 }
 
-# Copy ffmpeg.exe, ffprobe.exe, and their accompanying runtime files into the output directory.
-Copy-Item -Force -Path (Join-Path $binVideoDir '*') -Destination $env:FFMPEG_OUTPUT_DIR -Recurse
+# The static build produces standalone binaries, so copy just the two we need.
+$binVideoDir = Join-Path $suiteDir 'local64\bin-video'
+foreach ($exe in 'ffmpeg.exe', 'ffprobe.exe') {
+    $source = Join-Path $binVideoDir $exe
+    if (-not (Test-Path $source)) { throw "Could not find Windows $exe in $binVideoDir" }
+    Copy-Item -Force -Path $source -Destination $env:FFMPEG_OUTPUT_DIR
+}

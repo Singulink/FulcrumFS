@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Singulink.IO;
@@ -21,6 +22,68 @@ internal static class FFprobeUtils
             EnsureConfigurationInfoInitialized();
             return ref _configInfo;
         }
+    }
+
+    /// <summary>
+    /// Throws if the configured ffmpeg/ffprobe binaries are missing any encoder, decoder, muxer, demuxer or filter the
+    /// video pipeline requires.
+    /// </summary>
+    internal static void EnsureAllFeaturesPresent()
+    {
+        var c = Configuration;
+
+        static void Require(bool supported, [CallerArgumentExpression(nameof(supported))] string? feature = null)
+        {
+            if (!supported)
+                throw new InvalidOperationException($"The configured ffmpeg/ffprobe build does not support a required feature: {feature}");
+        }
+
+        // Encoders
+        Require(c.SupportsLibX264Encoder);
+        Require(c.SupportsLibX265Encoder);
+        Require(c.SupportsPngEncoder);
+        Require(c.SupportsLibFDKAACEncoder);
+        Require(c.SupportsAACEncoder);
+        Require(c.SupportsMovTextEncoder);
+        Require(c.SupportsDvdSubEncoder);
+
+        // Video decoders
+        Require(c.SupportsMpeg1VideoDecoder);
+        Require(c.SupportsMpeg2VideoDecoder);
+        Require(c.SupportsMpeg4Decoder);
+        Require(c.SupportsH263Decoder);
+        Require(c.SupportsH264Decoder);
+        Require(c.SupportsHEVCDecoder);
+        Require(c.SupportsVVCDecoder);
+        Require(c.SupportsVP8Decoder);
+        Require(c.SupportsVP9Decoder);
+        Require(c.SupportsAV1Decoder);
+
+        // Audio decoders
+        Require(c.SupportsAACDecoder);
+        Require(c.SupportsMP2Decoder);
+        Require(c.SupportsMP3Decoder);
+        Require(c.SupportsVorbisDecoder);
+        Require(c.SupportsOpusDecoder);
+
+        // Muxers
+        Require(c.SupportsMP4Muxing);
+
+        // Demuxers
+        Require(c.SupportsMovGroupDemuxing);
+        Require(c.SupportsMatroskaGroupDemuxing);
+        Require(c.SupportsAviDemuxing);
+        Require(c.SupportsMpegTSGroupDemuxing);
+        Require(c.SupportsMpegDemuxing);
+
+        // Filters
+        Require(c.SupportsZscaleFilter);
+        Require(c.SupportsScaleFilter);
+        Require(c.SupportsFpsFilter);
+        Require(c.SupportsTonemapFilter);
+        Require(c.SupportsFormatFilter);
+        Require(c.SupportsBwdifFilter);
+        Require(c.SupportsSetsarFilter);
     }
 
     public sealed class VideoFileInfo(string formatName, double? duration, ImmutableArray<StreamInfo> streams)
