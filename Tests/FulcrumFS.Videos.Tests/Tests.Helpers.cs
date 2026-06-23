@@ -33,28 +33,6 @@ partial class Tests
     public const bool DefaultForceValidateAllStreams = false;
 #endif
 
-    /// <summary>
-    /// Marks the current test inconclusive on local builds. On CI builds, where inconclusive results are mapped to failures on some platforms, this instead
-    /// prints a red warning naming the affected test case at process exit, and lets the test pass.
-    /// </summary>
-    private void MarkInconclusive()
-    {
-#if CI
-        string testCase = TestContext.TestDisplayName ?? TestContext.TestName;
-        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
-        {
-            var previousColor = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Inconclusive test case: {testCase}.");
-            Console.ForegroundColor = previousColor;
-        };
-#else
-#pragma warning disable RS0030 // Do not use banned APIs
-        Assert.Inconclusive();
-#pragma warning restore RS0030 // Do not use banned APIs
-#endif
-    }
-
     private static readonly IAbsoluteDirectoryPath _appDir = DirectoryPath.GetAppBase();
     private static readonly IAbsoluteDirectoryPath _videoFilesDir = _appDir.CombineDirectory("Videos");
     private static readonly IAbsoluteDirectoryPath _tempFilesDir = _appDir.CombineDirectory("Temp");

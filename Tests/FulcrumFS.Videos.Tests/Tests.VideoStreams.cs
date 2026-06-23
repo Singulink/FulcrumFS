@@ -814,7 +814,10 @@ partial class Tests
         catch when (fileName == "video166.mp4" && expectedError == null && maxSize == (1000, 50) && inputSize == (96, 128) && outputSize == (38, 50))
         {
             // See https://bitbucket.org/multicoreware/x265_git/issues/1022/heap-corruption-issue
-            MarkInconclusive();
+
+#pragma warning disable RS0030 // Do not use banned APIs
+            Assert.Inconclusive();
+#pragma warning restore RS0030 // Do not use banned APIs
         }
     }
 

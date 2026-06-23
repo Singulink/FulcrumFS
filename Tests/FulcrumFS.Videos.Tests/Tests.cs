@@ -307,7 +307,10 @@ public sealed partial class Tests
         catch when (maxWidth == 41 && maxHeight == 37)
         {
             // See https://bitbucket.org/multicoreware/x265_git/issues/1022/heap-corruption-issue
-            MarkInconclusive();
+
+#pragma warning disable RS0030 // Do not use banned APIs
+            Assert.Inconclusive();
+#pragma warning restore RS0030 // Do not use banned APIs
         }
     }
 }
