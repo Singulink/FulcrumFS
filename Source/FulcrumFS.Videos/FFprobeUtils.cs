@@ -25,17 +25,17 @@ internal static class FFprobeUtils
     }
 
     /// <summary>
-    /// Throws if the configured ffmpeg/ffprobe binaries are missing any encoder, decoder, muxer, demuxer or filter the
-    /// video pipeline requires.
+    /// Throws if the configured ffmpeg/ffprobe binaries are missing any encoder, decoder, muxer, demuxer or filter the video pipeline may require for the unit
+    /// tests (i.e., include anything we may opportunistically depend on, or outright require).
     /// </summary>
     internal static void EnsureAllFeaturesPresent()
     {
-        var c = Configuration;
+        ref readonly var c = ref Configuration;
 
         static void Require(bool supported, [CallerArgumentExpression(nameof(supported))] string? feature = null)
         {
             if (!supported)
-                throw new InvalidOperationException($"The configured ffmpeg/ffprobe build does not support a required feature: {feature}");
+                throw new InvalidOperationException($"The configured ffmpeg/ffprobe build does not support a required feature: {feature}.");
         }
 
         // Encoders
