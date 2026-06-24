@@ -278,6 +278,24 @@ partial class Tests
         return output.Trim();
     }
 
+    private async Task<string> GetCodecTag(string inputFile, CancellationToken cancellationToken)
+    {
+        // Reads the container codec tag (e.g. hvc1 vs hev1) from the stream's sample entry. This lives in the container
+        // rather than the packet data, so comparing it ensures container-level tag remuxing is still detected as a change.
+        string output = await RunFFtoolProcessWithErrorHandling(
+            "ffprobe",
+            [
+                "-v", "error",
+                "-select_streams", "0",
+                "-show_entries", "stream=codec_tag_string",
+                "-of", "default=nokey=1:noprint_wrappers=1",
+                inputFile
+            ],
+            cancellationToken);
+
+        return output.Trim();
+    }
+
     private async Task<bool> CompareStreamEquality(
         string file1,
         string file2,
@@ -286,7 +304,8 @@ partial class Tests
         int streamIdx2,
         CancellationToken cancellationToken)
     {
-        // Extracts matching streams from two files and compares their elementary stream contents.
+        // Extracts matching streams from two files and compares their elementary stream contents (packet data) along with the container codec tag, so a
+        // tag-only remux (e.g. hev1 -> hvc1) is still detected as a change.
         IDisposable disposeHelper;
         (string extractedFile1, disposeHelper) = await ExtractStream(file1, extension, streamIdx1, cancellationToken);
         using var disposeHelper1 = disposeHelper;
@@ -296,7 +315,10 @@ partial class Tests
         string hash1 = await GetStreamHash(extractedFile1, cancellationToken);
         string hash2 = await GetStreamHash(extractedFile2, cancellationToken);
 
-        return hash1 == hash2;
+        string tag1 = await GetCodecTag(extractedFile1, cancellationToken);
+        string tag2 = await GetCodecTag(extractedFile2, cancellationToken);
+
+        return hash1 == hash2 && tag1 == tag2;
     }
 
     private async Task<int> GetStreamCount(string fileName, CancellationToken cancellationToken)
