@@ -84,13 +84,37 @@ partial class Tests
 
     // TEMPORARY: Logs when a test starts and ends so a hung test can be identified in CI (the last "Started" entry without a
     // matching "Ended" is the culprit). App-exit cleanup is disabled so a test killed mid-run does not incorrectly log "Ended".
+    // A watchdog thread kills the process via FailFast if a single test runs longer than the timeout - the FailFast message
+    // surfaces in the "Error output" section of the dotnet test report (raw stdout/stderr is otherwise swallowed), naming the
+    // hung test without waiting for the CI job timeout.
+    private static readonly TimeSpan _testHangTimeout = TimeSpan.FromMinutes(4);
+
     private IDisposable TrackTestExecution()
     {
         string testName = TestContext.TestDisplayName ?? TestContext.TestName;
         AppendTestExecutionLog($"Started {testName}");
 
+        var completed = new ManualResetEventSlim(false);
+
+        var watchdog = new Thread(() =>
+        {
+            if (!completed.Wait(_testHangTimeout))
+            {
+                Environment.FailFast($"TEST HUNG (exceeded {_testHangTimeout.TotalMinutes:0} min): {testName}");
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "TestHangWatchdog",
+        };
+        watchdog.Start();
+
         return new DisposeHelper(
-            () => AppendTestExecutionLog($"Ended {testName}"),
+            () =>
+            {
+                completed.Set();
+                AppendTestExecutionLog($"Ended {testName}");
+            },
             registerProcessExit: false);
     }
 
