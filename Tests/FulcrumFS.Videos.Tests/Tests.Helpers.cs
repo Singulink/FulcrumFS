@@ -104,7 +104,6 @@ partial class Tests
             }
         })
         {
-            IsBackground = true,
             Name = "TestHangWatchdog",
         };
         watchdog.Start();
