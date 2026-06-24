@@ -59,18 +59,76 @@ partial class Tests
         });
     }
 
+    // TEMPORARY: Path of the test-execution log used to identify a test that hangs in CI. The path comes from the
+    // TEST_EXECUTION_LOG environment variable (CI sets this and prints the file afterwards, even on failure), falling back
+    // to a temp file for local runs. The file is truncated once at startup so it only holds the current run's entries.
+    private static readonly string _testExecutionLogPath = InitTestExecutionLog();
+
+    private static string InitTestExecutionLog()
+    {
+        string path = Environment.GetEnvironmentVariable("TEST_EXECUTION_LOG") is { Length: > 0 } envPath
+            ? envPath
+            : Path.Combine(Path.GetTempPath(), "fulcrumfs-test-execution.log");
+
+        try
+        {
+            File.WriteAllText(path, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to reset test execution log '{path}': {ex}");
+        }
+
+        return path;
+    }
+
+    // TEMPORARY: Logs when a test starts and ends so a hung test can be identified in CI (the last "Started" entry without a
+    // matching "Ended" is the culprit). App-exit cleanup is disabled so a test killed mid-run does not incorrectly log "Ended".
+    private IDisposable TrackTestExecution()
+    {
+        string testName = TestContext.TestDisplayName ?? TestContext.TestName;
+        AppendTestExecutionLog($"Started {testName}");
+
+        return new DisposeHelper(
+            () => AppendTestExecutionLog($"Ended {testName}"),
+            registerProcessExit: false);
+    }
+
+    private static void AppendTestExecutionLog(string message)
+    {
+        // Open the log file exclusively (FileShare.None) and retry until it is available, so concurrent writers - whether
+        // other test threads or other processes - take turns instead of colliding and losing entries.
+        while (true)
+        {
+            try
+            {
+                using var stream = new FileStream(_testExecutionLogPath, FileMode.Append, FileAccess.Write, FileShare.None);
+                using var writer = new StreamWriter(stream);
+                writer.WriteLine(message);
+                return;
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
     // Helper class to run an action on dispose or finalize, and also try to run on process exit if dispose or finalizer wasn't called:
     private sealed class DisposeHelper : IDisposable
     {
         private readonly Action _onDispose;
-        private readonly EventHandler _processExitHandler;
+        private readonly EventHandler? _processExitHandler;
         private InterlockedFlag _run;
 
-        public DisposeHelper(Action onDispose)
+        public DisposeHelper(Action onDispose, bool registerProcessExit = true)
         {
             _onDispose = onDispose;
-            _processExitHandler = Create_CurrentDomain_ProcessExit(new(this));
-            AppDomain.CurrentDomain.ProcessExit += _processExitHandler;
+
+            if (registerProcessExit)
+            {
+                _processExitHandler = Create_CurrentDomain_ProcessExit(new(this));
+                AppDomain.CurrentDomain.ProcessExit += _processExitHandler;
+            }
         }
 
         private static EventHandler Create_CurrentDomain_ProcessExit(WeakReference<DisposeHelper> weakThis) => (sender, e) =>
@@ -96,7 +154,7 @@ partial class Tests
                 }
                 finally
                 {
-                    if (!exiting) AppDomain.CurrentDomain.ProcessExit -= _processExitHandler;
+                    if (!exiting && _processExitHandler is not null) AppDomain.CurrentDomain.ProcessExit -= _processExitHandler;
                     if (disposing) GC.SuppressFinalize(this);
                 }
             }

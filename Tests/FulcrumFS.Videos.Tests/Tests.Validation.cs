@@ -4,6 +4,8 @@ using Shouldly;
 
 namespace FulcrumFS.Videos;
 
+#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
+
 // NOTE: these are only the validation tests for VideoProcessor.
 // These tests are the tests that perform source validation, and the tests that validate that common configs work across all of the valid test videos
 // (i.e., the bulk tests).
@@ -13,6 +15,7 @@ partial class Tests
     [TestMethod]
     public async Task TestSourceValidation()
     {
+        using var testTracker = TrackTestExecution();
         // Tests source video/audio stream validation options including duration, stream count, dimensions, and pixel count limits.
 
         using var repoCtx = GetRepo(out var repo);
@@ -261,6 +264,7 @@ partial class Tests
     [DynamicData(nameof(ValidVideosToCheck))]
     public async Task TestPreserveOptions(string fileName)
     {
+        using var testTracker = TrackTestExecution();
         // Note: we are also testing that oversized videos don't re-encode to H.264 unnecessarily here (e.g., video143.mp4).
 
         using var repoCtx = GetRepo(out var repo);
@@ -277,6 +281,7 @@ partial class Tests
     [DynamicData(nameof(ValidVideosToCheck))]
     public async Task TestH264StandardizedOptions(string fileName)
     {
+        using var testTracker = TrackTestExecution();
         // This tests that it can succedd processing every valid file, that the stream count matches afterwards (except for those with streams incompatible
         // with MP4), and that all streams have been changed (re-encoded):
 
@@ -316,6 +321,7 @@ partial class Tests
     [DynamicData(nameof(ValidVideosToCheckToHEVC))]
     public async Task TestHEVCStandardizedOptions(string fileName)
     {
+        using var testTracker = TrackTestExecution();
         // Same as TestStandardizedOptions, but using HEVC as the target video codec to test our hevc handling:
 
         using var repoCtx = GetRepo(out var repo);
@@ -360,6 +366,7 @@ partial class Tests
     [DynamicData(nameof(ValidVideosToCheck))]
     public async Task TestH264ReencodeOptions(string fileName)
     {
+        using var testTracker = TrackTestExecution();
         // This tests that it can succeed processing every valid file (with original settings, rather than limited ones), that the stream count matches
         // afterwards (except for those with streams incompatible with MP4), and that all streams have been changed (re-encoded):
 
@@ -413,6 +420,7 @@ partial class Tests
     [DynamicData(nameof(ValidVideosToCheckToHEVC))]
     public async Task TestHEVCReencodeOptions(string fileName)
     {
+        using var testTracker = TrackTestExecution();
         // Same as TestH264ReencodeOptions, but using HEVC as the target video codec to test our hevc handling:
 
         using var repoCtx = GetRepo(out var repo);
@@ -466,6 +474,7 @@ partial class Tests
     [DynamicData(nameof(VideoFilesWithSubtitles))]
     public async Task TestStandardizedOptionsNotPreservingUnrecognizedStreams(string fileName)
     {
+        using var testTracker = TrackTestExecution();
         // Tests that subtitle streams are correctly stripped when TryPreserveUnrecognizedStreams is disabled (default for StandardizedH264AACMP4).
 
         using var repoCtx = GetRepo(out var repo);
@@ -484,6 +493,7 @@ partial class Tests
     [TestMethod]
     public async Task SkipWhenSourceUnchanged()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that FileProcessingException is thrown when throwWhenMainSourceUnchanged is enabled and the file would be unchanged.
 
         using var repoCtx = GetRepo(out var repo);
@@ -503,6 +513,7 @@ partial class Tests
     [TestMethod]
     public async Task TestUnsupportedExtension()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that files with extensions not matching the allowed SourceFormats are rejected early with a clear error.
 
         using var repoCtx = GetRepo(out var repo);
@@ -522,6 +533,7 @@ partial class Tests
     [TestMethod]
     public async Task TestUnsupportedFormat()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that files with container formats not matching SourceFormats are rejected after format detection.
         // Uses .mp4 extension override to bypass extension check and trigger actual format validation.
 
@@ -543,6 +555,7 @@ partial class Tests
     [TestMethod]
     public async Task TestSupportedFormat()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that files matching the SourceFormats constraint are accepted and processed normally.
 
         using var repoCtx = GetRepo(out var repo);
@@ -562,6 +575,7 @@ partial class Tests
     [TestMethod]
     public async Task TestOtherInputValidation()
     {
+        using var testTracker = TrackTestExecution();
         // Tests validation of videos with misleading metadata. Uses video158.mkv which has advertised duration of 0.5s
         // but actual measured duration of ~1s, to verify both advertised and measured duration checks work correctly.
 
@@ -656,6 +670,7 @@ partial class Tests
     [TestMethod]
     public async Task TestUnsupportedVideoCodec()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that video files with codecs not in SourceVideoCodecs are rejected.
         // Uses video10.mp4 (HEVC) with H264-only source constraint.
 
@@ -676,6 +691,7 @@ partial class Tests
     [TestMethod]
     public async Task TestSupportedVideoCodec()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that video files with codecs matching SourceVideoCodecs are accepted.
 
         using var repoCtx = GetRepo(out var repo);
@@ -695,6 +711,7 @@ partial class Tests
     [TestMethod]
     public async Task TestUnsupportedAudioCodec()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that files with audio codecs not in SourceAudioCodecs are rejected.
         // Uses video4.webm (Opus audio) with AAC-only source constraint.
 
@@ -715,6 +732,7 @@ partial class Tests
     [TestMethod]
     public async Task TestSupportedAudioCodec()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that files with audio codecs matching SourceAudioCodecs are accepted.
 
         using var repoCtx = GetRepo(out var repo);
@@ -734,6 +752,7 @@ partial class Tests
     [TestMethod]
     public async Task TestNoVideoOrAudioStreamsThrows()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that processing fails with clear error message when input contains no audio or video streams.
 
         using var repoCtx = GetRepo(out var repo);
@@ -764,6 +783,7 @@ partial class Tests
     [TestMethod]
     public async Task TestRemoveAudioThrows()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that requesting audio removal from an audio-only file (video161.mp4) results in an error,
         // but succeeds for video-only files (video160.mp4) since there's nothing to remove.
 
@@ -795,6 +815,7 @@ partial class Tests
     [TestMethod]
     public async Task TestRandomBytesAsVideoThrows()
     {
+        using var testTracker = TrackTestExecution();
         // This test generates random bytes with a specific seed, which forms an invalid an mp4,
         // and verifies that a FileProcessingException is thrown because the file is invalid.
 
@@ -831,6 +852,7 @@ partial class Tests
     [DataRow("video164.mp4", "hevc")]
     public async Task TestSourceVideoCodecDetection(string fileName, string expectedVideoCodecName)
     {
+        using var testTracker = TrackTestExecution();
         // Tests that SourceVideoCodecs correctly identifies video codecs by iterating through all known codecs.
         // Each test file should only match its expected codec and reject all others.
 
@@ -882,6 +904,7 @@ partial class Tests
     [DataRow("video14.mp4", "vorbis", null)]
     public async Task TestSourceAudioCodecDetection(string fileName, string expectedAudioCodecName, string? expectedAudioCodecProfile)
     {
+        using var testTracker = TrackTestExecution();
         // Tests that SourceAudioCodecs correctly identifies audio codecs by iterating through all known codecs.
         // Each test file should only match its expected codec and reject all others.
 
@@ -932,6 +955,7 @@ partial class Tests
     [DataRow("video8.3gp", ".3gp", new string[] { ".mp4" }, true)]
     public async Task TestSourceFormatDetection(string fileName, string expectedFormatPrimaryExtension, string[] otherValidExtensions, bool supportsMp4Loose)
     {
+        using var testTracker = TrackTestExecution();
         // Tests that SourceFormats correctly identifies container formats by iterating through all known formats.
         // Each test file should only match its expected format singleton (identified by primary extension) and reject all others.
 
@@ -993,6 +1017,7 @@ partial class Tests
     [DataRow("video164.mp4", true)]
     public async Task TestSourceVideoCodecHEVCTagDetection(string fileName, bool isHvc1)
     {
+        using var testTracker = TrackTestExecution();
         // Tests HEVC tag detection: VideoCodec.HEVC matches only hvc1-tagged files, while HEVCAnyTag matches any HEVC file.
         // video10.mp4 is hev1-tagged, video164.mp4 is hvc1-tagged.
 
@@ -1029,6 +1054,7 @@ partial class Tests
     [TestMethod]
     public async Task TestLooseSourceFormatRemuxesToStrictResultFormat()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that a .mov file that is valid by MP4Loose is remuxed (not re-encoded) when MP4Loose is the only allowed source format
         // but MP4 is the only allowed result format. The streams should be preserved but the container changes.
 
@@ -1055,6 +1081,7 @@ partial class Tests
     [TestMethod]
     public async Task TestLooseSourceFormatWithLooseResultFormatDoesntRemux()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that a .mov file that is valid by MP4Loose is not remuxed when MP4Loose is also an allowed result format.
         // The file should be preserved unchanged. Note: MP4Loose must not be first in ResultFormats since it is not writable.
 
@@ -1077,6 +1104,7 @@ partial class Tests
     [TestMethod]
     public async Task TestForceValidateAllStreams()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that ForceValidateAllStreams causes invalid streams to be detected even when they would be missed otherwise.
 
         using var repoCtx = GetRepo(out var repo);

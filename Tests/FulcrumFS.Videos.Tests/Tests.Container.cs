@@ -5,6 +5,8 @@ using Singulink.IO;
 
 namespace FulcrumFS.Videos;
 
+#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
+
 // This file contains the tests directly related to container processing handling.
 
 partial class Tests
@@ -12,6 +14,7 @@ partial class Tests
     [TestMethod]
     public async Task TestUnwantedOutputFormatRemuxes()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that files in formats not matching ResultFormats are remuxed (not re-encoded) to a supported format.
         // Uses video2.mkv with MP4-only result format to verify streams are preserved but container changes.
 
@@ -36,6 +39,7 @@ partial class Tests
     [TestMethod]
     public async Task TestWantedOutputFormatDoesntRemuxUnnecessarily()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that files already in an allowed ResultFormats container are not unnecessarily remuxed.
 
         using var repoCtx = GetRepo(out var repo);
@@ -55,6 +59,7 @@ partial class Tests
     [TestMethod]
     public async Task TestForceProgressiveDownload()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that ForceProgressiveDownload correctly moves the moov atom before mdat for streaming compatibility.
         // Verifies the original file has moov after mdat, and the processed file has moov before mdat - this provides improved streaming performance, but does
         // not make it seekable.
@@ -105,6 +110,7 @@ partial class Tests
     [TestMethod]
     public async Task TestMP4FileWithMkvExtensionWithCopying()
     {
+        using var testTracker = TrackTestExecution();
         // Tests handling of an MP4 file masquerading with .mkv extension when file is unchanged (direct copy).
         // The processor should reject the file because its content does not match the declared extension.
 
@@ -125,6 +131,7 @@ partial class Tests
     [TestMethod]
     public async Task TestMP4FileWithMkvExtensionWithRemuxing()
     {
+        using var testTracker = TrackTestExecution();
         // Tests handling of an MP4 file masquerading with .mkv extension when remuxing (via ForceProgressiveDownload).
         // The processor should reject the file because its content does not match the declared extension.
 
@@ -146,6 +153,7 @@ partial class Tests
     [TestMethod]
     public async Task TestMP4FileWithMkvExtensionWithReencoding()
     {
+        using var testTracker = TrackTestExecution();
         // Tests handling of an MP4 file masquerading with .mkv extension when re-encoding.
         // The processor should reject the file because its content does not match the declared extension.
 

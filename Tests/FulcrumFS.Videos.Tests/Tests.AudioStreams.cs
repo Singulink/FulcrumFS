@@ -5,6 +5,8 @@ using Shouldly;
 
 namespace FulcrumFS.Videos;
 
+#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
+
 // This file contains the tests directly related to audio stream processing handling.
 
 partial class Tests
@@ -12,6 +14,7 @@ partial class Tests
     [TestMethod]
     public async Task TestUnwantedOutputAudioCodecReencodes()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that audio streams with codecs not in ResultAudioCodecs are re-encoded while video is preserved.
         // Uses video14.mp4 (Vorbis audio) with AAC-only result to verify audio re-encoding, video stream copy.
 
@@ -36,6 +39,7 @@ partial class Tests
     [TestMethod]
     public async Task TestWantedOutputAudioCodecDoesntReencodeUnnecessarily()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that audio streams already in an allowed ResultAudioCodecs codec are not unnecessarily re-encoded.
 
         using var repoCtx = GetRepo(out var repo);
@@ -55,6 +59,7 @@ partial class Tests
     [TestMethod]
     public async Task TestRemoveAudioStreamAdjustment()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that RemoveAudioStreams correctly strips audio streams from video files.
         // video160.mp4 (video-only) is unchanged.
 
@@ -89,6 +94,7 @@ partial class Tests
     [TestMethod]
     public async Task TestAlwaysReencodeAudioStreams()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that AudioReencodeMode.Always forces audio stream re-encoding even when codec is acceptable.
 
         using var repoCtx = GetRepo(out var repo);
@@ -140,6 +146,7 @@ partial class Tests
     [TestMethod]
     public async Task TestMaxChannelsNotUnnecessarilyReencoded()
     {
+        using var testTracker = TrackTestExecution();
         // This test verifies that audio files that already have fewer or equal channels are not unnecessarily processed.
         // video1.mp4 has stereo audio, so specifying Stereo or higher max should not cause re-encoding.
 
@@ -160,6 +167,7 @@ partial class Tests
     [TestMethod]
     public async Task TestMaxSampleRateNotUnnecessarilyReencoded()
     {
+        using var testTracker = TrackTestExecution();
         // This test verifies that audio files that already have a lower or equal sample rate are not unnecessarily processed.
         // video1.mp4 has 44.1kHz audio, so specifying 44.1kHz or higher max should not cause re-encoding.
 
@@ -187,6 +195,7 @@ partial class Tests
     [DataRow("video60.mp4", AudioChannels.Stereo, true)]
     public async Task TestMaxChannelsRespected(string fileName, AudioChannels maxChannels, bool shouldReencode)
     {
+        using var testTracker = TrackTestExecution();
         // Tests MaxChannels enforcement: audio exceeding the limit is re-encoded/downmixed, compliant files remain unchanged.
         // Covers mono, stereo, and 5.1 surround source files against mono and stereo limits.
 
@@ -284,6 +293,7 @@ partial class Tests
     public async Task TestMaxSampleRateRespected(
         string fileName, AudioSampleRate maxSampleRate, bool shouldReencode, bool forceReencode, int inputSampleRate, int expectedOutputSampleRate)
     {
+        using var testTracker = TrackTestExecution();
         // Tests MaxSampleRate enforcement and sample rate resampling. Validates that audio sample rates exceeding the limit
         // are resampled, unusual rates are converted to valid AAC rates, and compliant files remain unchanged.
 

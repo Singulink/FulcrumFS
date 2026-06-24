@@ -64,3 +64,25 @@ jobs:
       run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+        TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
+    - name: Print test execution log on Linux
+      if: always() && runner.os == 'Linux'
+      run: |
+        log="${{ github.workspace }}/test-execution.log"
+        if [ -f "$log" ]; then
+          echo "===== Test execution log ($log) ====="
+          cat "$log"
+        else
+          echo "No test execution log found at $log"
+        fi
+    - name: Print test execution log on Windows
+      if: always() && runner.os == 'Windows'
+      run: |
+        $log = "${{ github.workspace }}/test-execution.log"
+        if (Test-Path $log) {
+          Write-Host "===== Test execution log ($log) ====="
+          Get-Content -LiteralPath $log
+        }
+        else {
+          Write-Host "No test execution log found at $log"
+        }

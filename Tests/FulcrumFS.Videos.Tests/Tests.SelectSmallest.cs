@@ -4,6 +4,8 @@ using Shouldly;
 
 namespace FulcrumFS.Videos;
 
+#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
+
 // These are the tests that are specifically related to our SelectSmallest functionality in VideoProcessor.
 
 partial class Tests
@@ -11,6 +13,7 @@ partial class Tests
     [TestMethod]
     public async Task TestSelectSmallestReencodesOversizedStreams()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that SelectSmallest re-encodes oversized streams (where re-encoding produces smaller output)
         // and preserves undersized streams (where original is already smaller than re-encoded would be).
 
@@ -84,6 +87,7 @@ partial class Tests
     [TestMethod]
     public async Task TestSelectSmallestOnlyAffectsConfiguredStream()
     {
+        using var testTracker = TrackTestExecution();
         // Tests that setting SelectSmallest for only video or only audio doesn't cause the other stream to change.
 
         using var repoCtx = GetRepo(out var repo);
@@ -146,6 +150,7 @@ partial class Tests
         StreamReencodeMode videoReencodeMode,
         StreamReencodeMode audioReencodeMode)
     {
+        using var testTracker = TrackTestExecution();
         // This test checks that the SelectSmallest & metadata handling interact correctly. We take video171.mp4 (which has oversized video & audio streams),
         // and add metadata to both the container & the video stream, and then make a copy that is undersized (equivalent of video172.mp4) and copies that are
         // mixed oversized / undersized (equivalent of video173.mp4 and video174.mp4), but with the same metadata. We then test the combos of these files and
@@ -237,6 +242,7 @@ partial class Tests
         StreamReencodeMode videoReencodeMode,
         StreamReencodeMode audioReencodeMode)
     {
+        using var testTracker = TrackTestExecution();
         // Tests how SelectSmallest mode interacts with videos that have resolution too large for MP4 container.
         // When the resolution exceeds MP4 limits, the video must be resized regardless of SelectSmallest outcome when we are remuxing or re-encoding (but the
         // video stream should only cause re-encoding when set to StreamReencodeMode.Always).
@@ -286,6 +292,7 @@ partial class Tests
         bool isVideoStreamOversized,
         StreamReencodeMode audioReencodeMode)
     {
+        using var testTracker = TrackTestExecution();
         // Tests how SelectSmallest mode interacts with videos that have codecs incompatible with MP4 container.
         // When the video codec is not MP4-compatible, the video must be re-encoded regardless of SelectSmallest outcome when we are outputting to MP4.
         // video194.mkv: oversized video (VP9), AAC audio - video needs re-encoding for MP4 compatibility.
@@ -322,6 +329,7 @@ partial class Tests
         string fileName,
         bool isVideoOversized)
     {
+        using var testTracker = TrackTestExecution();
         // Tests that the side-effect of HDR->SDR conversion occurs correctly when a video is re-encoded for any reason
         // (but does not cause re-encoding by itself when RemapHDRToSDR is not set).
         // Y0__auYqGXY-1s-low.mp4: undersized HDR video - should not be re-encoded with SelectSmallest, so HDR should be preserved.
@@ -405,6 +413,7 @@ partial class Tests
     [DataRow("video170.mkv", 3)]
     public async Task TestAllInputCodecsAndFileFormatsForSelectSmallest(string fileName, int streamCount)
     {
+        using var testTracker = TrackTestExecution();
         // Tests that SelectSmallest mode works correctly across all supported input codecs and file formats.
         // We run with 'ForceProgressiveDownload = true' to ensure that remuxing to mp4 occurs (we currently do not support skipping this when already done).
 
@@ -431,6 +440,7 @@ partial class Tests
     [DataRow("video191.mp4")]
     public async Task TestSelectSmallestWithMetadataStrippingPreservesLanguage(string fileName)
     {
+        using var testTracker = TrackTestExecution();
         // Test our handling around the manual metadata we set in combination with our SelectSmallest logic.
 
         using var repoCtx = GetRepo(out var repo);
