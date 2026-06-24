@@ -1,7 +1,5 @@
 # Only the external libraries FulcrumFS.Videos needs (see FFprobeUtils.cs); everything else is built
-# into ffmpeg. --disable-autodetect stops the suite from linking libraries that merely happen to be
-# present in MSYS2. zlib is required by the png encoder; libzimg by the zscale filter.
---disable-autodetect
+# into ffmpeg. zlib is required by the png encoder; libzimg by the zscale filter.
 --enable-gpl
 --enable-nonfree
 --enable-zlib
