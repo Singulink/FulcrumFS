@@ -17,6 +17,11 @@ public abstract class MediaContainerFormat
     private const string MatroskaName = "matroska,webm";
 
     /// <summary>
+    /// Gets the loose MP4 media container format. Extensions: <c>.mp4</c> (primary), <c>.mov</c>, <c>.m4a</c>, <c>.3gp</c>, <c>.3g2</c>, <c>.mj2</c>.
+    /// </summary>
+    public static MediaContainerFormat MP4Loose { get; } = new Impl(FileFormat.Mp4Loose, IsoBmffName, supportsWriting: false, static () => FFprobeUtils.Configuration.SupportsMovGroupDemuxing);
+
+    /// <summary>
     /// Gets the MP4 media container format. Extension: <c>.mp4</c>. This is currently the only format that supports muxing (writing) output.
     /// </summary>
     public static MediaContainerFormat MP4 { get; } = new Impl(FileFormat.Mp4, IsoBmffName, supportsWriting: true, static () => FFprobeUtils.Configuration.SupportsMovGroupDemuxing);
@@ -82,6 +87,7 @@ public abstract class MediaContainerFormat
     public static IReadOnlyList<MediaContainerFormat> AllSourceFormats { get; } =
     [
         MP4,
+        MP4Loose,
         Mov,
         M4A,
         Tgp,

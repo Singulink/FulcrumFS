@@ -922,15 +922,15 @@ partial class Tests
     }
 
     [TestMethod]
-    [DataRow("video1.mp4", ".mp4", new string[] { })]
-    [DataRow("video2.mkv", ".mkv", new string[] { })]
-    [DataRow("video3.mov", ".mov", new string[] { })]
-    [DataRow("video4.webm", ".webm", new string[] { })]
-    [DataRow("video5.avi", ".avi", new string[] { })]
-    [DataRow("video6.ts", ".ts", new string[] { })]
-    [DataRow("video7.mpeg", ".mpeg", new string[] { })]
-    [DataRow("video8.3gp", ".3gp", new string[] { ".mp4" })]
-    public async Task TestSourceFormatDetection(string fileName, string expectedFormatPrimaryExtension, string[] otherValidExtensions)
+    [DataRow("video1.mp4", ".mp4", new string[] { }, true)]
+    [DataRow("video2.mkv", ".mkv", new string[] { }, false)]
+    [DataRow("video3.mov", ".mov", new string[] { }, true)]
+    [DataRow("video4.webm", ".webm", new string[] { }, false)]
+    [DataRow("video5.avi", ".avi", new string[] { }, false)]
+    [DataRow("video6.ts", ".ts", new string[] { }, false)]
+    [DataRow("video7.mpeg", ".mpeg", new string[] { }, false)]
+    [DataRow("video8.3gp", ".3gp", new string[] { ".mp4" }, true)]
+    public async Task TestSourceFormatDetection(string fileName, string expectedFormatPrimaryExtension, string[] otherValidExtensions, bool supportsMp4Loose)
     {
         // Tests that SourceFormats correctly identifies container formats by iterating through all known formats.
         // Each test file should only match its expected format singleton (identified by primary extension) and reject all others.
@@ -941,6 +941,7 @@ partial class Tests
         {
             bool isPrimary = format.FileFormat.Extensions.Contains(expectedFormatPrimaryExtension);
             bool isCorrect = isPrimary || otherValidExtensions.Contains(format.PrimaryExtension);
+            if (format == MediaContainerFormat.MP4Loose) isCorrect = supportsMp4Loose;
 
             if (isCorrect)
             {
@@ -1021,6 +1022,54 @@ partial class Tests
                 SourceVideoCodecs = [VideoCodec.HEVCAnyTag],
             },
             fileName,
+            exceptionMessage: null,
+            expectedChanges: null);
+    }
+
+    [TestMethod]
+    public async Task TestLooseSourceFormatRemuxesToStrictResultFormat()
+    {
+        // Tests that a .mov file that is valid by MP4Loose is remuxed (not re-encoded) when MP4Loose is the only allowed source format
+        // but MP4 is the only allowed result format. The streams should be preserved but the container changes.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        // video3.mov is a valid mov file with 1 video stream and 1 audio stream, both MP4-compatible.
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                SourceFormats = [MediaContainerFormat.MP4Loose],
+                ResultFormats = [MediaContainerFormat.MP4],
+            },
+            "video3.mov",
+            exceptionMessage: null,
+            expectedChanges: (NewStreamCount: 2, StreamMapping:
+            [
+                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: true), // Video stream
+                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // Audio stream
+            ]));
+    }
+
+    [TestMethod]
+    public async Task TestLooseSourceFormatWithLooseResultFormatDoesntRemux()
+    {
+        // Tests that a .mov file that is valid by MP4Loose is not remuxed when MP4Loose is also an allowed result format.
+        // The file should be preserved unchanged. Note: MP4Loose must not be first in ResultFormats since it is not writable.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        // video3.mov is a valid mov file with 1 video stream and 1 audio stream, both MP4-compatible.
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                SourceFormats = [MediaContainerFormat.MP4Loose],
+                ResultFormats = [MediaContainerFormat.MP4, MediaContainerFormat.MP4Loose],
+            },
+            "video3.mov",
             exceptionMessage: null,
             expectedChanges: null);
     }
