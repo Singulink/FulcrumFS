@@ -2,6 +2,7 @@
   <PropertyGroup>
     <RootNamespace>FulcrumFS.Videos</RootNamespace>
     <TargetFramework>net10.0</TargetFramework>
+    <RunSettingsFile>test.runsettings</RunSettingsFile>
 
     <!-- Disable parts of tests that require manual inspection in CI to save on CI testing time -->
     <DefineConstants Condition=" '$(CI)' == 'true' ">$(DefineConstants);CI</DefineConstants>
