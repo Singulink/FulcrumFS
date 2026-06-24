@@ -256,6 +256,28 @@ partial class Tests
         return (outputFilePath, disposeHelper);
     }
 
+    private async Task<string> GetStreamHash(string inputFile, CancellationToken cancellationToken)
+    {
+        // Hashes the elementary packet data of a single-stream file. This compares the actual encoded stream
+        // content while ignoring container-level framing (sample tables, edit lists and timestamps) which can
+        // legitimately differ between ffmpeg versions even for a faithful stream copy.
+        string output = await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", inputFile,
+                "-map", "0",
+                "-c", "copy",
+                "-f", "streamhash",
+                "-hash", "md5",
+                "-xerror",
+                "-hide_banner",
+                "-"
+            ],
+            cancellationToken);
+
+        return output.Trim();
+    }
+
     private async Task<bool> CompareStreamEquality(
         string file1,
         string file2,
@@ -264,17 +286,17 @@ partial class Tests
         int streamIdx2,
         CancellationToken cancellationToken)
     {
-        // Extracts matching streams from two files and compares their contents.
+        // Extracts matching streams from two files and compares their elementary stream contents.
         IDisposable disposeHelper;
         (string extractedFile1, disposeHelper) = await ExtractStream(file1, extension, streamIdx1, cancellationToken);
         using var disposeHelper1 = disposeHelper;
         (string extractedFile2, disposeHelper) = await ExtractStream(file2, extension, streamIdx2, cancellationToken);
         using var disposeHelper2 = disposeHelper;
 
-        await using var stream1 = FilePath.ParseAbsolute(extractedFile1).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
-        await using var stream2 = FilePath.ParseAbsolute(extractedFile2).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+        string hash1 = await GetStreamHash(extractedFile1, cancellationToken);
+        string hash2 = await GetStreamHash(extractedFile2, cancellationToken);
 
-        return await AreStreamsEqual(stream1, stream2, cancellationToken);
+        return hash1 == hash2;
     }
 
     private async Task<int> GetStreamCount(string fileName, CancellationToken cancellationToken)
