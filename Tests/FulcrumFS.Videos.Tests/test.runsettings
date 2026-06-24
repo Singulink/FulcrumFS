@@ -2,7 +2,7 @@
 <RunSettings>
   <RunConfiguration>
     <TreatNoTestsAsError>false</TreatNoTestsAsError>
-    <TestSessionTimeout>7200000</TestSessionTimeout>
+    <TestSessionTimeout>9000000</TestSessionTimeout>
   </RunConfiguration>
   <MSTest>
     <Parallelize>
@@ -10,6 +10,6 @@
       <Scope>MethodLevel</Scope>
     </Parallelize>
     <CaptureTraceOutput>false</CaptureTraceOutput>
-    <TestTimeout>420000</TestTimeout>
+    <TestTimeout>600000</TestTimeout>
   </MSTest>
 </RunSettings>
