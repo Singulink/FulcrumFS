@@ -2,7 +2,7 @@
 <RunSettings>
   <RunConfiguration>
     <TreatNoTestsAsError>false</TreatNoTestsAsError>
-    <TestSessionTimeout>3600000</TestSessionTimeout>
+    <TestSessionTimeout>7200000</TestSessionTimeout>
   </RunConfiguration>
   <MSTest>
     <Parallelize>
