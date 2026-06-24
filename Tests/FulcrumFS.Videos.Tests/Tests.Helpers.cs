@@ -87,7 +87,7 @@ partial class Tests
     // A watchdog thread kills the process via FailFast if a single test runs longer than the timeout - the FailFast message
     // surfaces in the "Error output" section of the dotnet test report (raw stdout/stderr is otherwise swallowed), naming the
     // hung test without waiting for the CI job timeout.
-    private static readonly TimeSpan _testHangTimeout = TimeSpan.FromMinutes(4);
+    private static readonly TimeSpan _testHangTimeout = TimeSpan.FromMinutes(3);
 
     private IDisposable TrackTestExecution()
     {
