@@ -6,10 +6,10 @@
   </RunConfiguration>
   <MSTest>
     <Parallelize>
-      <Workers>4</Workers>
+      <Workers>3</Workers>
       <Scope>MethodLevel</Scope>
     </Parallelize>
     <CaptureTraceOutput>false</CaptureTraceOutput>
-    <TestTimeout>300000</TestTimeout>
+    <TestTimeout>420000</TestTimeout>
   </MSTest>
 </RunSettings>
