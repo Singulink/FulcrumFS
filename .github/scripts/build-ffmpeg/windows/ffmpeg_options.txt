@@ -9,4 +9,6 @@
 --enable-libx265
 --enable-libfdk-aac
 --enable-libzimg
+--enable-libdav1d
+--enable-libvpx
 --disable-debug
