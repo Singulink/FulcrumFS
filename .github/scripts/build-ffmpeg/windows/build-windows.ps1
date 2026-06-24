@@ -16,6 +16,12 @@ New-Item -ItemType Directory -Force -Path $env:FFMPEG_OUTPUT_DIR | Out-Null
 $suiteRoot = 'C:\ffmpeg'
 $suiteDir = Join-Path $suiteRoot 'media-autobuild_suite'
 
+# Remove any leftover state from a previous (failed) attempt so a retry starts from a clean slate
+# (e.g. a partial git clone or a stale build\compilation_failed marker).
+if (Test-Path $suiteRoot) {
+    Remove-Item -Recurse -Force -Path $suiteRoot
+}
+
 # Create the root folder.
 New-Item -ItemType Directory -Force -Path $suiteRoot | Out-Null
 

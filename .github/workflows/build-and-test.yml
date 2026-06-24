@@ -51,7 +51,7 @@ jobs:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
       run: |
         mkdir -p "$FFMPEG_OUTPUT_DIR"
-        bash .github/scripts/build-ffmpeg/linux/build-linux.sh
+        bash .github/scripts/build-ffmpeg/linux/bootstrap-linux.sh
         chmod +x "$FFMPEG_OUTPUT_DIR"/*
     - name: Clean
       run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
@@ -91,7 +91,7 @@ jobs:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
       run: |
         New-Item -ItemType Directory -Force -Path $env:FFMPEG_OUTPUT_DIR | Out-Null
-        .\.github\scripts\build-ffmpeg\windows\build-windows.ps1
+        .\.github\scripts\build-ffmpeg\windows\bootstrap-windows.ps1
     - name: Clean
       run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
     - name: Install dependencies

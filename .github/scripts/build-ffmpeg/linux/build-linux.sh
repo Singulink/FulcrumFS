@@ -14,6 +14,10 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Ensure the output directory exists.
 mkdir -p "$FFMPEG_OUTPUT_DIR"
 
+# Remove any leftover state from a previous (failed) attempt so a retry starts from a clean slate
+# (e.g. a partial git clone, an already-applied patch, or a partial build tree).
+rm -rf ~/Clones
+
 # Build ffmpeg for Linux (output goes to ~/Clones/ffmpeg-build/packages/FFmpeg-release-X.Y)
 sudo apt -y install build-essential curl zip
 mkdir -p ~/Clones
