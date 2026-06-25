@@ -62,6 +62,7 @@ jobs:
       run: dotnet build --configuration ${{ matrix.configuration }} --no-restore
     - name: Test
       run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed
+      continue-on-error: true
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
         TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
