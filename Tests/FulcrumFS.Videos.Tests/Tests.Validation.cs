@@ -366,16 +366,6 @@ partial class Tests
     [DynamicData(nameof(ValidVideosToCheck))]
     public async Task TestH264ReencodeOptions(string fileName)
     {
-        // SET 1
-        if (fileName.StartsWith("video10") && fileName[7] is >= '7' and <= '8' && fileName.Length > 11) return; // Skip videos 10x for now
-
-        // SET 2
-        if (fileName.StartsWith("video12") && fileName.Length > 11) return; // Skip videos 12x for now
-        if (fileName.StartsWith("video13") && fileName.Length > 11) return; // Skip videos 13x for now
-
-        // SET 3
-        if (fileName.StartsWith("video14") && fileName[7] >= '4' && fileName.Length > 11) return; // Skip videos 14x for now
-
         using var testTracker = TrackTestExecution();
         // This tests that it can succeed processing every valid file (with original settings, rather than limited ones), that the stream count matches
         // afterwards (except for those with streams incompatible with MP4), and that all streams have been changed (re-encoded):
