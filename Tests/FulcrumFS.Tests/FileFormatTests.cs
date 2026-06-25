@@ -109,7 +109,7 @@ public sealed class FileFormatTests
     [TestMethod]
     public async Task Mp4Loose_TsBytes_Fails()
     {
-        // The mp4 loose format does not check the brand, so it should accept the ts sample.
+        // The mp4 loose format does not check the brand, so it should not accept the ts sample.
         await using var stream = File.OpenRead(_sampleDir.CombineFile("sample.ts").PathExport);
         var result = await FileFormat.Mp4Loose.ValidateAsync(stream, TestContext.CancellationToken);
         result.IsValid.ShouldBeFalse();

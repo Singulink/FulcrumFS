@@ -9,8 +9,8 @@ namespace FulcrumFS.Utilities;
 internal static class IsoBmffHeaderValidator
 {
     /// <summary>
-    /// Reads the <c>ftyp</c> box from the start of the stream. Returns <see langword="null"/> if the stream does not contain a valid <c>ftyp</c> box at the
-    /// start.
+    /// Reads the <c>ftyp</c> box from the start of the stream. Returns <see cref="FileFormatValidationResult.Invalid(string)"/> if the stream does not contain
+    /// a valid <c>ftyp</c> box at the start.
     /// </summary>
     public static async ValueTask<FileFormatValidationResult> CheckFtypAsync(string name, FrozenSet<string> acceptedBrands, Stream stream, CancellationToken cancellationToken)
     {

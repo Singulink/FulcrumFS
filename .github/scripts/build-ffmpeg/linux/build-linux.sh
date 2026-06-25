@@ -24,7 +24,7 @@ mkdir -p ~/Clones
 cd ~/Clones
 git clone https://github.com/markus-perl/ffmpeg-build-script.git
 cd ffmpeg-build-script
-git apply "$script_dir/build-ffmpeg.patch" # temorary workaround to ensure we're using a new enough version of x265
+git apply "$script_dir/build-ffmpeg.patch" # temporary workaround to ensure we're using a new enough version of x265
 cd ~/Clones
 mkdir -p ffmpeg-build
 cd ffmpeg-build
