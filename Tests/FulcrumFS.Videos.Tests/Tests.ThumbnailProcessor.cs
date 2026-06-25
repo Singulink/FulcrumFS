@@ -4,8 +4,6 @@ using SixLabors.ImageSharp;
 
 namespace FulcrumFS.Videos;
 
-#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
-
 // This file contains all of the ThumbnailProcessor-specific tests.
 
 partial class Tests
@@ -16,7 +14,6 @@ partial class Tests
     [DataRow(false)]
     public async Task ExtractThumbnailFromHDRVideoTest(bool remapHDRToSDR)
     {
-        using var testTracker = TrackTestExecution();
         // Test extracting a thumbnail from an HDR video, with and without remapping to SDR.
         // This is a visual inspection test - the resulting images should be checked manually to ensure correct color representation.
 
@@ -50,7 +47,6 @@ partial class Tests
     [DataRow("bbb_sunflower_1080p_60fps_normal-25s.mp4", 15, 0.5, true)]
     public async Task TestThumbnailTimestampSelection(string fileName, double seconds, double fraction, bool useFraction)
     {
-        using var testTracker = TrackTestExecution();
         // Tests that ThumbnailProcessor selects the correct frame timestamp when both ImageTimestamp and ImageTimestampFraction are specified.
         // The processor should take the minimum of the two when both have meaning.
 
@@ -100,7 +96,6 @@ partial class Tests
     [TestMethod]
     public async Task TestThumbnailFromExplicitThumbnailStream()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that when IncludeThumbnailVideoStreams is true, the thumbnail is extracted from the embedded thumbnail stream.
         // Uses video53.mp4 which has an embedded PNG thumbnail stream.
         // When IncludeThumbnailVideoStreams is true, the result should match test_image_1.png.
@@ -149,7 +144,6 @@ partial class Tests
     [DynamicData(nameof(ValidVideosWithVideoStreamsToCheck))]
     public async Task TestThumbnailProcessorAllOptionsConfigurations(string fileName)
     {
-        using var testTracker = TrackTestExecution();
         // Brute force test that verifies ThumbnailProcessor can successfully process all valid video files
         // with all important combinations of options.
 
@@ -208,7 +202,6 @@ partial class Tests
     [DataRow(false)]
     public async Task TestThumbnailHDRColorSpaceRemapping(bool remapHDRToSDR)
     {
-        using var testTracker = TrackTestExecution();
         // Tests that the HDR to SDR color space remapping works correctly for thumbnail extraction.
         // Uses an HDR video and verifies the color properties of the resulting thumbnail using ffprobe.
 
@@ -255,7 +248,6 @@ partial class Tests
     [DataRow("video168.mp4")]
     public async Task TestThumbnailFailsWithNoVideoStreams(string fileName)
     {
-        using var testTracker = TrackTestExecution();
         // Tests that ThumbnailProcessor fails with a clear error when the input file has no video streams.
 
         using var repoCtx = GetRepo(out var repo);
@@ -280,7 +272,6 @@ partial class Tests
     [TestMethod]
     public async Task TestThumbnailFailsWhenTimestampExceedsDuration()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that ThumbnailProcessor throws an exception when the requested timestamp exceeds the video duration.
         // Uses video1.mp4 which is 1 second long, with a 2 second timestamp request.
 
@@ -309,7 +300,6 @@ partial class Tests
     [DataRow("video43.mp4", "rgb48be")]
     public async Task TestThumbnailBitDepthPreservation(string videoFileName, string expectedPixelFormat)
     {
-        using var testTracker = TrackTestExecution();
         // Tests that 8-bit input videos produce 8-bpc PNG thumbnails, and higher bit depth videos produce 16-bpc PNG thumbnails.
 
         using var repoCtx = GetRepo(out var repo);
@@ -340,7 +330,6 @@ partial class Tests
     [TestMethod]
     public async Task TestThumbnailSelectsDefaultVideoStreamOverNonDefault()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that ThumbnailProcessor selects a non-first video stream that is marked as default over a first video stream that is not marked as default.
         // Creates a test video with two video streams: first is non-default, second is default.
 
@@ -406,7 +395,6 @@ partial class Tests
     [DataRow("video166.mp4", false, 96, 128)]
     public async Task TestThumbnailNonSquarePixelHandling(string fileName, bool forceSquarePixels, int expectedWidth, int expectedHeight)
     {
-        using var testTracker = TrackTestExecution();
         // Tests that ForceSquarePixels option correctly handles videos with non-square pixel aspect ratios (SAR).
         // When ForceSquarePixels is true, the output dimensions should be adjusted to account for the SAR.
         // When ForceSquarePixels is false, the original pixel dimensions should be preserved.
@@ -437,7 +425,6 @@ partial class Tests
     [TestMethod]
     public async Task TestThumbnailMaxResolutionCapping()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that the ThumbnailProcessor correctly caps output dimensions to 32767x32767.
 
         using var repoCtx = GetRepo(out var repo);

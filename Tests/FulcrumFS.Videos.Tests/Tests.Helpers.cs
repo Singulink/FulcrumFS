@@ -60,103 +60,18 @@ partial class Tests
         });
     }
 
-    // TEMPORARY: Path of the test-execution log used to identify a test that hangs in CI. The path comes from the
-    // TEST_EXECUTION_LOG environment variable (CI sets this and prints the file afterwards, even on failure), falling back
-    // to a temp file for local runs. The file is truncated once at startup so it only holds the current run's entries.
-    private static readonly string _testExecutionLogPath = InitTestExecutionLog();
-
-    private static string InitTestExecutionLog()
-    {
-        string path = Environment.GetEnvironmentVariable("TEST_EXECUTION_LOG") is { Length: > 0 } envPath
-            ? envPath
-            : Path.Combine(Path.GetTempPath(), "fulcrumfs-test-execution.log");
-
-        try
-        {
-            File.WriteAllText(path, string.Empty);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Failed to reset test execution log '{path}': {ex}");
-        }
-
-        return path;
-    }
-
-    // TEMPORARY: Logs when a test starts and ends so a hung test can be identified in CI (the last "Started" entry without a
-    // matching "Ended" is the culprit). App-exit cleanup is disabled so a test killed mid-run does not incorrectly log "Ended".
-    // A watchdog thread kills the process via FailFast if a single test runs longer than the timeout - the FailFast message
-    // surfaces in the "Error output" section of the dotnet test report (raw stdout/stderr is otherwise swallowed), naming the
-    // hung test without waiting for the CI job timeout.
-    private static readonly TimeSpan _testHangTimeout = TimeSpan.FromMinutes(3);
-
-    private IDisposable TrackTestExecution()
-    {
-        string testName = TestContext.TestDisplayName ?? TestContext.TestName;
-        AppendTestExecutionLog($"Started {testName}");
-        Trace.WriteLine($"Started {testName}");
-        TestContext.WriteLine($"Started {testName}");
-
-        var completed = new ManualResetEventSlim(false);
-
-        var watchdog = new Thread(() =>
-        {
-            if (!completed.Wait(_testHangTimeout))
-            {
-                Environment.FailFast($"TEST HUNG (exceeded {_testHangTimeout.TotalMinutes:0} min): {testName}");
-            }
-        })
-        {
-            Name = "TestHangWatchdog",
-        };
-        watchdog.Start();
-
-        return new DisposeHelper(
-            () =>
-            {
-                completed.Set();
-                AppendTestExecutionLog($"Ended {testName}");
-                Trace.WriteLine($"Ended {testName}");
-                TestContext.WriteLine($"Ended {testName}");
-            },
-            registerProcessExit: false);
-    }
-
-    private static void AppendTestExecutionLog(string message)
-    {
-        // Open the log file exclusively (FileShare.None) and retry until it is available, so concurrent writers - whether
-        // other test threads or other processes - take turns instead of colliding and losing entries.
-        while (true)
-        {
-            try
-            {
-                using var stream = new FileStream(_testExecutionLogPath, FileMode.Append, FileAccess.Write, FileShare.None);
-                using var writer = new StreamWriter(stream);
-                writer.WriteLine(message);
-                return;
-            }
-            catch (IOException)
-            {
-            }
-        }
-    }
-
     // Helper class to run an action on dispose or finalize, and also try to run on process exit if dispose or finalizer wasn't called:
     private sealed class DisposeHelper : IDisposable
     {
         private readonly Action _onDispose;
-        private readonly EventHandler? _processExitHandler;
+        private readonly EventHandler _processExitHandler;
         private InterlockedFlag _run;
 
-        public DisposeHelper(Action onDispose, bool registerProcessExit = true)
+        public DisposeHelper(Action onDispose)
         {
             _onDispose = onDispose;
-
-            if (registerProcessExit)
-            {
-                _processExitHandler = Create_CurrentDomain_ProcessExit(new(this));
-                AppDomain.CurrentDomain.ProcessExit += _processExitHandler;
-            }
+            _processExitHandler = Create_CurrentDomain_ProcessExit(new(this));
+            AppDomain.CurrentDomain.ProcessExit += _processExitHandler;
         }
 
         private static EventHandler Create_CurrentDomain_ProcessExit(WeakReference<DisposeHelper> weakThis) => (sender, e) =>
@@ -182,7 +97,7 @@ partial class Tests
                 }
                 finally
                 {
-                    if (!exiting && _processExitHandler is not null) AppDomain.CurrentDomain.ProcessExit -= _processExitHandler;
+                    if (!exiting) AppDomain.CurrentDomain.ProcessExit -= _processExitHandler;
                     if (disposing) GC.SuppressFinalize(this);
                 }
             }

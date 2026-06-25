@@ -4,8 +4,6 @@ using Shouldly;
 
 namespace FulcrumFS.Videos;
 
-#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
-
 // Tests relating to video file / stream metadata handling that don't fit into other categories (e.g., not TestSelectSmallestMetadataHandling, which is in
 // Tests.SelectSmallest.cs). I.e, tests relating to metadata handling alone.
 
@@ -14,7 +12,6 @@ partial class Tests
     [TestMethod]
     public async Task TestTryStripThumbnails()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that TryStripThumbnails removes embedded video thumbnail streams from the output.
 
         using var repoCtx = GetRepo(out var repo);
@@ -67,7 +64,6 @@ partial class Tests
     [TestMethod]
     public async Task TestStreamLanguagePreservedWithMetadataStripping()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that stream language metadata is preserved even when general metadata stripping is enabled.
 
         using var repoCtx = GetRepo(out var repo);
@@ -146,7 +142,6 @@ partial class Tests
     [TestMethod]
     public async Task TestRequiredMetadataStrippingMode()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that VideoMetadataStrippingMode.Required removes thumbnails, standard metadata, and custom metadata.
         // Uses video53.mp4 (has a thumbnail) and video162.mp4 (has artist & custom_metadata tags).
 
@@ -205,7 +200,6 @@ partial class Tests
     [TestMethod]
     public async Task TestMetadataPreservation()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that VideoMetadataStrippingMode.None preserves standard and custom metadata even when re-encoding.
         // Uses video162.mp4 with artist & custom_metadata tags.
 
@@ -254,7 +248,6 @@ partial class Tests
     [TestMethod]
     public async Task TestStreamMetadataPreservation()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that stream-level metadata (language tags) is preserved when re-encoding with MetadataStrippingMode.None.
         // Uses video163.mp4 which has eng video stream and fre audio stream.
 
@@ -299,7 +292,6 @@ partial class Tests
     [TestMethod]
     public async Task TestMetadataStrippingPreferredMode()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that VideoMetadataStrippingMode.Preferred preserves metadata when no re-encoding is needed, but strips it when re-encoding is forced.
         // Uses video162.mp4 with artist & custom_metadata tags.
 
@@ -360,7 +352,6 @@ partial class Tests
     [TestMethod]
     public async Task TestMetadataStrippingRequiredModeForcesRemuxing()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that VideoMetadataStrippingMode.Required forces remuxing even when no re-encoding is needed.
 
         using var repoCtx = GetRepo(out var repo);

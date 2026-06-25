@@ -6,8 +6,6 @@ using Singulink.IO;
 
 namespace FulcrumFS.Videos;
 
-#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
-
 // NOTE: these are only the manual inspection tests for VideoProcessor.
 // These tests should be re-run locally when making changes to related functionality to ensure it looks visually / sounds audibly correct.
 
@@ -63,7 +61,6 @@ partial class Tests
     [DataRow(VideoCompressionLevel.Highest)]
     public async Task TestVideoCompressionLevelH264(VideoCompressionLevel level)
     {
-        using var testTracker = TrackTestExecution();
         // Note: this test is disabled on CI as it can be quite slow.
         // Tests H.264 video compression at different levels. Outputs result files and diff heatmaps for visual comparison (they should all look similar).
         // Files should be sized approximately smaller at higher compression levels, but not guaranteed; however, they should certainly be more consistently
@@ -108,7 +105,6 @@ partial class Tests
     [DataRow(VideoCompressionLevel.Highest)]
     public async Task TestVideoCompressionLevelHEVC(VideoCompressionLevel level)
     {
-        using var testTracker = TrackTestExecution();
         // Note: this test is disabled on CI as it can be quite slow.
         // Tests HEVC video compression at different levels. Outputs result files and diff heatmaps for visual comparison (they should all look similar).
         // Files should be sized approximately smaller at higher compression levels, but not guaranteed; however, they should certainly be more consistently
@@ -149,7 +145,6 @@ partial class Tests
     [TestMethod]
     public async Task TestVideoQualityH264()
     {
-        using var testTracker = TrackTestExecution();
         // Tests H.264 video quality at different levels. Outputs result files and diff heatmaps for visual comparison.
         // Runs all quality levels in parallel, then verifies file sizes increase with quality.
 
@@ -173,7 +168,6 @@ partial class Tests
     [TestMethod]
     public async Task TestVideoQualityHEVC()
     {
-        using var testTracker = TrackTestExecution();
         // Tests HEVC video quality at different levels. Outputs result files and diff heatmaps for visual comparison.
         // Runs all quality levels in parallel, then verifies file sizes increase with quality.
 
@@ -282,7 +276,6 @@ partial class Tests
     [TestMethod]
     public async Task TestAudioQualityLibFDKAAC()
     {
-        using var testTracker = TrackTestExecution();
         // Tests AAC audio quality at different levels using libfdk_aac encoder. Outputs spectrograms for visual comparison (not the most accurate method, but
         // useful for a quick comparison within a specific encoder).
         // Runs all quality levels in parallel, then verifies file sizes increase with quality.
@@ -344,7 +337,6 @@ partial class Tests
     [TestMethod]
     public async Task TestAudioQualityAAC()
     {
-        using var testTracker = TrackTestExecution();
         // Tests AAC audio quality at different levels using default aac encoder. Outputs spectrograms for visual comparison (not the most accurate method, but
         // useful for a quick comparison within a specific encoder).
         // Runs all quality levels in parallel, then verifies file sizes increase with quality.
@@ -411,7 +403,6 @@ partial class Tests
     [DataRow(320, 180)]
     public async Task TestVideoResizeH264(int width, int height)
     {
-        using var testTracker = TrackTestExecution();
         // Note: this test is disabled on CI as it's for visual inspection primarily (video resizing is also tested elsewhere).
         // Tests H.264 video resizing at various target dimensions. Outputs resized result files.
 
@@ -452,7 +443,6 @@ partial class Tests
     [DataRow(320, 180)]
     public async Task TestVideoResizeHEVC(int width, int height)
     {
-        using var testTracker = TrackTestExecution();
         // Note: this test is disabled on CI as it's for visual inspection primarily (video resizing is also tested elsewhere).
         // Tests HEVC video resizing at various target dimensions. Outputs resized result files.
 
@@ -495,7 +485,6 @@ partial class Tests
     [DataRow("video170", ".mkv", true)]
     public async Task TestSubtitleReencode(string fileName, string extension, bool makeMkvCopy)
     {
-        using var testTracker = TrackTestExecution();
         // All of these files should end up with subtitles that are playable in VLC after re-encoding (note: you may have to try playing the video more than
         // once, due to VLC struggling with short subtitles near the start).
         // Note: the subtitles for 169 won't look right when playing as mp4 necessarily, as support for dvd_subtitles in mp4 in some players is poor, but if
@@ -546,7 +535,6 @@ partial class Tests
     [DataRow("bff")]
     public async Task TestDeinterlacing(string interlaceMode)
     {
-        using var testTracker = TrackTestExecution();
         // This test creates an interlaced version of the big buck bunny file using ffmpeg's interlace filter,
         // then processes it through the library with ForceProgressiveFrames = true to validate de-interlacing works,
         // and copies both the interlaced and de-interlaced versions to a folder for manual inspection.
@@ -626,7 +614,6 @@ partial class Tests
     [DataRow(BigBuckBunnyFullVideoFileName, AudioChannels.Stereo, AudioChannels.Mono)]
     public async Task TestAudioChannelDownmixQuality(string fileName, AudioChannels inputChannels, AudioChannels maxChannels)
     {
-        using var testTracker = TrackTestExecution();
         // Note: this test is excluded from CI runs since it is intended for manual inspection only (audio channel downmixing is also tested elsewhere).
         // Tests audio channel downmixing quality for manual inspection. Outputs downmixed result files.
 
@@ -659,7 +646,6 @@ partial class Tests
     [TestMethod]
     public async Task TestRotationMetadataHandling()
     {
-        using var testTracker = TrackTestExecution();
         // This test creates a video that is physically rotated 90 degrees clockwise, but has rotation metadata set to -90 (to display correctly). It then
         // processes it with both preserve (both re-encoding & remuxing) and strip metadata modes to verify that rotation handling works correctly in all
         // cases.
@@ -765,7 +751,6 @@ partial class Tests
     [DataRow("Y0__auYqGXY-20s")]
     public async Task TestHDRToSDRMapping(string fileName)
     {
-        using var testTracker = TrackTestExecution();
         // Note: this test is excluded from CI runs since it is intended for manual inspection only (HDR->SDR logic is also tested in TestStandardizedOptions).
         // Tests HDR to SDR color mapping. Outputs the result files for manual inspection.
 
@@ -819,7 +804,6 @@ partial class Tests
     [TestMethod]
     public async Task TestStartTimeMetadataHandling()
     {
-        using var testTracker = TrackTestExecution();
         // This test creates a video that starts at 5s into the timeline, with start time metadata set accordingly. It then processes it with all of preserve (
         // both re-encoding & remuxing), strip metadata mode, and unrecognized stream stripping to verify that start time handling works correctly in all cases
         // we expect.

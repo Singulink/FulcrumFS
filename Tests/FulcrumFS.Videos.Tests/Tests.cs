@@ -5,8 +5,6 @@ using Shouldly;
 
 namespace FulcrumFS.Videos;
 
-#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
-
 // This is the main Tests file for FulcrumFS.Videos - most tests are in other partial class files named by category, and the helpers are split out also.
 // This file contains the type declaration and miscellaneous tests that don't really fit into other categories easily.
 
@@ -16,7 +14,6 @@ public sealed partial class Tests
     [TestMethod]
     public async Task TestCreateAndDelete()
     {
-        using var testTracker = TrackTestExecution();
         // Tests the complete file repository lifecycle: create a video file with a scaled variant, then delete both.
         // Verifies files exist after commit, are removed after deletion, and parent directories are cleaned up.
 
@@ -65,7 +62,6 @@ public sealed partial class Tests
     [TestMethod]
     public async Task TestTryPreserveUnrecognizedStreamsFalse()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that unrecognized streams are stripped when TryPreserveUnrecognizedStreams is false.
 
         using var repoCtx = GetRepo(out var repo);
@@ -130,7 +126,6 @@ public sealed partial class Tests
     [TestMethod]
     public async Task TestSingleAudioOrVideoStreamFiles()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that files with only video (video160.mp4) or only audio (video161.mp4) streams can be processed successfully.
 
         // video160.mp4: video-only file.
@@ -219,7 +214,6 @@ public sealed partial class Tests
         StreamReencodeMode audioReencode,
         string fileName)
     {
-        using var testTracker = TrackTestExecution();
         // Tests progress callback is monotonically increasing across different processing configurations.
         // Tests important combos of: ForceValidateAllStreams, VideoReencodeMode, AudioReencodeMode, incompatible streams.
 
@@ -255,7 +249,6 @@ public sealed partial class Tests
     [DataRow(59, 53)]
     public async Task TestComplexFile(int maxWidth, int maxHeight)
     {
-        using var testTracker = TrackTestExecution();
         using var repoCtx = GetRepo(out var repo);
 
         try

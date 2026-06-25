@@ -7,8 +7,6 @@ using Singulink.IO;
 
 namespace FulcrumFS.Videos;
 
-#pragma warning disable SA1515 // Temporary: the test-execution tracker line directly precedes existing comments.
-
 // This file contains the tests directly related to video stream processing handling.
 
 partial class Tests
@@ -16,7 +14,6 @@ partial class Tests
     [TestMethod]
     public async Task TestUnwantedOutputVideoCodecReencodes()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that video streams with codecs not in ResultVideoCodecs are re-encoded while audio is preserved.
         // Uses video10.mp4 (HEVC) with H264-only result to verify video re-encoding, audio stream copy.
 
@@ -41,7 +38,6 @@ partial class Tests
     [TestMethod]
     public async Task TestWantedOutputVideoCodecDoesntReencodeUnnecessarily()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that video streams already in an allowed ResultVideoCodecs codec are not unnecessarily re-encoded.
 
         using var repoCtx = GetRepo(out var repo);
@@ -61,7 +57,6 @@ partial class Tests
     [TestMethod]
     public async Task TestAlwaysReencodeVideoStreams()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that VideoReencodeMode.Always forces video stream re-encoding even when codec is acceptable.
 
         using var repoCtx = GetRepo(out var repo);
@@ -113,7 +108,6 @@ partial class Tests
     [TestMethod]
     public async Task TestMaxChromasubsamplingRespected()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that MaximumChromaSubsampling is correctly enforced, with downsampling when needed.
 
         using var repoCtx = GetRepo(out var repo);
@@ -284,7 +278,6 @@ partial class Tests
     [TestMethod]
     public async Task TestMaxBitsPerSampleRespected()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that MaximumBitsPerChannel is correctly enforced, with downsampling when needed.
 
         using var repoCtx = GetRepo(out var repo);
@@ -479,7 +472,6 @@ partial class Tests
     [DataRow("video52.webm", 420, 8, true)] // video52.webm is yuva420p / tv
     public async Task TestPixelFormats(string fileName, int actualChromaSubsampling, int actualBpc, bool isAbnormal)
     {
-        using var testTracker = TrackTestExecution();
         // Note: we are validate all of the following here: all known pixel formats are handled as expected, abnormal pixel formats are re-encoded when max
         // chroma subsampling is not "Preserve", max bits per channel / chroma subsampling correctly re-encodes / preserves, both pc & tv variants of pixel
         // formats (that support both variants) are handled correctly.
@@ -703,7 +695,6 @@ partial class Tests
         (int W, int H) inputSize,
         (int W, int H) outputSize)
     {
-        using var testTracker = TrackTestExecution();
         // Tests handling of non-square pixel aspect ratios (SAR) and ForceSquarePixels option.
         // Verifies correct dimension/SAR transformations for various input files and resize settings.
 
@@ -808,7 +799,6 @@ partial class Tests
     public async Task TestResizeHandlingH264(
         string fileName, string? expectedError, (int W, int H)? maxSize, (int W, int H) inputSize, (int W, int H)? outputSize)
     {
-        using var testTracker = TrackTestExecution();
         await TestResizeHandlingImpl(VideoCodec.H264, fileName, expectedError, maxSize, inputSize, outputSize);
     }
 
@@ -817,7 +807,6 @@ partial class Tests
     public async Task TestResizeHandlingHEVC(
         string fileName, string? expectedError, (int W, int H)? maxSize, (int W, int H) inputSize, (int W, int H)? outputSize)
     {
-        using var testTracker = TrackTestExecution();
         try
         {
             await TestResizeHandlingImpl(VideoCodec.HEVC, fileName, expectedError, maxSize, inputSize, outputSize);
@@ -963,7 +952,6 @@ partial class Tests
     public async Task TestFpsLimitHandling(
         string fileName, bool shouldReencode, VideoFpsMode mode, int targetFps, (int Num, int Den) inputFps, (int Num, int Den)? outputFps)
     {
-        using var testTracker = TrackTestExecution();
         // Tests FPS limiting with both LimitToExact and LimitByIntegerDivision modes.
         // Verifies correct frame rate reduction for various input FPS values and target limits.
 
@@ -1032,7 +1020,6 @@ partial class Tests
     [DataRow("video161.mp4")]
     public async Task TestProgressiveFileNotUnnecessarilyDeinterlaced(string fileName)
     {
-        using var testTracker = TrackTestExecution();
         // This test verifies that progressive files are not unnecessarily processed when ForceProgressiveFrames is enabled.
         // The file should remain identical (not re-encoded or modified).
 
@@ -1053,7 +1040,6 @@ partial class Tests
     [TestMethod]
     public async Task TestSquarePixelsFileNotUnnecessarilyReencoded()
     {
-        using var testTracker = TrackTestExecution();
         // This test verifies that files with already square pixels are not unnecessarily processed when ForceSquarePixels is enabled.
         // video1.mp4 already has 1:1 SAR (square pixels), so it should remain identical.
 
@@ -1074,7 +1060,6 @@ partial class Tests
     [TestMethod]
     public async Task TestRemapHDRToSDRNotUnnecessarilyReencoded()
     {
-        using var testTracker = TrackTestExecution();
         // This test verifies that SDR files are not unnecessarily processed when RemapHDRToSDR is enabled.
         // video1.mp4 is SDR, so it should remain identical.
 
@@ -1095,7 +1080,6 @@ partial class Tests
     [TestMethod]
     public async Task TestResizeOptionsNotUnnecessarilyReencoded()
     {
-        using var testTracker = TrackTestExecution();
         // This test verifies that files that already fit within the resize bounds are not unnecessarily processed.
         // video1.mp4 is 128x72, so specifying a larger max size should not cause re-encoding.
 
@@ -1118,7 +1102,6 @@ partial class Tests
     [DataRow("video164.mp4", true)]
     public async Task TestHEVCTagRemuxing(string fileName, bool isHvc1)
     {
-        using var testTracker = TrackTestExecution();
         // Tests HEVC tag remuxing: using a result video codec of HEVC causes hev1-tagged files to be remuxed to hvc1,
         // while hvc1 files remain unchanged. HEVCAnyTag never triggers tag remuxing.
 
@@ -1188,7 +1171,6 @@ partial class Tests
     [TestMethod]
     public async Task TestNoUpscalingWithoutReencode()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that videos are not upscaled when resize options specify dimensions larger than the source.
         // video1.mp4 has dimensions 128x72 - we request 1920x1080 and expect no change.
         // Without re-encoding, the file should remain byte-for-byte identical (stream copy).
@@ -1210,7 +1192,6 @@ partial class Tests
     [TestMethod]
     public async Task TestNoUpscalingWithForcedReencode()
     {
-        using var testTracker = TrackTestExecution();
         // Tests that videos are not upscaled when resize options specify dimensions larger than the source.
         // video1.mp4 has dimensions 128x72 - we request 1920x1080 and expect no change to dimensions.
         // With forced re-encoding, the file will be re-encoded but should NOT be upscaled.
@@ -1290,7 +1271,6 @@ partial class Tests
         (int W, int H)? expectedOutputSize,
         (int W, int H)? maxSize)
     {
-        using var testTracker = TrackTestExecution();
         // Tests HEVC video encoding near the codec's dimension limits, verifying that videos are scaled as expected to meet HEVC minimum dimension
         // requirements when the source dimensions are too small so that re-encoding these videos to HEVC doesn't fail (unless we expect it to do so due to a
         // max size limitation).
@@ -1379,7 +1359,6 @@ partial class Tests
     public async Task TestChromaSubsamplingResolutionRounding(
         string fileName, ChromaSubsampling maxChromaSubsampling, (int W, int H) inputSize, (int W, int H) expectedOutputSize)
     {
-        using var testTracker = TrackTestExecution();
         // Tests that video dimensions are correctly rounded to even values as required by chroma subsampling settings.
 
         using var repoCtx = GetRepo(out var repo);
