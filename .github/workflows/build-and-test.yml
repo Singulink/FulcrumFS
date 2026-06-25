@@ -15,7 +15,7 @@ jobs:
         configuration: [Debug, Release]
 
     runs-on: ${{ matrix.os }}
-    environment: ${{ matrix.os == 'windows-latest' && 'test-core-windows-x64' || 'test-core-linux-x64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
+    name: ${{ matrix.os == 'windows-latest' && 'test-core-windows-x64' || 'test-core-linux-x64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
 
     steps:
     - name: Checkout
@@ -36,7 +36,7 @@ jobs:
 
   build-and-test-video-linux:
     runs-on: ubuntu-latest
-    environment: test-video-linux-x64
+    name: test-video-linux-x64
 
     steps:
     - name: Checkout
@@ -73,7 +73,7 @@ jobs:
 
   build-and-test-video-windows:
     runs-on: windows-latest
-    environment: test-video-windows-x64
+    name: test-video-windows-x64
 
     steps:
     - name: Checkout
