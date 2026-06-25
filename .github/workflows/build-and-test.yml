@@ -68,8 +68,7 @@ jobs:
         TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
     - name: Test (Linux)
       if: runner.os == 'Linux'
-      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed --max-parallel-test-modules 1 || true
-      continue-on-error: true
+      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
         TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
