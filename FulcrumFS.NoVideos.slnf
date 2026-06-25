@@ -1,0 +1,12 @@
+{
+  "solution": {
+    "path": "FulcrumFS.slnx",
+    "projects": [
+      "Source\\FulcrumFS.Core\\FulcrumFS.Core.csproj",
+      "Source\\FulcrumFS.Images\\FulcrumFS.Images.csproj",
+      "Source\\FulcrumFS\\FulcrumFS.csproj",
+      "Tests\\FulcrumFS.Tests\\FulcrumFS.Tests.csproj",
+      "Tests\\FulcrumFS.Images.Tests\\FulcrumFS.Images.Tests.csproj"
+    ]
+  }
+}

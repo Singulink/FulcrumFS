@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Singulink.IO;
@@ -21,6 +22,71 @@ internal static class FFprobeUtils
             EnsureConfigurationInfoInitialized();
             return ref _configInfo;
         }
+    }
+
+    /// <summary>
+    /// Throws if the configured ffmpeg/ffprobe binaries are missing any encoder, decoder, muxer, demuxer or filter the video pipeline may require for the unit
+    /// tests (i.e., include anything we may opportunistically depend on, or outright require).
+    /// </summary>
+    internal static void EnsureAllFeaturesPresent()
+    {
+        ref readonly var c = ref Configuration;
+
+        static void Require(bool supported, [CallerArgumentExpression(nameof(supported))] string? feature = null)
+        {
+            if (!supported)
+                throw new InvalidOperationException($"The configured ffmpeg/ffprobe build does not support a required feature: {feature}.");
+        }
+
+        // Encoders
+        Require(c.SupportsLibX264Encoder);
+        Require(c.SupportsLibX265Encoder);
+        Require(c.SupportsPngEncoder);
+        Require(c.SupportsLibFDKAACEncoder);
+        Require(c.SupportsAACEncoder);
+        Require(c.SupportsMovTextEncoder);
+        Require(c.SupportsDvdSubEncoder);
+
+        // Video decoders
+        Require(c.SupportsMpeg1VideoDecoder);
+        Require(c.SupportsMpeg2VideoDecoder);
+        Require(c.SupportsMpeg4Decoder);
+        Require(c.SupportsH263Decoder);
+        Require(c.SupportsH264Decoder);
+        Require(c.SupportsHEVCDecoder);
+        Require(c.SupportsVVCDecoder);
+        Require(c.SupportsVP8Decoder);
+        Require(c.SupportsVP9Decoder);
+        Require(c.SupportsAV1Decoder);
+        Require(c.SupportsLibDav1dDecoder);
+        Require(c.SupportsLibVpxDecoder);
+        Require(c.SupportsLibVpxVp9Decoder);
+
+        // Audio decoders
+        Require(c.SupportsAACDecoder);
+        Require(c.SupportsMP2Decoder);
+        Require(c.SupportsMP3Decoder);
+        Require(c.SupportsVorbisDecoder);
+        Require(c.SupportsOpusDecoder);
+
+        // Muxers
+        Require(c.SupportsMP4Muxing);
+
+        // Demuxers
+        Require(c.SupportsMovGroupDemuxing);
+        Require(c.SupportsMatroskaGroupDemuxing);
+        Require(c.SupportsAviDemuxing);
+        Require(c.SupportsMpegTSGroupDemuxing);
+        Require(c.SupportsMpegDemuxing);
+
+        // Filters
+        Require(c.SupportsZscaleFilter);
+        Require(c.SupportsScaleFilter);
+        Require(c.SupportsFpsFilter);
+        Require(c.SupportsTonemapFilter);
+        Require(c.SupportsFormatFilter);
+        Require(c.SupportsBwdifFilter);
+        Require(c.SupportsSetsarFilter);
     }
 
     public sealed class VideoFileInfo(string formatName, double? duration, ImmutableArray<StreamInfo> streams)
@@ -206,6 +272,9 @@ internal static class FFprobeUtils
         public bool SupportsVP8Decoder { get; set; }
         public bool SupportsVP9Decoder { get; set; }
         public bool SupportsAV1Decoder { get; set; }
+        public bool SupportsLibDav1dDecoder { get; set; }
+        public bool SupportsLibVpxDecoder { get; set; }
+        public bool SupportsLibVpxVp9Decoder { get; set; }
 
         // Audio codec decoder support
         public bool SupportsAACDecoder { get; set; }
@@ -360,6 +429,17 @@ internal static class FFprobeUtils
                     case "mp3" when info is ['D', _, 'A', ..]: _configInfo.SupportsMP3Decoder = true; break;
                     case "vorbis" when info is ['D', _, 'A', ..]: _configInfo.SupportsVorbisDecoder = true; break;
                     case "opus" when info is ['D', _, 'A', ..]: _configInfo.SupportsOpusDecoder = true; break;
+                }
+            }
+
+            // Initialize decoders
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-decoders", noStartingLine: false))
+            {
+                switch (name)
+                {
+                    case "libdav1d" when info is ['V', ..]: _configInfo.SupportsLibDav1dDecoder = true; break;
+                    case "libvpx-vp9" when info is ['V', ..]: _configInfo.SupportsLibVpxVp9Decoder = true; break;
+                    case "libvpx" when info is ['V', ..]: _configInfo.SupportsLibVpxDecoder = true; break;
                 }
             }
 
