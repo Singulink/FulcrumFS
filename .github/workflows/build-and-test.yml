@@ -60,15 +60,8 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build --configuration ${{ matrix.configuration }} --no-restore
-    - name: Test (Windows)
-      if: runner.os == 'Windows'
-      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal
-      env:
-        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-        TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
-    - name: Test (Linux)
-      if: runner.os == 'Linux'
-      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed
+    - name: Test
+      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed --max-parallel-test-modules 1
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
         TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
