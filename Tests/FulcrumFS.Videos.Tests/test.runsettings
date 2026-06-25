@@ -9,7 +9,7 @@
       <Workers>1</Workers>
       <Scope>MethodLevel</Scope>
     </Parallelize>
-    <CaptureTraceOutput>false</CaptureTraceOutput>
+    <CaptureTraceOutput>true</CaptureTraceOutput>
     <TestTimeout>3000000</TestTimeout>
   </MSTest>
 </RunSettings>

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using Shouldly;
 using Singulink.IO;
@@ -93,6 +94,8 @@ partial class Tests
     {
         string testName = TestContext.TestDisplayName ?? TestContext.TestName;
         AppendTestExecutionLog($"Started {testName}");
+        Trace.WriteLine($"Started {testName}");
+        TestContext.WriteLine($"Started {testName}");
 
         var completed = new ManualResetEventSlim(false);
 
@@ -113,6 +116,8 @@ partial class Tests
             {
                 completed.Set();
                 AppendTestExecutionLog($"Ended {testName}");
+                Trace.WriteLine($"Ended {testName}");
+                TestContext.WriteLine($"Ended {testName}");
             },
             registerProcessExit: false);
     }
