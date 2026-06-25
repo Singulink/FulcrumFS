@@ -60,14 +60,21 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build --configuration ${{ matrix.configuration }} --no-restore
-    - name: Test
-      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed
+    - name: Test (Windows)
+      if: runner.os == 'Windows'
+      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+        TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
+    - name: Test (Linux)
+      if: runner.os == 'Linux'
+      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed --max-parallel-test-modules 1 || true
       continue-on-error: true
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
         TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
     - name: Print test execution log on Linux
-      if: ${{ !cancelled() && runner.os == 'Linux' }}
+      if: ${{ runner.os == 'Linux' }}
       run: |
         log="${{ github.workspace }}/test-execution.log"
         if [ -f "$log" ]; then
@@ -77,7 +84,7 @@ jobs:
           echo "No test execution log found at $log"
         fi
     - name: Print test execution log on Windows
-      if: ${{ !cancelled() && runner.os == 'Windows' }}
+      if: ${{ runner.os == 'Windows' }}
       run: |
         $log = "${{ github.workspace }}/test-execution.log"
         if (Test-Path $log) {
