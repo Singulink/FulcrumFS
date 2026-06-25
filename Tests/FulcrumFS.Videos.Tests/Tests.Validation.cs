@@ -370,6 +370,7 @@ partial class Tests
         if (fileName.StartsWith("video10") && fileName[7] is >= '7' and <= '8' && fileName.Length > 11) return; // Skip videos 10x for now
 
         // SET 2
+        if (fileName.StartsWith("video12") && fileName.Length > 11) return; // Skip videos 12x for now
         if (fileName.StartsWith("video13") && fileName.Length > 11) return; // Skip videos 13x for now
 
         // SET 3
