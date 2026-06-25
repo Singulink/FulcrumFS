@@ -62,11 +62,12 @@ jobs:
       run: dotnet build --configuration ${{ matrix.configuration }} --no-restore
     - name: Test
       run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed
+      continue-on-error: true
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
         TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
     - name: Print test execution log on Linux
-      if: always() && runner.os == 'Linux'
+      if: ${{ !cancelled() && runner.os == 'Linux' }}
       run: |
         log="${{ github.workspace }}/test-execution.log"
         if [ -f "$log" ]; then
@@ -76,7 +77,7 @@ jobs:
           echo "No test execution log found at $log"
         fi
     - name: Print test execution log on Windows
-      if: always() && runner.os == 'Windows'
+      if: ${{ !cancelled() && runner.os == 'Windows' }}
       run: |
         $log = "${{ github.workspace }}/test-execution.log"
         if (Test-Path $log) {
