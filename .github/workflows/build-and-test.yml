@@ -61,15 +61,15 @@ jobs:
       run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
     - name: Build (Release)
       run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
-    - parallel:
-      - name: Test (Debug)
-        run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
-        env:
-          FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-      - name: Test (Release)
-        run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
-        env:
-          FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    - name: Test (Debug)
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    - name: Test (Release)
+      if: ${{ !cancelled() }}
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
 
   build-and-test-video-windows:
     runs-on: windows-latest
@@ -97,12 +97,12 @@ jobs:
       run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
     - name: Build (Release)
       run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
-    - parallel:
-      - name: Test (Debug)
-        run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
-        env:
-          FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-      - name: Test (Release)
-        run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
-        env:
-          FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    - name: Test (Debug)
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    - name: Test (Release)
+      if: ${{ !cancelled() }}
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
