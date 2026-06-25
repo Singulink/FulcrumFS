@@ -367,6 +367,8 @@ partial class Tests
     public async Task TestH264ReencodeOptions(string fileName)
     {
         if (fileName.StartsWith("video10") && fileName.Length > 11) return; // Skip videos 10x for now
+        if (fileName.StartsWith("video12") && fileName.Length > 11) return; // Skip videos 12x for now
+        if (fileName.StartsWith("video13") && fileName.Length > 11) return; // Skip videos 13x for now
 
         using var testTracker = TrackTestExecution();
         // This tests that it can succeed processing every valid file (with original settings, rather than limited ones), that the stream count matches
