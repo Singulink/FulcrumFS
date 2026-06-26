@@ -811,7 +811,13 @@ partial class Tests
         {
             await TestResizeHandlingImpl(VideoCodec.HEVC, fileName, expectedError, maxSize, inputSize, outputSize);
         }
-        catch when (fileName == "video166.mp4" && expectedError == null && maxSize == (1000, 50) && inputSize == (96, 128) && outputSize == (38, 50))
+        catch (Exception ex) when (
+            ex is not OperationCanceledException &&
+            fileName == "video166.mp4" &&
+            expectedError == null &&
+            maxSize == (1000, 50) &&
+            inputSize == (96, 128) &&
+            outputSize == (38, 50))
         {
             // See https://bitbucket.org/multicoreware/x265_git/issues/1022/heap-corruption-issue
 

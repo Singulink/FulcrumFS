@@ -304,7 +304,7 @@ public sealed partial class Tests
                 exceptionMessage: null,
                 expectedChanges: (NewStreamCount: 15, StreamMapping: []));
         }
-        catch when (maxWidth == 41 && maxHeight == 37)
+        catch (Exception ex) when (ex is not OperationCanceledException && maxWidth == 41 && maxHeight == 37)
         {
             // See https://bitbucket.org/multicoreware/x265_git/issues/1022/heap-corruption-issue
 
