@@ -1427,7 +1427,8 @@ public sealed class VideoProcessor : FileProcessor
                             filterOverride.ResizeTo = (resultWidth, resultHeight);
                         }
 
-                        // If resolution is above level 7.2 limit, enable level 8.5 support:
+                        // If resolution is above level 7.2 limit, enable level 8.5 support.
+                        // Note: this is the only level 7.2 limit that x265 currently requires special handling for.
                         if ((long)resultWidth * resultHeight > 142_606_336) requiresLevel85ForX265 = true;
                     }
                 }
@@ -1501,7 +1502,7 @@ public sealed class VideoProcessor : FileProcessor
                         // Make the file more compatible by using 'hvc1' tag:
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamTagOverride(streamKind: 'v', streamIndexWithinKind: id, tag: "hvc1"));
 
-                        // level 8.5 support is now under allow-non-conformance=1 on some builds of x265
+                        // Level 8.5 support is now under allow-non-conformance=1 on some builds of x265
                         // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).
                         if (requiresLevel85ForX265)
                         {

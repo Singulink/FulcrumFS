@@ -1053,6 +1053,58 @@ partial class Tests
     }
 
     [TestMethod]
+    public async Task TestLooseSourceFormatWithOtherExtensionRemuxesToStrictResultFormat()
+    {
+        // Tests that a .mov file that is renamed to .mp4 and is valid by MP4Loose is remuxed (not re-encoded) when MP4Loose is the only allowed source format
+        // but MP4 is the only allowed result format. The streams should be preserved but the container changes.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        // video3.mov is a valid mov file with 1 video stream and 1 audio stream, both MP4-compatible.
+        string tempFilePath = GetUniqueTempFilePath(".mp4");
+        File.Copy(_videoFilesDir.CombineFile("video3.mov").PathExport, tempFilePath);
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                SourceFormats = [MediaContainerFormat.MP4Loose],
+                ResultFormats = [MediaContainerFormat.MP4],
+            },
+            tempFilePath,
+            exceptionMessage: null,
+            expectedChanges: (NewStreamCount: 2, StreamMapping:
+            [
+                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: true), // Video stream
+                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // Audio stream
+            ]));
+    }
+
+    [TestMethod]
+    public async Task TestLooseSourceFormatWithOtherExtensionPreserves()
+    {
+        // Tests that a .mov file that is renamed to .mp4 and is valid by MP4Loose is preserved when MP4Loose is the only allowed source format & an allowed
+        // result format.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        // video3.mov is a valid mov file with 1 video stream and 1 audio stream, both MP4-compatible.
+        string tempFilePath = GetUniqueTempFilePath(".mp4");
+        File.Copy(_videoFilesDir.CombineFile("video3.mov").PathExport, tempFilePath);
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                SourceFormats = [MediaContainerFormat.MP4Loose],
+                ResultFormats = [MediaContainerFormat.MP4, MediaContainerFormat.MP4Loose],
+            },
+            tempFilePath,
+            exceptionMessage: null,
+            expectedChanges: null);
+    }
+
+    [TestMethod]
     public async Task TestLooseSourceFormatWithLooseResultFormatDoesntRemux()
     {
         // Tests that a .mov file that is valid by MP4Loose is not remuxed when MP4Loose is also an allowed result format.

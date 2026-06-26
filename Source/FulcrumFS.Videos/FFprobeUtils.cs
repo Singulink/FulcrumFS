@@ -438,8 +438,8 @@ internal static class FFprobeUtils
                 switch (name)
                 {
                     case "libdav1d" when info is ['V', ..]: _configInfo.SupportsLibDav1dDecoder = true; break;
-                    case "libvpx-vp9" when info is ['V', ..]: _configInfo.SupportsLibVpxVp9Decoder = true; break;
                     case "libvpx" when info is ['V', ..]: _configInfo.SupportsLibVpxDecoder = true; break;
+                    case "libvpx-vp9" when info is ['V', ..]: _configInfo.SupportsLibVpxVp9Decoder = true; break;
                 }
             }
 

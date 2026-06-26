@@ -249,6 +249,7 @@ public sealed partial class Tests
     [DataRow(59, 53)]
     public async Task TestComplexFile(int maxWidth, int maxHeight)
     {
+        // Test processing a complex file with many streams with a complex processing scenario.
         using var repoCtx = GetRepo(out var repo);
 
         try
