@@ -1339,6 +1339,7 @@ public sealed class VideoProcessor : FileProcessor
 
                 // Check that we have a valid size & fps:
 
+                bool requiresLevel85ForX265Local = false;
                 if (reencode)
                 {
                     // Check that our fps is parseable (i.e., not above int.MaxValue):
@@ -1425,10 +1426,10 @@ public sealed class VideoProcessor : FileProcessor
                             }
 
                             filterOverride.ResizeTo = (resultWidth, resultHeight);
-
-                            // If resolution is above level 7.2 limit, enable level 8.5 support:
-                            if ((long)resultWidth * resultHeight > 142_606_336) requiresLevel85ForX265 = true;
                         }
+
+                        // If resolution is above level 7.2 limit, enable level 8.5 support:
+                        if ((long)resultWidth * resultHeight > 142_606_336) requiresLevel85ForX265Local = true;
                     }
                 }
 
@@ -1500,6 +1501,9 @@ public sealed class VideoProcessor : FileProcessor
 
                         // Make the file more compatible by using 'hvc1' tag:
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamTagOverride(streamKind: 'v', streamIndexWithinKind: id, tag: "hvc1"));
+
+                        // Flow the local "requires level 8.5" flag to the global one (we just set it globally once for simplicity, rather than per stream):
+                        requiresLevel85ForX265 |= requiresLevel85ForX265Local;
                     }
                     else
                     {
@@ -1948,7 +1952,7 @@ public sealed class VideoProcessor : FileProcessor
             // level 8.5 support is now under allow-non-conformance=1 on some builds of x265
             // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).
             perOutputStreamOverrides.Add(
-                new FFmpegUtils.PerStreamX265ParamsOverride(streamKind: 'v', streamIndexWithinKind: -1, paramsToPass: "allow-non-conformance=1"));
+                new FFmpegUtils.PerStreamX265ParamsOverride(streamKind: '\0', streamIndexWithinKind: -1, paramsToPass: "allow-non-conformance=1"));
         }
 
         // Finish setting up & running the main FFmpeg command:
