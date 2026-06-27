@@ -1077,7 +1077,8 @@ partial class Tests
             [
                 (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: true), // Video stream
                 (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // Audio stream
-            ]));
+            ]),
+            pathIsAbsolute: true);
     }
 
     [TestMethod]
@@ -1101,7 +1102,8 @@ partial class Tests
             },
             tempFilePath,
             exceptionMessage: null,
-            expectedChanges: null);
+            expectedChanges: null,
+            pathIsAbsolute: true);
     }
 
     [TestMethod]
