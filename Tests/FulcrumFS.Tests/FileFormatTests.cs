@@ -31,6 +31,12 @@ public sealed class FileFormatTests
         [FileFormat.Tgp, "sample.3gp"],
         [FileFormat.Tg2, "sample.3g2"],
         [FileFormat.Mj2, "sample.mj2"],
+        [FileFormat.Mp4Loose, "sample.mp4"],
+        [FileFormat.Mp4Loose, "sample.mov"],
+        [FileFormat.Mp4Loose, "sample.m4a"],
+        [FileFormat.Mp4Loose, "sample.3gp"],
+        [FileFormat.Mp4Loose, "sample.3g2"],
+        [FileFormat.Mp4Loose, "sample.mj2"],
         [FileFormat.Mkv, "sample.mkv"],
         [FileFormat.WebM, "sample.webm"],
         [FileFormat.Ts, "sample.ts"],
@@ -101,6 +107,15 @@ public sealed class FileFormatTests
     }
 
     [TestMethod]
+    public async Task Mp4Loose_TsBytes_Fails()
+    {
+        // The mp4 loose format does not check the brand, but it should still not accept the ts sample.
+        await using var stream = File.OpenRead(_sampleDir.CombineFile("sample.ts").PathExport);
+        var result = await FileFormat.Mp4Loose.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+    }
+
+    [TestMethod]
     public async Task Ts_M2tsBytes_Fails()
     {
         await using var stream = File.OpenRead(_sampleDir.CombineFile("sample.m2ts").PathExport);
@@ -151,7 +166,7 @@ public sealed class FileFormatTests
         [
             FileFormat.Jpeg, FileFormat.Png, FileFormat.Gif, FileFormat.WebP, FileFormat.Bmp, FileFormat.Tiff,
             FileFormat.Heic, FileFormat.Heif, FileFormat.Avif,
-            FileFormat.Mp4, FileFormat.Mov, FileFormat.M4a, FileFormat.Tgp, FileFormat.Tg2, FileFormat.Mj2,
+            FileFormat.Mp4Loose, FileFormat.Mp4, FileFormat.Mov, FileFormat.M4a, FileFormat.Tgp, FileFormat.Tg2, FileFormat.Mj2,
             FileFormat.Mkv, FileFormat.WebM,
             FileFormat.Ts, FileFormat.M2ts,
             FileFormat.Avi, FileFormat.Mpeg, FileFormat.Wav, FileFormat.Mp3, FileFormat.Flac, FileFormat.Ogg,

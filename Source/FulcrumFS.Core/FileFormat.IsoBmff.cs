@@ -20,18 +20,7 @@ public abstract partial class FileFormat
 
         public override async ValueTask<FileFormatValidationResult> ValidateAsync(Stream stream, CancellationToken cancellationToken)
         {
-            IsoBmffHeaderReader.FtypInfo? ftyp = await IsoBmffHeaderReader.ReadFtypAsync(stream, cancellationToken).ConfigureAwait(false);
-
-            if (ftyp is null)
-                return FileFormatValidationResult.Invalid($"File does not contain a valid ISOBMFF 'ftyp' box (required for {Name}).");
-
-            if (!IsoBmffHeaderReader.BrandsMatch(ftyp.Value, _acceptedBrands))
-            {
-                return FileFormatValidationResult.Invalid(
-                    $"File's major brand '{ftyp.Value.MajorBrand}' and compatible brands do not match any accepted brand for {Name}.");
-            }
-
-            return FileFormatValidationResult.Success;
+            return await IsoBmffHeaderValidator.CheckFtypAsync(Name, _acceptedBrands, stream, cancellationToken).ConfigureAwait(false);
         }
     }
 }

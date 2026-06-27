@@ -126,7 +126,7 @@ public abstract class VideoCodec
         writableFileExtension: ".webm",
         supportsMP4Muxing: false,
         supportsEncoding: false,
-        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsVP8Decoder);
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsVP8Decoder && FFprobeUtils.Configuration.SupportsLibVpxDecoder);
 
     /// <summary>
     /// Gets the VP9 video codec. Does not support encoding.
@@ -136,7 +136,7 @@ public abstract class VideoCodec
         writableFileExtension: ".mp4",
         supportsMP4Muxing: true,
         supportsEncoding: false,
-        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsVP9Decoder);
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsVP9Decoder && FFprobeUtils.Configuration.SupportsLibVpxVp9Decoder);
 
     /// <summary>
     /// Gets the AV1 video codec. Does not support encoding.
@@ -146,7 +146,7 @@ public abstract class VideoCodec
         writableFileExtension: ".mp4",
         supportsMP4Muxing: true,
         supportsEncoding: false,
-        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsAV1Decoder);
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsAV1Decoder && FFprobeUtils.Configuration.SupportsLibDav1dDecoder);
 
     /// <summary>
     /// Gets a list of all supported video codecs (with encodable ones first).

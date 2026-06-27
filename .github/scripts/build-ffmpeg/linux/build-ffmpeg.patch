@@ -1,0 +1,15 @@
+diff --git a/build-ffmpeg b/build-ffmpeg
+index ab8304a..00f4e90 100644
+--- a/build-ffmpeg
++++ b/build-ffmpeg
+@@ -701,8 +701,8 @@ if $NONFREE_AND_GPL; then
+ fi
+ 
+ if $NONFREE_AND_GPL; then
+-  if build "x265" "8be7dbf"; then
+-    download "https://bitbucket.org/multicoreware/x265_git/get/8be7dbf8159ddfceea4115675a6d48e1611b8baa.tar.gz" "x265-8be7dbf.tar.gz"
++  if build "x265" "6fdfffe"; then
++    download "https://bitbucket.org/multicoreware/x265_git/get/6fdfffe8d3afe028c24ab8712ce07c90432934cf.tar.gz" "x265-6fdfffe.tar.gz"
+ 
+     if $MACOS_SILICON; then
+         export CXXFLAGS="-DHAVE_NEON=1 ${CXXFLAGS}"

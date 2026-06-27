@@ -1,0 +1,3 @@
+# mpv is not built (mpv=2 in media-autobuild_suite.ini), so the contents of this file are unused.
+# It exists only so the suite does not stop to interactively prompt for / pause on mpv options when
+# ffmpegChoice=1. Lines starting with # are ignored.

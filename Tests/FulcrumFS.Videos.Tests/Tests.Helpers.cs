@@ -256,6 +256,46 @@ partial class Tests
         return (outputFilePath, disposeHelper);
     }
 
+    private async Task<string> GetStreamHash(string inputFile, CancellationToken cancellationToken)
+    {
+        // Hashes the elementary packet data of a single-stream file. This compares the actual encoded stream
+        // content while ignoring container-level framing (sample tables, edit lists and timestamps) which can
+        // legitimately differ between ffmpeg versions even for a faithful stream copy.
+        string output = await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", inputFile,
+                "-map", "0",
+                "-c", "copy",
+                "-f", "streamhash",
+                "-hash", "md5",
+                "-xerror",
+                "-hide_banner",
+                "-"
+            ],
+            cancellationToken);
+
+        return output.Trim();
+    }
+
+    private async Task<string> GetCodecTag(string inputFile, CancellationToken cancellationToken)
+    {
+        // Reads the container codec tag (e.g. hvc1 vs hev1) from the stream's sample entry. This lives in the container
+        // rather than the packet data, so comparing it ensures container-level tag remuxing is still detected as a change.
+        string output = await RunFFtoolProcessWithErrorHandling(
+            "ffprobe",
+            [
+                "-v", "error",
+                "-select_streams", "0",
+                "-show_entries", "stream=codec_tag_string",
+                "-of", "default=nokey=1:noprint_wrappers=1",
+                inputFile
+            ],
+            cancellationToken);
+
+        return output.Trim();
+    }
+
     private async Task<bool> CompareStreamEquality(
         string file1,
         string file2,
@@ -264,17 +304,21 @@ partial class Tests
         int streamIdx2,
         CancellationToken cancellationToken)
     {
-        // Extracts matching streams from two files and compares their contents.
+        // Extracts matching streams from two files and compares their elementary stream contents (packet data) along with the container codec tag, so a
+        // tag-only remux (e.g. hev1 -> hvc1) is still detected as a change.
         IDisposable disposeHelper;
         (string extractedFile1, disposeHelper) = await ExtractStream(file1, extension, streamIdx1, cancellationToken);
         using var disposeHelper1 = disposeHelper;
         (string extractedFile2, disposeHelper) = await ExtractStream(file2, extension, streamIdx2, cancellationToken);
         using var disposeHelper2 = disposeHelper;
 
-        await using var stream1 = FilePath.ParseAbsolute(extractedFile1).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
-        await using var stream2 = FilePath.ParseAbsolute(extractedFile2).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+        string hash1 = await GetStreamHash(extractedFile1, cancellationToken);
+        string hash2 = await GetStreamHash(extractedFile2, cancellationToken);
 
-        return await AreStreamsEqual(stream1, stream2, cancellationToken);
+        string tag1 = await GetCodecTag(extractedFile1, cancellationToken);
+        string tag2 = await GetCodecTag(extractedFile2, cancellationToken);
+
+        return hash1 == hash2 && tag1 == tag2;
     }
 
     private async Task<int> GetStreamCount(string fileName, CancellationToken cancellationToken)
@@ -422,7 +466,7 @@ partial class Tests
         return equal;
     }
 
-    public static IEnumerable<object[]> VideosToCheck => field ??= [.. Enumerable.Range(1, 200).Select((x) => (object[])[
+    public static IEnumerable<object[]> VideosToCheck => field ??= [.. Enumerable.Range(1, 203).Select((x) => (object[])[
         ((IEnumerable<string>)[".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".mpeg", ".3gp"])
             .Select((y) => "video" + x.ToString(CultureInfo.InvariantCulture) + y).Single((y) => _videoFilesDir.CombineFile(y).Exists)
     ])];

@@ -42,6 +42,12 @@ public abstract partial class FileFormat
 
     #region ISOBMFF Media
 
+    /// <summary>Gets the loose MP4 media file format. Extensions: <c>.mp4</c> (primary), <c>.mov</c>, <c>.m4a</c>, <c>.3gp</c>, <c>.3g2</c>, <c>.mj2</c>.</summary>
+    /// <remarks>
+    /// This format is less strict and does not check the brand, it leaves checking up to ffmpeg which checks for the <c>mov,mp4,m4a,3gp,3g2,mj2</c> group.
+    /// </remarks>
+    public static FileFormat Mp4Loose { get; } = new IsoBmffFileFormat("MP4 Loose", [".mp4", ".mov", ".m4a", ".3gp", ".3g2", ".mj2"], []);
+
     /// <summary>Gets the MP4 media file format. Extension: <c>.mp4</c>.</summary>
     public static FileFormat Mp4 { get; } = new IsoBmffFileFormat("MP4", [".mp4"],
     [
