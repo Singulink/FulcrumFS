@@ -17,6 +17,13 @@ public sealed class FFprobeUtilsTests
     private static readonly IAbsoluteDirectoryPath _videosDir = _appDir.CombineDirectory("Videos");
 
     [TestMethod]
+    public void EnsureAllFeaturesPresent()
+    {
+        // Throws if the configured ffmpeg/ffprobe build is missing anything the tests may rely on.
+        FFprobeUtils.EnsureAllFeaturesPresent();
+    }
+
+    [TestMethod]
     [DynamicData(nameof(VideosToCheck))]
     internal async Task ValidateReading(string file, FFprobeUtils.VideoFileInfo expectedInfo)
     {
@@ -8324,6 +8331,123 @@ public sealed class FFprobeUtilsTests
                     Height: 4208,
                     Duration: 1.0,
                     FpsNum: 993,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video201.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    IsStillImage: false,
+                    IsDefaultStream: true,
+                    IsBadCandidateForThumbnail: false,
+                    Width: 16384,
+                    Height: 8704,
+                    Duration: 1.0,
+                    FpsNum: 3,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video202.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    IsStillImage: false,
+                    IsDefaultStream: true,
+                    IsBadCandidateForThumbnail: false,
+                    Width: 16382,
+                    Height: 8706,
+                    Duration: 1.0,
+                    FpsNum: 3,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuvj420p",
+                    ColorRange: "pc",
+                    ColorSpace: null,
+                    ColorTransfer: null,
+                    ColorPrimaries: null,
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false),
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AAC.Name,
+                    ProfileName: AudioCodec.AAC.Profile,
+                    Language: "und",
+                    Duration: 1.0,
+                    Channels: 2,
+                    SampleRate: 44100,
+                    ChannelLayout: "stereo"),
+            ])
+        ],
+        [
+            "video203.mp4",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 1.0,
+            [
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "High",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    IsStillImage: false,
+                    IsDefaultStream: true,
+                    IsBadCandidateForThumbnail: false,
+                    Width: 16384,
+                    Height: 8706,
+                    Duration: 1.0,
+                    FpsNum: 3,
                     FpsDen: 1,
                     SarNum: 1,
                     SarDen: 1,

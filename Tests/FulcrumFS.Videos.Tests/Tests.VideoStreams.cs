@@ -786,6 +786,9 @@ partial class Tests
         (H264: false, HEVC: true, ["video136.mp4", "Cannot re-encode video to fit within specified dimensions.", null, (2, 16384), null]),
         (H264: false, HEVC: true, ["video185.mkv", null, null, (64, 65536), (64, 65534)]),
         (H264: true, HEVC: false, ["video185.mkv", null, null, (64, 65536), (16, 16384)]),
+        (H264: true, HEVC: true, ["video201.mp4", null, null, (16384, 8704), (16384, 8704)]),
+        (H264: true, HEVC: true, ["video202.mp4", null, null, (16382, 8706), (16382, 8706)]),
+        (H264: true, HEVC: true, ["video203.mp4", null, null, (16384, 8706), (16384, 8706)]),
     ];
 
     public static IEnumerable<object?[]> TestH264ResizeHandlingData => field ??= TestResizeHandlingData.Where((x) => x.H264).Select((x) => x.Value);
@@ -804,7 +807,24 @@ partial class Tests
     public async Task TestResizeHandlingHEVC(
         string fileName, string? expectedError, (int W, int H)? maxSize, (int W, int H) inputSize, (int W, int H)? outputSize)
     {
-        await TestResizeHandlingImpl(VideoCodec.HEVC, fileName, expectedError, maxSize, inputSize, outputSize);
+        try
+        {
+            await TestResizeHandlingImpl(VideoCodec.HEVC, fileName, expectedError, maxSize, inputSize, outputSize);
+        }
+        catch (Exception ex) when (
+            ex is not OperationCanceledException &&
+            fileName == "video166.mp4" &&
+            expectedError == null &&
+            maxSize == (1000, 50) &&
+            inputSize == (96, 128) &&
+            outputSize == (38, 50))
+        {
+            // See https://bitbucket.org/multicoreware/x265_git/issues/1022/heap-corruption-issue
+
+#pragma warning disable RS0030 // Do not use banned APIs
+            Assert.Inconclusive();
+#pragma warning restore RS0030 // Do not use banned APIs
+        }
     }
 
     private async Task TestResizeHandlingImpl(

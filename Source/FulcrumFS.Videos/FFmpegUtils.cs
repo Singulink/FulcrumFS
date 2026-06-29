@@ -149,6 +149,14 @@ internal static class FFmpegUtils
         protected override string CommandArgument => Preset;
     }
 
+    public sealed class PerStreamX265ParamsOverride(char streamKind, int streamIndexWithinKind, string paramsToPass)
+        : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
+    {
+        public string ParamsToPass { get; } = paramsToPass;
+        protected override string CommandName => "x265-params";
+        protected override string CommandArgument => ParamsToPass;
+    }
+
     public sealed class PerStreamFilterOverride(char streamKind, int streamIndexWithinKind)
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {

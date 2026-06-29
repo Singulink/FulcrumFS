@@ -78,26 +78,31 @@ partial class Tests
         var videoPath = (await repo.GetAsync(fileId)).Path;
         videoPath.Exists.ShouldBeTrue();
 
-        // Check that the original file was not progressive download, and the new one is (note: the check is very basic & could be fooled, but is sufficient
-        // for test purposes):
-        var (_, errorOriginal, returnCodeOriginal) = await RunFFtoolProcess(
-            "ffprobe",
-            ["-i", _videoFilesDir.CombineFile("video1.mp4").PathExport, "-v", "trace"],
-            TestContext.CancellationToken);
-        var (_, errorModified, returnCodeModified) = await RunFFtoolProcess(
-            "ffprobe",
-            ["-i", videoPath.PathExport, "-v", "trace"],
-            TestContext.CancellationToken);
-        returnCodeOriginal.ShouldBe(0);
-        returnCodeModified.ShouldBe(0);
-        int idxMoovOriginal = errorOriginal.IndexOf("moov", StringComparison.Ordinal);
-        int idxMoovModified = errorModified.IndexOf("moov", StringComparison.Ordinal);
-        int idxMdatOriginal = errorOriginal.IndexOf("mdat", StringComparison.Ordinal);
-        int idxMdatModified = errorModified.IndexOf("mdat", StringComparison.Ordinal);
+        // Check that the original file was not progressive download, and the new one is (note: the check is very basic & could be fooled by spurious moov/mdat
+        // bytes, but is sufficient for this test's purposes).
+        // Note: we could use ffprobe -v trace, but it seems to get frozen on Linux, so we just "parse" it ourselves.
+        // Note: unless we get unlucky & end up with multiple instances of the moov/mdat bytes in the file (which we check for), this is more reliable than
+        // ffprobe anyway, because it directly gives the exact position in the file, whereas ffprobe prints things more than once & makes it less trivial to get
+        // the file offset out of its output.
+        /*
+            ---------------------------------------------------------------------------------------------------------------------------------------------------------
+            WARNING: PLEASE DO NOT CHANGE THIS CODE WITHOUT THOROUGHLY TESTING IT ON LINUX IN CI AND LOCALLY - IGNORING THIS HAS WASTED A LOT OF TIME MORE THAN ONCE.
+            ---------------------------------------------------------------------------------------------------------------------------------------------------------
+        */
+        byte[] originalFile = await File.ReadAllBytesAsync(_videoFilesDir.CombineFile("video1.mp4").PathExport, TestContext.CancellationToken);
+        byte[] modifiedFile = await File.ReadAllBytesAsync(videoPath.PathExport, TestContext.CancellationToken);
+        int idxMoovOriginal = originalFile.IndexOf("moov"u8);
+        int idxMoovModified = modifiedFile.IndexOf("moov"u8);
+        int idxMdatOriginal = originalFile.IndexOf("mdat"u8);
+        int idxMdatModified = modifiedFile.IndexOf("mdat"u8);
         idxMoovOriginal.ShouldBeGreaterThanOrEqualTo(0);
         idxMoovModified.ShouldBeGreaterThanOrEqualTo(0);
         idxMdatOriginal.ShouldBeGreaterThanOrEqualTo(0);
         idxMdatModified.ShouldBeGreaterThanOrEqualTo(0);
+        originalFile.LastIndexOf("moov"u8).ShouldBe(idxMoovOriginal);
+        modifiedFile.LastIndexOf("moov"u8).ShouldBe(idxMoovModified);
+        originalFile.LastIndexOf("mdat"u8).ShouldBe(idxMdatOriginal);
+        modifiedFile.LastIndexOf("mdat"u8).ShouldBe(idxMdatModified);
         idxMoovOriginal.ShouldBeGreaterThan(idxMdatOriginal);
         idxMoovModified.ShouldBeLessThan(idxMdatModified);
     }

@@ -3,11 +3,11 @@ name: build and test
 on:
   push:
     branches: [ main ]
-  pull_request_target:
+  pull_request:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  build-and-test-core:
     strategy:
       fail-fast: false
       matrix:
@@ -15,74 +15,94 @@ jobs:
         configuration: [Debug, Release]
 
     runs-on: ${{ matrix.os }}
-    environment: ${{ matrix.os == 'windows-latest' && 'test-windows-x64' || 'test-linux-x64' }}
+    name: ${{ matrix.os == 'windows-latest' && 'test-core-windows-x64' || 'test-core-linux-x64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
 
     steps:
-    - name: Checkout (push)
-      if: github.event_name == 'push'
+    - name: Checkout
       uses: actions/checkout@v6
-    - name: Checkout base branch (pull_request_target)
-      if: github.event_name == 'pull_request_target'
-      uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.pull_request.base.ref }}
-    - name: Download ffmpeg binaries
-      run: |
-        curl -L "${{ secrets.FFMPEG_BINARIES_URL }}" -o file.zip
-    - name: Unzip ffmpeg binaries on Linux
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y unzip
-        unzip file.zip -d Binaries
-        chmod +x Binaries/ffmpeg
-        chmod +x Binaries/ffprobe
-        rm file.zip
-    - name: Unzip ffmpeg binaries on Windows
-      if: runner.os == 'Windows'
-      run: |
-        Expand-Archive -Path file.zip -DestinationPath Binaries
-        Remove-Item file.zip
-    - name: Checkout PR head (pull_request_target)
-      if: github.event_name == 'pull_request_target'
-      uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-        clean: false
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: |
           10.0.x
     - name: Clean
-      run: dotnet clean --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
+      run: dotnet clean FulcrumFS.slnx --configuration ${{ matrix.configuration }} && dotnet nuget locals all --clear
     - name: Install dependencies
-      run: dotnet restore
+      run: dotnet restore FulcrumFS.slnx
     - name: Build
-      run: dotnet build --configuration ${{ matrix.configuration }} --no-restore
+      run: dotnet build FulcrumFS.slnx --configuration ${{ matrix.configuration }} --no-restore
     - name: Test
-      run: dotnet test --configuration ${{ matrix.configuration }} --no-build --verbosity normal --output Detailed --max-parallel-test-modules 1
+      run: dotnet test FulcrumFS.NoVideos.slnf --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+
+  build-and-test-video-linux:
+    runs-on: ubuntu-latest
+    name: test-video-linux-x64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Build ffmpeg binaries
+      env:
+        FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
+      run: |
+        mkdir -p "$FFMPEG_OUTPUT_DIR"
+        bash .github/scripts/build-ffmpeg/linux/bootstrap-linux.sh
+        chmod +x "$FFMPEG_OUTPUT_DIR"/*
+    - name: Clean
+      run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore FulcrumFS.slnx
+    - name: Build (Debug)
+      run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
+    - name: Build (Release)
+      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
+    - name: Test (Debug)
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-        TEST_EXECUTION_LOG: ${{ github.workspace }}/test-execution.log
-    - name: Print test execution log on Linux
-      if: ${{ runner.os == 'Linux' }}
+    - name: Test (Release)
+      if: ${{ !cancelled() }}
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+
+  build-and-test-video-windows:
+    runs-on: windows-latest
+    name: test-video-windows-x64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Build ffmpeg binaries
+      env:
+        FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
       run: |
-        log="${{ github.workspace }}/test-execution.log"
-        if [ -f "$log" ]; then
-          echo "===== Test execution log ($log) ====="
-          cat "$log"
-        else
-          echo "No test execution log found at $log"
-        fi
-    - name: Print test execution log on Windows
-      if: ${{ runner.os == 'Windows' }}
-      run: |
-        $log = "${{ github.workspace }}/test-execution.log"
-        if (Test-Path $log) {
-          Write-Host "===== Test execution log ($log) ====="
-          Get-Content -LiteralPath $log
-        }
-        else {
-          Write-Host "No test execution log found at $log"
-        }
+        New-Item -ItemType Directory -Force -Path $env:FFMPEG_OUTPUT_DIR | Out-Null
+        .\.github\scripts\build-ffmpeg\windows\bootstrap-windows.ps1
+    - name: Clean
+      run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore FulcrumFS.slnx
+    - name: Build (Debug)
+      run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
+    - name: Build (Release)
+      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
+    - name: Test (Debug)
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    - name: Test (Release)
+      if: ${{ !cancelled() }}
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
