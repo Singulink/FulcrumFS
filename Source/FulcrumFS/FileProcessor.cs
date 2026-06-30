@@ -13,7 +13,7 @@ public abstract class FileProcessor : IFileProcessingPipelineProvider, IFileProc
     /// Gets a string that can be used in progress callbacks to indicate which processor is currently running.
     /// </summary>
     /// <remarks>
-    /// Must not contain a space character - many processors just use their class name.
+    /// Must not contain a space character - by default, processors use their class name.
     /// </remarks>
     public virtual string ProcessorName => GetType().Name;
 
