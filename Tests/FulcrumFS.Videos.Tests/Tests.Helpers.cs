@@ -339,7 +339,8 @@ partial class Tests
         string? addAsyncExtensionOverride = null,
         bool throwWhenMainSourceUnchanged = false,
         bool pathIsAbsolute = false,
-        Func<string, Task>? afterFinishedAction = null)
+        Func<string, Task>? afterFinishedAction = null,
+        bool forceProgressReporting = false)
     {
         // Create the processing pipeline:
         var pipeline = new VideoProcessor(options).ToPipeline(throwWhenMainSourceUnchanged: throwWhenMainSourceUnchanged);
@@ -356,14 +357,20 @@ partial class Tests
             var ex = await Should.ThrowAsync<FileProcessingException>(async () =>
             {
                 await using var txn = await repo.BeginTransactionAsync();
+                TaskWithProgress<RepoFileGroupInfo> addAsyncTask;
                 if (addAsyncExtensionOverride is not null)
                 {
-                    await txn.AddAsync(stream, addAsyncExtensionOverride, true, pipeline, TestContext.CancellationToken);
+                    addAsyncTask = txn.AddAsync(stream, addAsyncExtensionOverride, true, pipeline, TestContext.CancellationToken);
                 }
                 else
                 {
-                    await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
+                    addAsyncTask = txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
                 }
+
+                // If we want to force progress reporting, do that now:
+                await foreach (var unused in addAsyncTask.ConfigureAwait(false)) { }
+
+                await addAsyncTask.ConfigureAwait(false);
             });
             ex.Message.ShouldBe(exceptionMessage);
 

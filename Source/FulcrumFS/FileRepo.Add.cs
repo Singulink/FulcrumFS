@@ -41,7 +41,7 @@ partial class FileRepo
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <inheritdoc cref="AddVariantAsync(FileId, string, string?, IFileProcessingPipelineSelector, CancellationToken)"/>
-    public Task<IReadOnlyList<RepoFileInfo>> AddVariantAsync(
+    public TaskWithProgress<IReadOnlyList<RepoFileInfo>> AddVariantAsync(
         FileId fileId,
         string variantId,
         IFileProcessingPipelineSelector pipeline,
@@ -61,20 +61,29 @@ partial class FileRepo
     /// <returns>The list of stored variants in pre-order (top-level first, then nested in declaration order). Variants whose pipelines stored an alias due to
     /// <see cref="FileProcessingPipeline.AliasWhenVariantSourceUnchanged"/> are included in the list with the resolved data file path.</returns>
     /// <exception cref="InvalidOperationException">A variant in the requested tree already exists.</exception>
-    public async Task<IReadOnlyList<RepoFileInfo>> AddVariantAsync(
+    public TaskWithProgress<IReadOnlyList<RepoFileInfo>> AddVariantAsync(
         FileId fileId,
         string variantId,
         string? sourceVariantId,
         IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        var result = await RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.Add, cancellationToken).ConfigureAwait(false);
-        Debug.Assert(result is not null, "Add mode should never return null.");
-        return result;
+        TaskWithProgress<IReadOnlyList<RepoFileInfo>?> result = new(cancellationToken, async (ct, progressCallback) => await RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.Add, progressCallback, ct).ConfigureAwait(false));
+
+        // We just check it is non-null in Debug via a continuation, and cast it with a nullable suppression, to save the overhead of CastTo.
+#if DEBUG
+        result.AddPostTask((isSuccessful, result) =>
+        {
+            if (isSuccessful) Debug.Assert(result is not null, "Add mode should never return null.");
+            return ValueTask.CompletedTask;
+        });
+#endif
+
+        return result!;
     }
 
     /// <inheritdoc cref="GetOrAddVariantAsync(FileId, string, string?, IFileProcessingPipelineSelector, CancellationToken)"/>
-    public Task<IReadOnlyList<RepoFileInfo>> GetOrAddVariantAsync(
+    public TaskWithProgress<IReadOnlyList<RepoFileInfo>> GetOrAddVariantAsync(
         FileId fileId,
         string variantId,
         IFileProcessingPipelineSelector pipeline,
@@ -93,20 +102,29 @@ partial class FileRepo
     /// marker is stored that transparently resolves to the variant's source on fetch operations. Nested variants of the aliased variant still run against the
     /// unchanged parent source.
     /// </remarks>
-    public async Task<IReadOnlyList<RepoFileInfo>> GetOrAddVariantAsync(
+    public TaskWithProgress<IReadOnlyList<RepoFileInfo>> GetOrAddVariantAsync(
         FileId fileId,
         string variantId,
         string? sourceVariantId,
         IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        var result = await RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.GetOrAdd, cancellationToken).ConfigureAwait(false);
-        Debug.Assert(result is not null, "GetOrAdd mode should never return null.");
-        return result;
+        TaskWithProgress<IReadOnlyList<RepoFileInfo>?> result = new(cancellationToken, (ct, progressCallback) => RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.GetOrAdd, progressCallback, ct));
+
+        // We just check it is non-null in Debug via a continuation, and cast it with a nullable suppression, to save the overhead of CastTo.
+#if DEBUG
+        result.AddPostTask((isSuccessful, result) =>
+        {
+            if (isSuccessful) Debug.Assert(result is not null, "GetOrAdd mode should never return null.");
+            return ValueTask.CompletedTask;
+        });
+#endif
+
+        return result!;
     }
 
     /// <inheritdoc cref="TryAddVariantAsync(FileId, string, string?, IFileProcessingPipelineSelector, CancellationToken)"/>
-    public Task<IReadOnlyList<RepoFileInfo>?> TryAddVariantAsync(
+    public TaskWithProgress<IReadOnlyList<RepoFileInfo>?> TryAddVariantAsync(
         FileId fileId,
         string variantId,
         IFileProcessingPipelineSelector pipeline,
@@ -120,14 +138,14 @@ partial class FileRepo
     /// <see langword="null"/> if any declared variant ID in the tree already exists or if any per-variant lock cannot be acquired immediately. The operation is
     /// strict and all-or-nothing: any collision aborts the entire add.
     /// </summary>
-    public Task<IReadOnlyList<RepoFileInfo>?> TryAddVariantAsync(
+    public TaskWithProgress<IReadOnlyList<RepoFileInfo>?> TryAddVariantAsync(
         FileId fileId,
         string variantId,
         string? sourceVariantId,
         IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        return RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.Try, cancellationToken);
+        return new(cancellationToken, (ct, progressCallback) => RunVariantAddAsync(fileId, variantId, sourceVariantId, pipeline, VariantAddMode.Try, progressCallback, ct));
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -136,12 +154,13 @@ partial class FileRepo
 
     private const int MaxAddRebaseRollForwardAttempts = 8;
 
-    private async Task<IReadOnlyList<RepoFileInfo>?> RunVariantAddAsync(
+    private async ValueTask<IReadOnlyList<RepoFileInfo>?> RunVariantAddAsync(
         FileId fileId,
         string variantId,
         string? sourceVariantId,
         IFileProcessingPipelineSelector rootSelector,
         VariantAddMode mode,
+        Func<ProgressValue, ValueTask>? progressCallback,
         CancellationToken cancellationToken)
     {
         variantId = VariantId.Normalize(variantId);
@@ -407,6 +426,7 @@ partial class FileRepo
                         existingByVariantId,
                         stagedNodes,
                         brokenMarkersToDelete,
+                        progressCallback,
                         cancellationToken).ConfigureAwait(false);
 
                     // Physically remove any broken alias markers under the slots we are about to fill. The batch move uses overwrite-false, so a stale marker
@@ -495,6 +515,7 @@ partial class FileRepo
         Dictionary<string, IAbsoluteFilePath>? existingByVariantId,
         List<StagedNode> stagedNodes,
         List<IAbsoluteFilePath>? brokenMarkersToDelete,
+        Func<ProgressValue, ValueTask>? progressCallback,
         CancellationToken cancellationToken)
     {
         Debug.Assert((streamSource is null) != (fileSource is null), "Exactly one of streamSource or fileSource must be non-null.");
@@ -544,7 +565,7 @@ partial class FileRepo
                         childRootVariantId = aliasSourceVid ?? FileRepoPaths.MainFileName;
                         childRootExtension = aliasSourceExt;
 
-                        await RunChildrenAsync(fileId, childSource, childRootVariantId, childRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, cancellationToken).ConfigureAwait(false);
+                        await RunChildrenAsync(fileId, childSource, childRootVariantId, childRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, progressCallback, cancellationToken).ConfigureAwait(false);
                         return;
                     }
                 }
@@ -562,7 +583,7 @@ partial class FileRepo
                     RootExtension = existingFile.Extension,
                 });
 
-                await RunChildrenAsync(fileId, existingFile, variantId, existingFile.Extension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, cancellationToken).ConfigureAwait(false);
+                await RunChildrenAsync(fileId, existingFile, variantId, existingFile.Extension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, progressCallback, cancellationToken).ConfigureAwait(false);
                 return;
             }
         }
@@ -580,7 +601,7 @@ partial class FileRepo
 
         try
         {
-            await pipeline.ExecuteAsync(context, knownRepoFileSource: fileSource is not null, isMainPipeline: variantId is null).ConfigureAwait(false);
+            await pipeline.ExecuteAsync(context, progressCallback, knownRepoFileSource: fileSource is not null, isMainPipeline: variantId is null).ConfigureAwait(false);
 
             stagedResult = await context.GetSourceAsFileAsync().ConfigureAwait(false);
 
@@ -626,7 +647,7 @@ partial class FileRepo
                 RootExtension = parentRootExtension,
             });
 
-            await RunChildrenAsync(fileId, childSource, parentRootVariantId, parentRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, cancellationToken).ConfigureAwait(false);
+            await RunChildrenAsync(fileId, childSource, parentRootVariantId, parentRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, progressCallback, cancellationToken).ConfigureAwait(false);
 
             return;
         }
@@ -650,7 +671,7 @@ partial class FileRepo
             RootExtension = thisRootExtension,
         });
 
-        await RunChildrenAsync(fileId, stagedResult, thisRootVariantId, thisRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, cancellationToken).ConfigureAwait(false);
+        await RunChildrenAsync(fileId, stagedResult, thisRootVariantId, thisRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, progressCallback, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RunChildrenAsync(
@@ -663,6 +684,7 @@ partial class FileRepo
         Dictionary<string, IAbsoluteFilePath>? existingByVariantId,
         List<StagedNode> stagedNodes,
         List<IAbsoluteFilePath>? brokenMarkersToDelete,
+        Func<ProgressValue, ValueTask>? progressCallback,
         CancellationToken cancellationToken)
     {
         if (variants.Count is 0)
@@ -685,6 +707,7 @@ partial class FileRepo
                 existingByVariantId,
                 stagedNodes,
                 brokenMarkersToDelete,
+                progressCallback,
                 cancellationToken).ConfigureAwait(false);
         }
     }
@@ -837,6 +860,7 @@ partial class FileRepo
         string extension,
         bool leaveOpen,
         IFileProcessingPipelineSelector rootSelector,
+        Func<ProgressValue, ValueTask>? progressCallback,
         CancellationToken cancellationToken)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
@@ -869,6 +893,7 @@ partial class FileRepo
                 existingByVariantId: null,
                 stagedNodes,
                 brokenMarkersToDelete: null,
+                progressCallback,
                 cancellationToken).ConfigureAwait(false);
 
             // Batch-move under indeterminate marker.

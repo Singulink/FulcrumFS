@@ -8,6 +8,9 @@ namespace FulcrumFS;
 /// </summary>
 internal sealed class NoChangeCountingProcessor : FileProcessor
 {
+    /// <inheritdoc />
+    public override string DisplayName => "NoChangeCountingProcessor";
+
     private int _invocationCount;
 
     public int InvocationCount => Volatile.Read(ref _invocationCount);
@@ -28,6 +31,9 @@ internal sealed class NoChangeCountingProcessor : FileProcessor
 /// </summary>
 internal sealed class RewriteProcessor : FileProcessor
 {
+    /// <inheritdoc />
+    public override string DisplayName => "RewriteProcessor";
+
     private readonly byte[] _content;
 
     public RewriteProcessor(byte[]? content = null) => _content = content ?? [1, 2, 3, 4, 5];

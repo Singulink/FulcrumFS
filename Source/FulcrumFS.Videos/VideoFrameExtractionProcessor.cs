@@ -6,21 +6,24 @@ namespace FulcrumFS.Videos;
 #pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
 
 /// <summary>
-/// Provides functionality to extract thumbnails from video files with specified options.
+/// Provides functionality to extract video frames from video files with specified options.
 /// </summary>
-public sealed class VideoThumbnailProcessor : FileProcessor
+public sealed class VideoFrameExtractionProcessor : FileProcessor
 {
+    /// <inheritdoc />
+    public override string DisplayName => "VideoFrameExtractionProcessor";
+
     /// <summary>
     /// <para>
-    /// Initializes a new instance of the <see cref="VideoThumbnailProcessor"/> class with the specified options.</para>
+    /// Initializes a new instance of the <see cref="VideoFrameExtractionProcessor"/> class with the specified options.</para>
     /// <para>
     /// Note: you must configure the ffmpeg executable paths by calling <see cref="VideoProcessor.ConfigureWithFFmpegExecutables"/> before creating an instance
     /// of this class.</para>
     /// <para>
     /// Note: if you want to do source video validation, you need to use <see cref="VideoProcessor" /> first and chain this after it, as this class does not
-    /// perform any validation itself, it just extracts a thumbnail from the provided video.</para>
+    /// perform any validation itself, it just extracts a video frame from the provided video.</para>
     /// </summary>
-    public VideoThumbnailProcessor(VideoThumbnailProcessingOptions options)
+    public VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions options)
     {
         Options = options;
 
@@ -35,9 +38,9 @@ public sealed class VideoThumbnailProcessor : FileProcessor
     }
 
     /// <summary>
-    /// Gets the options used to configure this <see cref="VideoThumbnailProcessor" />.
+    /// Gets the options used to configure this <see cref="VideoFrameExtractionProcessor" />.
     /// </summary>
-    public VideoThumbnailProcessingOptions Options { get; }
+    public VideoFrameExtractionProcessingOptions Options { get; }
 
     /// <inheritdoc/>
     public override IReadOnlyList<string> AllowedFileExtensions => [];
@@ -65,8 +68,8 @@ public sealed class VideoThumbnailProcessor : FileProcessor
             throw new FileProcessingException("Failed to read source video file information.", ex);
         }
 
-        // Select the video stream to extract thumbnail from (we prefer thumbnail streams, still image streams, then others that are not bad candidates for
-        // thumbnails (due to weird disposition), then any video stream - and within those categories we prefer default streams, except the last):
+        // Select the video stream to extract video frame from (we prefer thumbnail streams, still image streams, then others that are not bad candidates for
+        // video frames (due to weird disposition), then any video stream - and within those categories we prefer default streams, except the last):
         var (stream, idx) = sourceInfo.Streams
             .Select((x, i) => (x, i))
             .Where((x) => x.x is FFprobeUtils.VideoStreamInfo)
@@ -82,7 +85,7 @@ public sealed class VideoThumbnailProcessor : FileProcessor
 
         // If no suitable stream found, throw:
         if (stream is null)
-            throw new FileProcessingException("No suitable video stream found to extract thumbnail from.");
+            throw new FileProcessingException("No suitable video stream found to extract a video frame from.");
 
         // Determine timestamp to extract at:
         double? duration = stream.Duration ?? sourceInfo.Duration;
@@ -98,11 +101,11 @@ public sealed class VideoThumbnailProcessor : FileProcessor
                 (double v1, double v2) => (double.Min(v1, v2), v2 < v1),
                 (double v1, null) => (v1, false),
                 (null, double v2) => (v2, true),
-                _ => throw new FileProcessingException("No timestamp specified to extract thumbnail at."),
+                _ => throw new FileProcessingException("No timestamp specified to extract a video frame at."),
             };
 
             if (timestampSeconds.HasValue && timestampSeconds.Value > dur)
-                throw new FileProcessingException("Specified thumbnail timestamp is beyond the end of the video.");
+                throw new FileProcessingException("Specified video frame timestamp is beyond the end of the video.");
         }
 
         // Create temp file for output image:
@@ -154,7 +157,7 @@ public sealed class VideoThumbnailProcessor : FileProcessor
         // Create an enumerable so we can use spread syntax later:
         if (useOverride) additionalOutputStreamOverrides = [filterOverride];
 
-        // Helper to run the thumbnail extraction ffmpeg command:
+        // Helper to run the video frame extraction ffmpeg command:
         async Task<Exception?> TryRun((double Offset, bool FromEnd)? seek)
         {
             try
@@ -183,16 +186,16 @@ public sealed class VideoThumbnailProcessor : FileProcessor
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return new FileProcessingException("Failed to extract thumbnail image from video.", ex);
+                return new FileProcessingException("Failed to extract video frame from video.", ex);
             }
 
             if (!outputImageFile.Exists || outputImageFile.Length == 0)
-                return new FileProcessingException("Failed to extract thumbnail image from video (result file was not written).");
+                return new FileProcessingException("Failed to extract video frame from video (result file was not written).");
 
             return null;
         }
 
-        // Run ffmpeg to extract thumbnail:
+        // Run ffmpeg to extract the video frame:
         var originalException = await TryRun(timestampSeconds.HasValue ? (Offset: timestampSeconds.Value, FromEnd: false) : null).ConfigureAwait(false);
         if (originalException is null)
         {
@@ -230,7 +233,7 @@ public sealed class VideoThumbnailProcessor : FileProcessor
         return null;
     }
 
-    // Helper to share the logic for resizing a video thumbnail (similar to VideoProcessor.CalculateVideoResize, but simpler).
+    // Helper to share the logic for resizing a video frame (similar to VideoProcessor.CalculateVideoResize, but simpler).
     private static (int Width, int Height) CalculateThumbnailResize(
         int streamWidth,
         int streamHeight,
@@ -239,7 +242,7 @@ public sealed class VideoThumbnailProcessor : FileProcessor
         CancellationToken cancellationToken)
     {
         // We use 2^15 - 1 as the max dimensions, since some image viewers/editors have trouble with images larger than that (and it's more than large enough
-        // for most uses of thumbnails anyway):
+        // for most uses of video frames anyway):
         int maxW = 32767;
         int maxH = 32767;
 

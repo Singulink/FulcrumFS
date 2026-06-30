@@ -4,33 +4,33 @@ namespace FulcrumFS.Videos;
 
 /// <summary>
 /// <para>
-/// Specifies the options for processing videos to create a thumbnail with a <see cref="VideoThumbnailProcessor" />.</para>
+/// Specifies the options for processing videos to create a video frame with a <see cref="VideoFrameExtractionProcessor" />.</para>
 /// <para>
-/// If <see cref="IncludeThumbnailVideoStreams" /> is <see langword="true" /> and there is a video stream marked as a thumbnail stream, the thumbnail image is
+/// If <see cref="IncludeThumbnailVideoStreams" /> is <see langword="true" /> and there is a video stream marked as a thumbnail stream, the video frame is
 /// taken from that stream.</para>
 /// <para>
-/// Otherwise, the thumbnail image is taken from the earlier of <see cref="ImageTimestamp" /> and <see cref="ImageTimestampFraction" /> if both are specified
+/// Otherwise, the video frame is taken from the earlier of <see cref="ImageTimestamp" /> and <see cref="ImageTimestampFraction" /> if both are specified
 /// and in range (this allows specifying options that work well for both long and short videos, e.g., by specifying 5s and 30%, for short videos 5s may be way
 /// too far in, it could be the end of the video so it takes 30%, and for long videos 30% could be way too far in, whereas 5s would be better).</para>
 /// <para>
-/// The thumbnail image is taken from the first video stream that is most likely to be the main video based on dispositions.</para>
+/// The video frame is taken from the first video stream that is most likely to be the main video based on dispositions.</para>
 /// <para>
-/// The default format for the extracted thumbnail image is PNG.</para>
+/// The default format for the extracted video frame is PNG.</para>
 /// <para>
-/// The default options result in no thumbnail extraction options being applied.</para>
+/// The default options result in no video frame extraction options being applied.</para>
 /// <para>
-/// Note: If no thumbnail is able to be extracted, then a <see cref="FileProcessingException" /> will be thrown when processing.</para>
+/// Note: If no video frame is able to be extracted, then a <see cref="FileProcessingException" /> will be thrown when processing.</para>
 /// <para>
 /// Note: Does not attempt to remove alpha channels, nor attempt to reduce bit depth to 8; callers can utilize additional image processing if needed for these.
 /// </para>
 /// </summary>
-public sealed record VideoThumbnailProcessingOptions
+public sealed record VideoFrameExtractionProcessingOptions
 {
     /// <summary>
-    /// Gets an options instance with standard thumbnail extraction settings - ignores thumbnail streams, and selects from the lesser of 5 seconds and 30% of
+    /// Gets an options instance with standard video frame extraction settings - ignores thumbnail streams, and selects from the lesser of 5 seconds and 30% of
     /// the video duration.
     /// </summary>
-    public static VideoThumbnailProcessingOptions Standard { get; } = new()
+    public static VideoFrameExtractionProcessingOptions Standard { get; } = new()
     {
         ImageTimestamp = TimeSpan.FromSeconds(5),
         ImageTimestampFraction = 0.3,
@@ -38,7 +38,7 @@ public sealed record VideoThumbnailProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes a value indicating whether video streams marked as thumbnail streams should be considered for thumbnail extraction.</para>
+    /// Gets or initializes a value indicating whether video streams marked as thumbnail streams should be considered for video frame extraction.</para>
     /// <para>
     /// Default is <see langword="false" />, meaning this option is not used.</para>
     /// </summary>
@@ -46,7 +46,7 @@ public sealed record VideoThumbnailProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes the timestamp within the video at which to capture the thumbnail image.</para>
+    /// Gets or initializes the timestamp within the video at which to capture the video frame.</para>
     /// <para>
     /// Default is <see langword="null" />, meaning this option is not used.</para>
     /// </summary>
@@ -62,7 +62,7 @@ public sealed record VideoThumbnailProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes the fraction of the video's duration at which to capture the thumbnail image.</para>
+    /// Gets or initializes the fraction of the video's duration at which to capture the video frame.</para>
     /// <para>
     /// Default is <see langword="null" />, meaning this option is not used.</para>
     /// </summary>
@@ -83,7 +83,7 @@ public sealed record VideoThumbnailProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes a value indicating whether to remap HDR to SDR for the thumbnail.</para>
+    /// Gets or initializes a value indicating whether to remap HDR to SDR for the video frame.</para>
     /// <para>
     /// Note: this uses a basic tone-mapping algorithm and may not produce optimal results for all content.</para>
     /// <para>

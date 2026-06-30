@@ -42,7 +42,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     /// <para>When this property is <see langword="true"/> and no processor in the pipeline reports changes, no data file is stored for the variant. Instead, a
     /// zero-byte alias marker is written that transparently resolves to the variant's source on fetch operations. Nested variants of the aliased variant
     /// continue to run against the unchanged parent source.</para>
-    /// <para>This is useful for avoiding storing duplicate files. For example, a thumbnail variant pipeline that produces no changes when the source image is
+    /// <para>This is useful for avoiding storing duplicate files. For example, a frame variant pipeline that produces no changes when the source image is
     /// already small enough will store an alias to the source instead of an identical copy.</para>
     /// </remarks>
     public bool AliasWhenVariantSourceUnchanged { get; init; }
@@ -151,7 +151,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     /// <inheritdoc/>
     FileProcessingPipeline IFileProcessingPipelineSelector.GetPipeline(string extension) => this;
 
-    internal async Task ExecuteAsync(FileProcessingContext context, bool knownRepoFileSource, bool isMainPipeline)
+    internal async Task ExecuteAsync(FileProcessingContext context, Func<ProgressValue, ValueTask>? progressCallback, bool knownRepoFileSource, bool isMainPipeline)
     {
         if ((SourceBufferingMode is SourceBufferingMode.ForceTempCopy && !knownRepoFileSource) ||
             (SourceBufferingMode is SourceBufferingMode.Auto && !context.IsSourceInMemoryOrFile))
@@ -159,10 +159,53 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
             await context.BufferSourceToWorkFileAsync().ConfigureAwait(false);
         }
 
+        Dictionary<string, int> countPerName = [];
+
         for (int i = 0; i < Processors.Count; i++)
         {
             var processor = Processors[i];
+
+            bool callbackIsValid = true;
+            Func<double, ValueTask>? processorProgressCallback = null;
+
+            // Handle progress reporting if enabled:
+            if (progressCallback is not null)
+            {
+                // Get a unique name:
+                string processorName = processor.DisplayName;
+
+                if (processorName.Contains(' '))
+                    throw new InvalidOperationException($"Processor display name '{processorName}' must not contain a space character.");
+
+                if (!countPerName.TryGetValue(processorName, out int count))
+                {
+                    countPerName[processorName] = 1;
+                }
+                else
+                {
+                    countPerName[processorName] = count + 1;
+                    processorName += $" ({count + 1})";
+                }
+
+                // Create the callback to use for this one:
+                processorProgressCallback = async (fraction) =>
+                {
+                    if (!callbackIsValid)
+                        throw new InvalidOperationException("The progress callback for a previous processor is still active. Each processor must complete before the next one starts.");
+
+                    var progressValue = new ProgressValue(context.VariantId, processorName, fraction);
+                    await progressCallback(progressValue).ConfigureAwait(false);
+                };
+
+                // Ensure we see some progress for this processor even if it doesn't report any:
+                await processorProgressCallback(0.0).ConfigureAwait(false);
+
+                // Set the callback on the context:
+                context = new(context) { ProgressCallback = processorProgressCallback };
+            }
+
             var result = await processor.CallProcessAsync(context).ConfigureAwait(false);
+            callbackIsValid = false;
 
             bool oneStepLeft = i == Processors.Count - 2;
             await context.SetResultAsync(result, oneStepLeft).ConfigureAwait(false);

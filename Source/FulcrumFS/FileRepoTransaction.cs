@@ -46,7 +46,7 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <param name="pipeline">The processing pipeline provider to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The resulting file group, including the main file and any auto-variants produced by the pipeline.</returns>
-    public Task<RepoFileGroupInfo> AddAsync(FileStream stream, bool leaveOpen, IFileProcessingPipelineSelector pipeline, CancellationToken cancellationToken = default)
+    public TaskWithProgress<RepoFileGroupInfo> AddAsync(FileStream stream, bool leaveOpen, IFileProcessingPipelineSelector pipeline, CancellationToken cancellationToken = default)
     {
         string extension = FilePath.ParseAbsolute(stream.Name, PathOptions.None).Extension;
         return AddAsync(stream, extension, leaveOpen, pipeline, cancellationToken);
@@ -61,20 +61,23 @@ public sealed class FileRepoTransaction : IAsyncDisposable
     /// <param name="pipeline">The processing pipeline provider to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The resulting file group, including the main file and any auto-variants produced by the pipeline.</returns>
-    public async Task<RepoFileGroupInfo> AddAsync(
+    public TaskWithProgress<RepoFileGroupInfo> AddAsync(
         Stream stream,
         string extension,
         bool leaveOpen,
         IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
+        return new(cancellationToken, async (ct, progressCallback) =>
+        {
+            using var syncLock = await _sync.LockAsync(ct).ConfigureAwait(false);
 
-        var (result, indeterminateMarker) = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
-        _added.Add(result.FileId);
-        _indeterminateMarkers[result.FileId] = indeterminateMarker;
+            var (result, indeterminateMarker) = await Repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, progressCallback, ct).ConfigureAwait(false);
+            _added.Add(result.FileId);
+            _indeterminateMarkers[result.FileId] = indeterminateMarker;
 
-        return result;
+            return result;
+        });
     }
 
     /// <summary>

@@ -14,6 +14,9 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public sealed class VideoProcessor : FileProcessor
 {
+    /// <inheritdoc />
+    public override string DisplayName => "VideoProcessor";
+
     private static InterlockedFlag _ffmpegPathInitialized;
 
     /// <summary>
@@ -186,6 +189,22 @@ public sealed class VideoProcessor : FileProcessor
     /// <inheritdoc/>
     protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
     {
+        // Get the progress callback:
+        var progressCallback = context.ProgressCallback;
+#if DEBUG
+        double prevProgressFraction = -1.0;
+        if (progressCallback != null)
+        {
+            progressCallback = async (value) =>
+            {
+                Debug.Assert(value >= 0.0 && value <= 1.0, "Progress fraction should be between 0.0 and 1.0.");
+                Debug.Assert(value >= prevProgressFraction, "Progress fraction should not decrease.");
+                prevProgressFraction = value;
+                await context.ProgressCallback!(value).ConfigureAwait(false);
+            };
+        }
+#endif
+
         // Get the source video file:
         var sourceFile = await context.GetSourceAsFileAsync().ConfigureAwait(false);
 
@@ -384,7 +403,7 @@ public sealed class VideoProcessor : FileProcessor
                 .Select((x) => x.Duration ?? 0.0),
         ]).Max();
 
-        var progressTempFile = (Options.ProgressCallback != null && Options.ForceValidateAllStreams && maxDuration != 0.0) ? context.GetNewWorkFile(".txt") : null;
+        var progressTempFile = (progressCallback != null && Options.ForceValidateAllStreams && maxDuration != 0.0) ? context.GetNewWorkFile(".txt") : null;
         int streamsValidated = 0;
         bool[] validatedStreams = new bool[sourceInfo.Streams.Length];
         double progressUsed = 0.0;
@@ -414,7 +433,7 @@ public sealed class VideoProcessor : FileProcessor
                 context,
                 sourceFile,
                 sourceInfo,
-                Options.ProgressCallback,
+                progressCallback,
                 maxLength,
                 expectedMaxDuration,
                 (i) => mappedInputIndicesOrdered.BinarySearch(i) switch { < 0 => null, var x => x },
@@ -997,10 +1016,9 @@ public sealed class VideoProcessor : FileProcessor
 
                 reportProgress:
 
-                if (Options.ProgressCallback != null)
+                if (progressCallback != null)
                 {
-                    await Options.ProgressCallback(
-                        (context.FileId, context.VariantId),
+                    await progressCallback(
                         progressUsed + (StreamCompatibilityCheckProgressFraction * ((double)(i + 1) / (sourceInfo.Streams.Length + 2))))
                     .ConfigureAwait(false);
                 }
@@ -1969,14 +1987,14 @@ public sealed class VideoProcessor : FileProcessor
         // Run the command
         // Note: The last 5% of progress is reserved for the "checking if smaller" pass & since the progress reported is the highest timestamp completed of any
         // stream, so we want to leave some headroom.
-        if (Options.ProgressCallback != null && maxDuration != 0.0)
+        if (progressCallback != null && maxDuration != 0.0)
             progressTempFile ??= context.GetNewWorkFile(".txt");
 
         double lastDone = 0.0;
         double mostRecentClampedProgress = 0.0;
         const double ReservedProgress = 0.05;
 
-        Func<double, ValueTask>? localProgressCallback = (Options.ProgressCallback != null && maxDuration != 0.0) ? async (durationDone) =>
+        Func<double, ValueTask>? localProgressCallback = (progressCallback != null && maxDuration != 0.0) ? async (durationDone) =>
         {
             // Avoid going backwards or repeating the same progress:
 
@@ -1999,7 +2017,7 @@ public sealed class VideoProcessor : FileProcessor
             lastDone = durationDone;
             mostRecentClampedProgress = clampedProgress;
 
-            await Options.ProgressCallback!((context.FileId, context.VariantId), clampedProgress).ConfigureAwait(false);
+            await progressCallback!(clampedProgress).ConfigureAwait(false);
         } : null;
 
         try
@@ -2019,16 +2037,16 @@ public sealed class VideoProcessor : FileProcessor
                 // This way we optimise the common case of no validation errors, while still executing as if we checked beforehand.
                 context.CancellationToken.ThrowIfCancellationRequested();
 
-                Func<(FileId FileId, string? VariantId), double, ValueTask>? progressCallback = Options.ProgressCallback is not null
-                    ? async ((FileId FileId, string? VariantId) file, double fraction) =>
-                        await Options.ProgressCallback(file, mostRecentClampedProgress + (fraction * (1.0 - mostRecentClampedProgress))).ConfigureAwait(false)
+                Func<double, ValueTask>? progressCallback2 = progressCallback is not null
+                    ? async (double fraction) =>
+                        await progressCallback(mostRecentClampedProgress + (fraction * (1.0 - mostRecentClampedProgress))).ConfigureAwait(false)
                     : null;
 
                 await FullyValidateStreamsAsync(
                     context,
                     sourceFile,
                     sourceInfo,
-                    progressCallback,
+                    progressCallback2,
                     maxLength: null,
                     maxDuration,
                     (i) => streamsValidatedImplicitly.BinarySearch(i) switch { < 0 => null, { } idx => idx },
@@ -2190,7 +2208,7 @@ public sealed class VideoProcessor : FileProcessor
                     double progressPortion = ReservedProgress * 0.5 / (streamsToCheckSize.Count + 2);
                     double progressValue = 1.0 - ReservedProgress + (progressPortion * (i + 1));
 
-                    await Options.ProgressCallback!((context.FileId, context.VariantId), progressValue).ConfigureAwait(false);
+                    await progressCallback!(progressValue).ConfigureAwait(false);
                 }
             }
 
@@ -2307,7 +2325,7 @@ public sealed class VideoProcessor : FileProcessor
                 const double ReservedProgressInner = 0.02;
                 lastDone = 0.0;
 
-                Func<double, ValueTask>? localProgressCallbackInner = Options.ProgressCallback != null && maxDuration != 0.0 ? async (durationDone) =>
+                Func<double, ValueTask>? localProgressCallbackInner = progressCallback != null && maxDuration != 0.0 ? async (durationDone) =>
                 {
                     // Avoid going backwards or repeating the same progress:
                     if (durationDone <= lastDone) return;
@@ -2318,8 +2336,7 @@ public sealed class VideoProcessor : FileProcessor
                     // Clamp to [0.0, 0.98] range of our remaining reserved portion:
                     double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgressInner), 0.0, 1.0 - ReservedProgressInner);
                     lastDone = durationDone;
-                    await Options.ProgressCallback!(
-                        (context.FileId, context.VariantId),
+                    await progressCallback!(
                         1.0 - (ReservedProgress / 2.0) + (clampedProgress * (ReservedProgress / 2.0)))
                     .ConfigureAwait(false);
                 } : null;
@@ -2785,7 +2802,7 @@ public sealed class VideoProcessor : FileProcessor
             FileProcessingContext context,
             IAbsoluteFilePath sourceFile,
             FFprobeUtils.VideoFileInfo sourceInfo,
-            Func<(FileId FileId, string? VariantId), double, ValueTask>? progressCallback,
+            Func<double, ValueTask>? progressCallback,
             double? maxLength,
             double expectedMaxDuration,
             Func<int, int?> inputToOutputIndexMapper,
@@ -2835,7 +2852,7 @@ public sealed class VideoProcessor : FileProcessor
                 double durationFraction = durationDone / maxLength.Value;
                 double maxDuration = mappedStreamCount / (double)totalStreamCount * ValidateProgressFraction * 0.999;
                 double clampedProgress = double.Min(durationFraction * maxDuration, maxDuration);
-                await progressCallback((context.FileId, context.VariantId), progressUsed + clampedProgress).ConfigureAwait(false);
+                await progressCallback(progressUsed + clampedProgress).ConfigureAwait(false);
             }
             : null;
         if (validateProgressCallback is not null && progressTempFile is null) progressTempFile = context.GetNewWorkFile(".txt");
@@ -2944,7 +2961,7 @@ public sealed class VideoProcessor : FileProcessor
         // Note: we use double.BitDecrement, as we try to not hit values twice, and the new progressUsed value is reserved for the next informer.
         if (progressCallback is not null)
         {
-            await progressCallback((context.FileId, context.VariantId), double.BitDecrement(progressUsed)).ConfigureAwait(false);
+            await progressCallback(double.BitDecrement(progressUsed)).ConfigureAwait(false);
         }
 
         // Return the info from the operation:
