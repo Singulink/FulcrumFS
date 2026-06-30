@@ -19,6 +19,7 @@ partial class FileRepo
         string extension,
         bool leaveOpen,
         IFileProcessingPipelineSelector pipeline,
+        Func<ProgressValue, ValueTask>? progressCallback,
         CancellationToken cancellationToken = default)
     {
         extension = FileExtension.Normalize(extension);
@@ -65,7 +66,7 @@ partial class FileRepo
                 break;
             }
 
-            return await AddTransactionalAsyncCore(fileId, stream, extension, leaveOpen, pipeline, cancellationToken).ConfigureAwait(false);
+            return await AddTransactionalAsyncCore(fileId, stream, extension, leaveOpen, pipeline, progressCallback, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

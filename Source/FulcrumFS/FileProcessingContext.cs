@@ -47,6 +47,16 @@ public sealed class FileProcessingContext : IAsyncDisposable
     /// </summary>
     public bool HasChanges { get; private set; }
 
+    /// <summary>
+    /// Gets a value that represents the callback function to report the progress of the file processing operation. The callback function takes a double value
+    /// representing the progress fraction (between 0.0 and 1.0) and returns a <see cref="ValueTask" /> to await.
+    /// </summary>
+    /// <remarks>
+    /// This value is only meant to be read by the <see cref="FileProcessor"/> instances in the pipeline. It is set by the <see cref="FileProcessingPipeline" />
+    /// before each processor is executed and is not intended to be used outside of this.
+    /// </remarks>
+    public Func<double, ValueTask>? ProgressCallback { get; internal set; }
+
     internal bool IsSourceInMemoryOrFile => _source is IAbsoluteFilePath or MemoryStream or FileStream;
 
     internal FileProcessingContext(
