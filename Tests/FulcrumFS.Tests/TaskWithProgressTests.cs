@@ -683,8 +683,6 @@ public sealed class TaskWithProgressTests
     }
 
     // Returns how many times the given marker exception surfaced as an unobserved task exception. The producer creates and abandons the task(s) and returns the
-    // awaiter (or instance) to keep alive across handler registration so a fault cannot be collected before the handler exists.
-    // Returns how many times the given marker exception surfaced as an unobserved task exception. The producer creates and abandons the task(s) and returns the
     // awaiter (or instance) to keep alive across handler registration so a fault cannot be collected before the handler exists. An optional filter overrides the
     // default marker matching (used to assert that a specific captured exception never surfaces).
     private async Task<int> CountUnobservedAsync(Exception? marker, Func<Task<object>> produce, Func<AggregateException, bool>? filter = null)

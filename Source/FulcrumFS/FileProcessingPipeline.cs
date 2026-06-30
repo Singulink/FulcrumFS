@@ -189,7 +189,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
                 processorProgressCallback = async (fraction) =>
                 {
                     if (!callbackIsValid)
-                        throw new InvalidOperationException("The progress callback for a previous processor is still active. Each processor must complete before the next one starts.");
+                        throw new InvalidOperationException("The progress callback for a previous processor is still in use even though it should not be, as the processor has already completed.");
 
                     var progressValue = new ProgressValue(context.VariantId, processorName, fraction);
                     await progressCallback(progressValue).ConfigureAwait(false);
