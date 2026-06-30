@@ -1,3 +1,4 @@
+using System.Globalization;
 using Singulink.Enums;
 
 namespace FulcrumFS;
@@ -177,14 +178,11 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
                 if (processorName.Contains(' '))
                     throw new InvalidOperationException($"Processor display name '{processorName}' must not contain a space character.");
 
-                if (!countPerName.TryGetValue(processorName, out int count))
+                if (!countPerName.TryAdd(processorName, 1))
                 {
-                    countPerName[processorName] = 1;
-                }
-                else
-                {
+                    int count = countPerName[processorName];
                     countPerName[processorName] = count + 1;
-                    processorName += $" ({count + 1})";
+                    processorName = string.Create(CultureInfo.InvariantCulture, $"{processorName} ({count + 1})");
                 }
 
                 // Create the callback to use for this one:

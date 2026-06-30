@@ -72,10 +72,9 @@ partial class FileRepo
 
         // We just check it is non-null in Debug via a continuation, and cast it with a nullable suppression, to save the overhead of CastTo.
 #if DEBUG
-        result.AddPostTask((isSuccessful, result) =>
+        result.AddPostTask(async (isSuccessful, result) =>
         {
             if (isSuccessful) Debug.Assert(result is not null, "Add mode should never return null.");
-            return ValueTask.CompletedTask;
         });
 #endif
 
@@ -113,10 +112,9 @@ partial class FileRepo
 
         // We just check it is non-null in Debug via a continuation, and cast it with a nullable suppression, to save the overhead of CastTo.
 #if DEBUG
-        result.AddPostTask((isSuccessful, result) =>
+        result.AddPostTask(async (isSuccessful, result) =>
         {
             if (isSuccessful) Debug.Assert(result is not null, "GetOrAdd mode should never return null.");
-            return ValueTask.CompletedTask;
         });
 #endif
 

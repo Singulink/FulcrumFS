@@ -708,6 +708,7 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                 else
                 {
                     errors = [.. errors.Where((x) => x is not OperationCanceledException)];
+
                     if (errors.Count == 1)
                     {
                         ExceptionDispatchInfo.Throw(errors[0]);

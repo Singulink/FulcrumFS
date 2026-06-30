@@ -4,7 +4,7 @@ namespace FulcrumFS.Videos;
 
 /// <summary>
 /// <para>
-/// Specifies the options for processing videos to create a video frame with a <see cref="VideoFrameExtractionProcessor" />.</para>
+/// Specifies the options for processing videos to extract a video frame with a <see cref="VideoFrameExtractionProcessor" />.</para>
 /// <para>
 /// If <see cref="IncludeThumbnailVideoStreams" /> is <see langword="true" /> and there is a video stream marked as a thumbnail stream, the video frame is
 /// taken from that stream.</para>

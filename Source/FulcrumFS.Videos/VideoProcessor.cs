@@ -192,7 +192,11 @@ public sealed class VideoProcessor : FileProcessor
         // Get the progress callback:
         var progressCallback = context.ProgressCallback;
 #if DEBUG
+        // In debug mode, we will check that what we report to the callback is sensible.
+        // The callback would fix up some issues anyway, but since our logic is so complicated, we want to have parity with before the new callback approach and
+        // continue checking that we are reporting sensible progress values.
         double prevProgressFraction = -1.0;
+
         if (progressCallback != null)
         {
             progressCallback = async (value) =>
