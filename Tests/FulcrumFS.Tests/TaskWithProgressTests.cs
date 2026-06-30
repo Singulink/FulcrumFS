@@ -68,6 +68,22 @@ public sealed class TaskWithProgressTests
         return list;
     }
 
+    // Starts the task via an enumerator, waits for it to fully complete (so the queue is fully populated and coalesced), then drains all buffered progress.
+    // Because the consumer does not read until production has finished, this deterministically exercises the queue-coalescing behaviour.
+    private static async Task<List<ProgressValue>> CollectAfterCompletionAsync(TaskWithProgress<int> task)
+    {
+        var e = task.GetAsyncEnumerator();
+        await using (e.ConfigureAwait(false))
+        {
+            await task; // Wait for production to finish; the queue is now fully populated.
+
+            var list = new List<ProgressValue>();
+            while (await e.MoveNextAsync())
+                list.Add(e.Current);
+            return list;
+        }
+    }
+
     // Forces a full GC pass so any abandoned task is finalized (and its unobserved exception, if any, raised).
     private static void ForceFullCollect()
     {
@@ -767,6 +783,117 @@ public sealed class TaskWithProgressTests
         var t = Make([new(null, "A", 0.5), new(null, "B", 0.5), new(null, "A", 0.7)]);
         var ex = await Should.ThrowAsync<InvalidOperationException>(async () => await CollectFullAsync(t, TestContext.CancellationToken));
         ex.Message.ShouldBe("Stage 'A' for variant '' has already been reported.");
+    }
+
+    // --- Progress queue coalescing ---
+
+    [TestMethod]
+    public async Task Progress_AtQueueLimit_NoneDropped()
+    {
+        // 0.0 plus 15 in-range values fill the queue to exactly 16 items - the limit - so nothing is coalesced.
+        var reports = new List<ProgressValue> { new(null, "S", 0.0) };
+
+        for (int i = 1; i <= 15; i++)
+            reports.Add(new(null, "S", i / 64.0));
+
+        var t = Make([.. reports], result: 1);
+        var seen = await CollectAfterCompletionAsync(t);
+
+        var expected = new List<ProgressValue>();
+
+        for (int i = 0; i <= 15; i++)
+            expected.Add(new(null, "S", i / 64.0));
+
+        expected.Add(new(null, "S", 1.0));
+
+        seen.ShouldBe(expected);
+    }
+
+    [TestMethod]
+    public async Task Progress_BeyondQueueLimit_ExcessCoalescedIntoLastSlot()
+    {
+        // Once 16 items are queued for the stage (0.0 plus 15 in-range), every subsequent value replaces the last queued slot rather than growing the queue.
+        // So reporting many more values collapses the tail down to just the most recent one.
+        var reports = new List<ProgressValue> { new(null, "S", 0.0) };
+
+        for (int i = 1; i <= 50; i++)
+            reports.Add(new(null, "S", i / 64.0));
+
+        var t = Make([.. reports], result: 1);
+        var seen = await CollectAfterCompletionAsync(t);
+
+        // 0.0 plus 1/64..14/64 are preserved (15 items), the entire coalesced tail collapses to the latest value (50/64), then the stage closes at 1.0.
+        var expected = new List<ProgressValue>();
+
+        for (int i = 0; i <= 14; i++)
+            expected.Add(new(null, "S", i / 64.0));
+
+        expected.Add(new(null, "S", 50 / 64.0));
+        expected.Add(new(null, "S", 1.0));
+
+        seen.ShouldBe(expected);
+    }
+
+    [TestMethod]
+    public async Task Progress_StageEndsAtExplicitOne_NextStageCoalescesIndependently()
+    {
+        // Stage A ends at an explicit 1.0 (not the auto-close). Stage B should still coalesce based only on its own queued items, independent of A.
+        var reports = new List<ProgressValue> { new(null, "A", 0.0) };
+
+        for (int i = 1; i <= 40; i++)
+            reports.Add(new(null, "A", i / 64.0));
+
+        reports.Add(new(null, "A", 1.0)); // A ends at an explicit 1.0.
+        reports.Add(new(null, "B", 0.0));
+
+        for (int i = 1; i <= 40; i++)
+            reports.Add(new(null, "B", i / 64.0));
+
+        var t = Make([.. reports], result: 1);
+        var seen = await CollectAfterCompletionAsync(t);
+
+        // B keeps the same full shape as a normal stage: 0.0 plus 1/64..14/64, then the coalesced latest (40/64), then a 1.0 close.
+        var expectedB = new List<ProgressValue>();
+
+        for (int i = 0; i <= 14; i++)
+            expectedB.Add(new(null, "B", i / 64.0));
+
+        expectedB.Add(new(null, "B", 40 / 64.0));
+        expectedB.Add(new(null, "B", 1.0));
+
+        seen.Where(p => p.Stage == "B").ShouldBe(expectedB);
+    }
+
+    [TestMethod]
+    public async Task Progress_TwoStages_CoalesceLimitIsPerStage()
+    {
+        // Each stage should coalesce based only on its own queued items, independent of how many items from the previous stage are still buffered ahead of it.
+        var reports = new List<ProgressValue> { new(null, "A", 0.0) };
+
+        for (int i = 1; i <= 40; i++)
+            reports.Add(new(null, "A", i / 64.0));
+
+        reports.Add(new(null, "B", 0.0));
+
+        for (int i = 1; i <= 40; i++)
+            reports.Add(new(null, "B", i / 64.0));
+
+        var t = Make([.. reports], result: 1);
+        var seen = await CollectAfterCompletionAsync(t);
+
+        // Both stages preserve exactly the same shape: 0.0 plus 1/64..14/64, then the coalesced latest (40/64), then a 1.0 close.
+        var expected = new List<ProgressValue>();
+
+        foreach (string stage in (string[])["A", "B"])
+        {
+            for (int i = 0; i <= 14; i++)
+                expected.Add(new(null, stage, i / 64.0));
+
+            expected.Add(new(null, stage, 40 / 64.0));
+            expected.Add(new(null, stage, 1.0));
+        }
+
+        seen.ShouldBe(expected);
     }
 
     // --- Pre/post tasks ---

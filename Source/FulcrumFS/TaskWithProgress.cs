@@ -157,8 +157,10 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
     {
         // Our state declaration:
         bool isCancelled;
-        ConcurrentQueue<ProgressValue?> progressQueue;
+        LinkedList<ProgressValue?> progressQueue;
+        Lock progressQueueLock = new();
         SemaphoreSlim progressSemaphore;
+        int processedSinceNewStage = 0;
 
         // We want to start the background task & take ownership immediately, but report it as if it were a normal IAsyncEnumerator.
         // Thus, we do the starting immediately in a try/catch, and report exceptions as if they were thrown like normal by a IAsyncEnumerator.
@@ -217,6 +219,7 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                 string? lastStage = null;
                 string? lastVariantId = null;
                 HashSet<(string? VariantId, string Stage)> reportedStages = [];
+                int fromPreviousStage = 0;
 
                 // Get our progress callback:
                 Func<ProgressValue, ValueTask> progressCallback = async (progressValue) =>
@@ -246,9 +249,19 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
 
                             if (lastStage is not null && lastProgressValue < 1.0)
                             {
-                                progressQueue.Enqueue(new ProgressValue(lastVariantId, lastStage, 1.0));
+                                lock (progressQueueLock)
+                                {
+                                    progressQueue.AddLast(new ProgressValue(lastVariantId, lastStage, 1.0));
+                                }
+
                                 progressSemaphore.Release();
                                 lastProgressValue = 1.0;
+                            }
+
+                            lock (progressQueueLock)
+                            {
+                                processedSinceNewStage = 0;
+                                fromPreviousStage = progressQueue.Count;
                             }
                         }
 
@@ -270,13 +283,33 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                             // If we missed 0.0, enqueue it first.
                             if (lastProgressValue < 0.0 && progress > 0.0)
                             {
-                                progressQueue.Enqueue(new ProgressValue(variantId, stage, 0.0));
+                                lock (progressQueueLock)
+                                {
+                                    progressQueue.AddLast(new ProgressValue(variantId, stage, 0.0));
+                                }
+
                                 progressSemaphore.Release();
                             }
 
                             // Enqueue the reported progress value.
-                            progressQueue.Enqueue(new ProgressValue(variantId, stage, progress));
-                            progressSemaphore.Release();
+                            bool addedNew = true;
+                            lock (progressQueueLock)
+                            {
+                                // If we just added one for this before, and nobody has read it yet, then we should just replace that, except for 0.0 and 1.0.
+                                // This ensures our queue doesn't get way fuller than a caller can handle.
+                                // We only do this if we have at least 16 in the current stage in the queue.
+                                if (progressQueue.Count - int.Max(fromPreviousStage - processedSinceNewStage, 0) >= 16 && progressQueue.Last is { Value: ProgressValue lastValue } && lastValue.VariantId == variantId && lastValue.Stage == stage && lastValue.Progress is > 0.0 and < 1.0)
+                                {
+                                    progressQueue.RemoveLast();
+                                    addedNew = false;
+                                }
+
+                                // Add our new value
+                                progressQueue.AddLast(new ProgressValue(variantId, stage, progress));
+                            }
+
+                            if (addedNew)
+                                progressSemaphore.Release();
 
                             // Update the last progress value.
                             lastProgressValue = progress;
@@ -298,14 +331,22 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                 // Mark last progress value as 1.0 for the last stage if we haven't already done so:
                 if (!isCancelledLocal && lastStage != null && lastProgressValue < 1.0)
                 {
-                    progressQueue.Enqueue(new ProgressValue(lastVariantId, lastStage, 1.0));
+                    lock (progressQueueLock)
+                    {
+                        progressQueue.AddLast(new ProgressValue(lastVariantId, lastStage, 1.0));
+                    }
+
                     progressSemaphore.Release();
                 }
 
                 // Mark as fully done:
                 if (!isCancelledLocal)
                 {
-                    progressQueue.Enqueue(null);
+                    lock (progressQueueLock)
+                    {
+                        progressQueue.AddLast((ProgressValue?)null);
+                    }
+
                     progressSemaphore.Release();
                 }
             }
@@ -331,8 +372,19 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                     else
                         await progressSemaphore.WaitAsync(linkedCts.Token);
 
-                    // Dequeue the next value and yield it:
-                    if (progressQueue.TryDequeue(out var progressValue))
+                    // Dequeue the next value:
+                    bool gotValue;
+                    ProgressValue? progressValue;
+                    lock (progressQueueLock)
+                    {
+                        gotValue = progressQueue.Count > 0;
+                        progressValue = gotValue ? progressQueue.First!.Value : null;
+                        if (gotValue) progressQueue.RemoveFirst();
+                        processedSinceNewStage++;
+                    }
+
+                    // Deal with the value we just got and yield it:
+                    if (gotValue)
                     {
                         // If we got null, then we are done (fully successfully).
                         if (progressValue is null)
