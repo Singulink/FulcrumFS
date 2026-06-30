@@ -14,9 +14,6 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public sealed class VideoProcessor : FileProcessor
 {
-    /// <inheritdoc />
-    public override string DisplayName => "VideoProcessor";
-
     private static InterlockedFlag _ffmpegPathInitialized;
 
     /// <summary>

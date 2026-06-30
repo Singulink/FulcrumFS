@@ -10,12 +10,12 @@ public abstract class FileProcessor : IFileProcessingPipelineProvider, IFileProc
     private FileProcessingPipeline? _selfPipeline;
 
     /// <summary>
-    /// Gets a string that can be displayed in progress callbacks to indicate which processor is currently running.
+    /// Gets a string that can be used in progress callbacks to indicate which processor is currently running.
     /// </summary>
     /// <remarks>
     /// Must not contain a space character - many processors just use their class name.
     /// </remarks>
-    public abstract string DisplayName { get; }
+    public virtual string ProcessorName => GetType().Name;
 
     /// <summary>
     /// Gets the file extensions that this processor allows, including the leading dot (e.g., ".jpg", ".png"), or an empty collection if all file extensions are

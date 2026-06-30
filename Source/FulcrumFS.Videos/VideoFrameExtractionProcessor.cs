@@ -10,9 +10,6 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public sealed class VideoFrameExtractionProcessor : FileProcessor
 {
-    /// <inheritdoc />
-    public override string DisplayName => "VideoFrameExtractionProcessor";
-
     /// <summary>
     /// <para>
     /// Initializes a new instance of the <see cref="VideoFrameExtractionProcessor"/> class with the specified options.</para>

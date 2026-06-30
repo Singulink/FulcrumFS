@@ -172,7 +172,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
             if (progressCallback is not null)
             {
                 // Get a unique name:
-                string processorName = processor.DisplayName;
+                string processorName = processor.ProcessorName;
 
                 if (processorName.Contains(' '))
                     throw new InvalidOperationException($"Processor display name '{processorName}' must not contain a space character.");

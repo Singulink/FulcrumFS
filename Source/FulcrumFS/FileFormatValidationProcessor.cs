@@ -7,9 +7,6 @@
 /// </summary>
 public sealed class FileFormatValidationProcessor : FileProcessor
 {
-    /// <inheritdoc />
-    public override string DisplayName => "FileFormatValidationProcessor";
-
     private const int MaxInMemoryCopySize = 20 * 1024 * 1024;
 
     /// <summary>

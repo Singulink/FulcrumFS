@@ -16,9 +16,6 @@ namespace FulcrumFS.Images;
 /// </summary>
 public sealed class ImageProcessor : FileProcessor
 {
-    /// <inheritdoc />
-    public override string DisplayName => "ImageProcessor";
-
     /// <inheritdoc/>
     public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.Formats.SelectMany(format => format.SourceFormat.Extensions)];
 
