@@ -554,9 +554,6 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is only intended for internal use - must be called before awaiting.
-    /// </para>
-    /// <para>
     /// The purpose of this is so that you can insert additional logic after the task ends (e.g., so you can implement a wrapper method around a task).
     /// </para>
     /// <para>
@@ -586,9 +583,6 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
     /// Prepends the task with the specified task action, which is executed before the task begins.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// This is only intended for internal use - must be called before awaiting.
-    /// </para>
     /// <para>
     /// The purpose of this is so that you can insert additional logic before the task begins (e.g., so you can implement a wrapper method around a task).
     /// </para>
@@ -749,7 +743,7 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                 ExceptionDispatchInfo.Throw(errors[^1]);
             }
 
-            // If we have real exceptions, then cancellation is irrelevant as it should not have occured past the point of the first exception, and we consider
+            // If we have real exceptions, then cancellation is irrelevant as it should not have occurred past the point of the first exception, and we consider
             // exceptional state (in what is effectively a finalizer) to have overridden the cancellation here.
             else
             {

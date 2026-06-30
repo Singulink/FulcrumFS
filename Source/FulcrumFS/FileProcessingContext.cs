@@ -267,11 +267,12 @@ public sealed class FileProcessingContext : IAsyncDisposable
     /// </remarks>
     internal FileProcessingContext(FileProcessingContext other)
     {
-        FileId = other.FileId;
-        VariantId = other.VariantId;
         _tempWorkingDir = other._tempWorkingDir;
         _source = other._source;
         _leaveOpen = other._leaveOpen;
+        _lastWorkEntryId = other._lastWorkEntryId;
+        FileId = other.FileId;
+        VariantId = other.VariantId;
         Extension = other.Extension;
         CancellationToken = other.CancellationToken;
         IsLastProcessStep = other.IsLastProcessStep;
