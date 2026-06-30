@@ -51,6 +51,10 @@ public sealed class FileProcessingContext : IAsyncDisposable
     /// Gets a value that represents the callback function to report the progress of the file processing operation. The callback function takes a double value
     /// representing the progress fraction (between 0.0 and 1.0) and returns a <see cref="ValueTask" /> to await.
     /// </summary>
+    /// <remarks>
+    /// This value is only meant to be read by the <see cref="FileProcessor"/> instances in the pipeline. It is set by the <see cref="FileProcessingPipeline" />
+    /// before each processor is executed and is not intended to be used outside of this.
+    /// </remarks>
     public Func<double, ValueTask>? ProgressCallback { get; internal set; }
 
     internal bool IsSourceInMemoryOrFile => _source is IAbsoluteFilePath or MemoryStream or FileStream;
@@ -258,25 +262,4 @@ public sealed class FileProcessingContext : IAsyncDisposable
     }
 
     private int GetNextWorkId() => Interlocked.Increment(ref _lastWorkEntryId);
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="FileProcessingContext"/> class by copying the properties from another instance.
-    /// </summary>
-    /// <remarks>
-    /// This allows not leaking a progress callback to the wrong processor when it should have already finished.
-    /// </remarks>
-    internal FileProcessingContext(FileProcessingContext other)
-    {
-        _tempWorkingDir = other._tempWorkingDir;
-        _source = other._source;
-        _leaveOpen = other._leaveOpen;
-        _lastWorkEntryId = other._lastWorkEntryId;
-        FileId = other.FileId;
-        VariantId = other.VariantId;
-        Extension = other.Extension;
-        CancellationToken = other.CancellationToken;
-        IsLastProcessStep = other.IsLastProcessStep;
-        HasChanges = other.HasChanges;
-        ProgressCallback = other.ProgressCallback;
-    }
 }

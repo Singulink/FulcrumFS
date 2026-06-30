@@ -166,7 +166,6 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
         {
             var processor = Processors[i];
 
-            bool callbackIsValid = true;
             Func<double, ValueTask>? processorProgressCallback = null;
 
             // Handle progress reporting if enabled:
@@ -188,9 +187,6 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
                 // Create the callback to use for this one:
                 processorProgressCallback = async (fraction) =>
                 {
-                    if (!callbackIsValid)
-                        throw new InvalidOperationException("The progress callback for a previous processor is still in use even though it should not be, as the processor has already completed.");
-
                     var progressValue = new ProgressValue(context.VariantId, processorName, fraction);
                     await progressCallback(progressValue).ConfigureAwait(false);
                 };
@@ -199,11 +195,10 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
                 await processorProgressCallback(0.0).ConfigureAwait(false);
 
                 // Set the callback on the context:
-                context = new(context) { ProgressCallback = processorProgressCallback };
+                context.ProgressCallback = processorProgressCallback;
             }
 
             var result = await processor.CallProcessAsync(context).ConfigureAwait(false);
-            callbackIsValid = false;
 
             bool oneStepLeft = i == Processors.Count - 2;
             await context.SetResultAsync(result, oneStepLeft).ConfigureAwait(false);
