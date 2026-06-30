@@ -78,8 +78,10 @@ public sealed class TaskWithProgressTests
             await task; // Wait for production to finish; the queue is now fully populated.
 
             var list = new List<ProgressValue>();
+
             while (await e.MoveNextAsync())
                 list.Add(e.Current);
+
             return list;
         }
     }
@@ -247,8 +249,7 @@ public sealed class TaskWithProgressTests
             (await e.MoveNextAsync()).ShouldBeTrue();
             cts.Cancel();
             await e.DisposeAsync();
-            var awaiter = t.GetAwaiter();
-            return awaiter;
+            return t.GetAwaiter();
         }
     }
 
@@ -481,8 +482,7 @@ public sealed class TaskWithProgressTests
         {
             await Task.CompletedTask;
             var t = MakeThrows(marker);
-            var awaiter = t.GetAwaiter(); // Starts the task but never observes its result.
-            return awaiter;
+            return t.GetAwaiter(); // Starts the task but never observes its result.
         }
     }
 
@@ -603,8 +603,7 @@ public sealed class TaskWithProgressTests
             var t = MakeThrows(marker);
             var e = t.GetAsyncEnumerator(TestContext.CancellationToken); // Start enumeration, do not observe its fault.
             await e.DisposeAsync();
-            var awaiter = t.GetAwaiter(); // Start an await, do not observe its fault.
-            return awaiter;
+            return t.GetAwaiter(); // Start an await, do not observe its fault.
         }
     }
 
@@ -1298,7 +1297,7 @@ public sealed class TaskWithProgressTests
             postResult = result;
         });
 
-        var s = t.CastTo<string>(async (v) =>
+        var s = t.CastTo(async (v) =>
         {
             converterRan = true;
             return v.ToString();
@@ -1323,7 +1322,7 @@ public sealed class TaskWithProgressTests
             postSuccess = success;
         });
 
-        var s = t.CastTo<string>(async (v) =>
+        var s = t.CastTo(async (v) =>
         {
             converterRan = true;
             return v.ToString();

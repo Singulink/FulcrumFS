@@ -29,8 +29,8 @@ namespace FulcrumFS;
 /// If an exception occurs in the underlying operation and it is not observed by the caller through either <see cref="GetAwaiter" /> or
 /// <see cref="GetAsyncEnumerator" />, it will surface as an unobserved task exception like with a normal <see cref="Task{TResult}" />. Additionally, each call
 /// to <see cref="GetAwaiter" /> is treated like a new task, so if you call that methods and do not observe the exception, you could also see an unobserved task
-/// exception for each of those calls. Calling <see cref="GetAsyncEnumerator" /> and ignoring the exception from MoveNextAsync will not cause an unobserved task
-/// exception.
+/// exception for each of those calls. The handling for <see cref="GetAsyncEnumerator" /> is similar in most cases, but if you're manually enumerating, then
+/// ignoring the result of a <c>MoveNextAsync</c> that would throw will not result in an unobserved task exception, and will instead consume the exception.
 /// </para>
 /// </remarks>
 public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>

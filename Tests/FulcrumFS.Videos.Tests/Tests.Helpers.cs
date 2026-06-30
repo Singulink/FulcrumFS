@@ -358,6 +358,7 @@ partial class Tests
             {
                 await using var txn = await repo.BeginTransactionAsync();
                 TaskWithProgress<RepoFileGroupInfo> addAsyncTask;
+
                 if (addAsyncExtensionOverride is not null)
                 {
                     addAsyncTask = txn.AddAsync(stream, addAsyncExtensionOverride, true, pipeline, TestContext.CancellationToken);
@@ -368,7 +369,10 @@ partial class Tests
                 }
 
                 // If we want to force progress reporting, do that now:
-                await foreach (var unused in addAsyncTask.ConfigureAwait(false)) { }
+                if (forceProgressReporting)
+                {
+                    await foreach (var unused in addAsyncTask.ConfigureAwait(false)) { }
+                }
 
                 await addAsyncTask.ConfigureAwait(false);
             });
@@ -382,15 +386,24 @@ partial class Tests
             // Add the video to the repo:
 
             await using var txn = await repo.BeginTransactionAsync();
+            TaskWithProgress<RepoFileGroupInfo> addAsyncTask;
 
             if (addAsyncExtensionOverride is not null)
             {
-                fileId = (await txn.AddAsync(stream, addAsyncExtensionOverride, true, pipeline, TestContext.CancellationToken)).FileId;
+                addAsyncTask = txn.AddAsync(stream, addAsyncExtensionOverride, true, pipeline, TestContext.CancellationToken);
             }
             else
             {
-                fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+                addAsyncTask = txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
             }
+
+            // If we want to force progress reporting, do that now:
+            if (forceProgressReporting)
+            {
+                await foreach (var unused in addAsyncTask.ConfigureAwait(false)) { }
+            }
+
+            fileId = (await addAsyncTask.ConfigureAwait(false)).FileId;
 
             await txn.CommitAsync(TestContext.CancellationToken);
         }

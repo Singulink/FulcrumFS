@@ -127,7 +127,7 @@ public sealed class VideoFrameExtractionProcessor : FileProcessor
         }
 
         // Check if we need to resize:
-        var (w, h) = CalculateThumbnailResize(
+        var (w, h) = CalculateVideoFrameResize(
             streamWidth: stream.Width,
             streamHeight: stream.Height,
             streamSarNum: Options.ForceSquarePixels ? stream.SarNum : -1,
@@ -234,7 +234,7 @@ public sealed class VideoFrameExtractionProcessor : FileProcessor
     }
 
     // Helper to share the logic for resizing a video frame (similar to VideoProcessor.CalculateVideoResize, but simpler).
-    private static (int Width, int Height) CalculateThumbnailResize(
+    private static (int Width, int Height) CalculateVideoFrameResize(
         int streamWidth,
         int streamHeight,
         int streamSarNum,
