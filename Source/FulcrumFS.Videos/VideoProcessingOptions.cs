@@ -424,14 +424,6 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes the progress callback, which gets invoked with the current approximate progress (between 0.0 and 1.0).</para>
-    /// <para>
-    /// Default is <see langword="null" />.</para>
-    /// </summary>
-    public Func<(FileId FileId, string? VariantId), double, ValueTask>? ProgressCallback { get; init; }
-
-    /// <summary>
-    /// <para>
     /// Gets or initializes the behavior for re-encoding video streams.</para>
     /// </summary>
     public StreamReencodeMode VideoReencodeMode

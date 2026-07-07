@@ -219,7 +219,6 @@ public sealed partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        double lastProgress = double.MinValue;
         var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
         {
             ForceValidateAllStreams = forceValidation,
@@ -227,20 +226,33 @@ public sealed partial class Tests
             VideoReencodeMode = videoReencode,
             AudioReencodeMode = audioReencode,
             ResultFormats = [MediaContainerFormat.MP4],
-            ProgressCallback = async (_, progress) =>
-            {
-                progress.ShouldBeGreaterThanOrEqualTo(0.0, "Progress should not be negative");
-                progress.ShouldBeLessThanOrEqualTo(1.0, "Progress should not exceed 1.0");
-                progress.ShouldBeGreaterThan(lastProgress, $"Progress did not increase from {lastProgress} to {progress}");
-                lastProgress = progress;
-            },
         }).ToPipeline();
 
         var origFile = _videoFilesDir.CombineFile(fileName);
         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
         await using var txn = await repo.BeginTransactionAsync();
-        await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
+        var addAsyncTask = txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
+
+        // Cause progress reporting to occur & check that we get sane results.
+        double lastProgress = double.MinValue;
+        await foreach (var progress in addAsyncTask.ConfigureAwait(false))
+        {
+            progress.VariantId.ShouldBeNull("Progress should be reported for the main pipeline, not a variant");
+            progress.Stage.ShouldBe("VideoProcessor");
+
+            if (lastProgress < 0.0)
+                progress.Progress.ShouldBe(0.0, "Progress should start at 0.0");
+
+            progress.Progress.ShouldBeGreaterThanOrEqualTo(0.0, "Progress should not be negative");
+            progress.Progress.ShouldBeLessThanOrEqualTo(1.0, "Progress should not exceed 1.0");
+            progress.Progress.ShouldBeGreaterThan(lastProgress, $"Progress did not increase from {lastProgress} to {progress.Progress}");
+            lastProgress = progress.Progress;
+        }
+
+        lastProgress.ShouldBe(1.0, "Progress should end at 1.0");
+
+        await addAsyncTask.ConfigureAwait(false);
         await txn.CommitAsync(TestContext.CancellationToken);
     }
 
@@ -275,7 +287,6 @@ public sealed partial class Tests
                     RemapHDRToSDR = true,
                     ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, maxWidth, maxHeight),
                     TryPreserveUnrecognizedStreams = true,
-                    ProgressCallback = async (_, _) => { },
                     ForceProgressiveDownload = true,
                     VideoSourceValidation = VideoStreamValidationOptions.None with
                     {
@@ -303,7 +314,8 @@ public sealed partial class Tests
                 },
                 "video133.mp4",
                 exceptionMessage: null,
-                expectedChanges: (NewStreamCount: 15, StreamMapping: []));
+                expectedChanges: (NewStreamCount: 15, StreamMapping: []),
+                forceProgressReporting: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException && maxWidth == 41 && maxHeight == 37)
         {

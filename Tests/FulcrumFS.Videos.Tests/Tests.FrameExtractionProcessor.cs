@@ -4,7 +4,7 @@ using SixLabors.ImageSharp;
 
 namespace FulcrumFS.Videos;
 
-// This file contains all of the ThumbnailProcessor-specific tests.
+// This file contains all of the VideoFrameExtractionProcessor-specific tests.
 
 partial class Tests
 {
@@ -12,18 +12,18 @@ partial class Tests
     [TestMethod]
     [DataRow(true)]
     [DataRow(false)]
-    public async Task ExtractThumbnailFromHDRVideoTest(bool remapHDRToSDR)
+    public async Task ExtractVideoFrameFromHDRVideoTest(bool remapHDRToSDR)
     {
-        // Test extracting a thumbnail from an HDR video, with and without remapping to SDR.
+        // Test extracting a video frame from an HDR video, with and without remapping to SDR.
         // This is a visual inspection test - the resulting images should be checked manually to ensure correct color representation.
 
-        var resultFile = _appDir.CombineDirectory("TestHDRThumbnailResults").CombineFile(remapHDRToSDR ? "thumbnail_sdr.png" : "thumbnail_hdr.png");
+        var resultFile = _appDir.CombineDirectory("TestHDRVideoFrameResults").CombineFile(remapHDRToSDR ? "video_frame_sdr.png" : "video_frame_hdr.png");
         resultFile.ParentDirectory?.Create();
         resultFile.Delete();
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard with
+        var pipeline = new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard with
         {
             RemapHDRToSDR = remapHDRToSDR,
         }).ToPipeline();
@@ -45,17 +45,17 @@ partial class Tests
     [TestMethod]
     [DataRow("bbb_sunflower_1080p_60fps_normal-25s.mp4", 10, 0.5, false)]
     [DataRow("bbb_sunflower_1080p_60fps_normal-25s.mp4", 15, 0.5, true)]
-    public async Task TestThumbnailTimestampSelection(string fileName, double seconds, double fraction, bool useFraction)
+    public async Task TestVideoFrameTimestampSelection(string fileName, double seconds, double fraction, bool useFraction)
     {
-        // Tests that ThumbnailProcessor selects the correct frame timestamp when both ImageTimestamp and ImageTimestampFraction are specified.
+        // Tests that VideoFrameExtractionProcessor selects the correct frame timestamp when both ImageTimestamp and ImageTimestampFraction are specified.
         // The processor should take the minimum of the two when both have meaning.
 
         using var repoCtx = GetRepo(out var repo);
 
-        // Helper to extract thumbnail with given options and return the image path:
-        async Task<IAbsoluteFilePath> ExtractThumbnail(VideoThumbnailProcessingOptions options)
+        // Helper to extract video frame with given options and return the image path:
+        async Task<IAbsoluteFilePath> ExtractVideoFrame(VideoFrameExtractionProcessingOptions options)
         {
-            var pipeline = new VideoThumbnailProcessor(options).ToPipeline();
+            var pipeline = new VideoFrameExtractionProcessor(options).ToPipeline();
             var origFile = _videoFilesDir.CombineFile(fileName);
             await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -67,7 +67,7 @@ partial class Tests
         }
 
         // Extract with both options set
-        var bothOptionsPath = await ExtractThumbnail(new VideoThumbnailProcessingOptions
+        var bothOptionsPath = await ExtractVideoFrame(new VideoFrameExtractionProcessingOptions
         {
             ImageTimestamp = TimeSpan.FromSeconds(seconds),
             ImageTimestampFraction = fraction,
@@ -75,14 +75,14 @@ partial class Tests
         });
 
         // Extract with only absolute timestamp:
-        var absoluteOnlyPath = await ExtractThumbnail(new VideoThumbnailProcessingOptions
+        var absoluteOnlyPath = await ExtractVideoFrame(new VideoFrameExtractionProcessingOptions
         {
             ImageTimestamp = TimeSpan.FromSeconds(seconds),
             RemapHDRToSDR = true,
         });
 
         // Extract with only fraction:
-        var fractionOnlyPath = await ExtractThumbnail(new VideoThumbnailProcessingOptions
+        var fractionOnlyPath = await ExtractVideoFrame(new VideoFrameExtractionProcessingOptions
         {
             ImageTimestampFraction = fraction,
             RemapHDRToSDR = true,
@@ -94,9 +94,9 @@ partial class Tests
     }
 
     [TestMethod]
-    public async Task TestThumbnailFromExplicitThumbnailStream()
+    public async Task TestVideoFrameFromExplicitThumbnailStream()
     {
-        // Tests that when IncludeThumbnailVideoStreams is true, the thumbnail is extracted from the embedded thumbnail stream.
+        // Tests that when IncludeThumbnailVideoStreams is true, the video frame is extracted from the embedded thumbnail stream.
         // Uses video53.mp4 which has an embedded PNG thumbnail stream.
         // When IncludeThumbnailVideoStreams is true, the result should match test_image_1.png.
         // When IncludeThumbnailVideoStreams is false, the result should be different (taken from the main video stream).
@@ -105,10 +105,10 @@ partial class Tests
 
         var expectedThumbnailPath = _videoFilesDir.CombineFile("test_image_1.png");
 
-        // Helper to extract thumbnail with given options and return the image path:
-        async Task<IAbsoluteFilePath> ExtractThumbnail(VideoThumbnailProcessingOptions options)
+        // Helper to extract video frame with given options and return the image path:
+        async Task<IAbsoluteFilePath> ExtractVideoFrame(VideoFrameExtractionProcessingOptions options)
         {
-            var pipeline = new VideoThumbnailProcessor(options).ToPipeline();
+            var pipeline = new VideoFrameExtractionProcessor(options).ToPipeline();
             var origFile = _videoFilesDir.CombineFile("video53.mp4");
             await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -120,13 +120,13 @@ partial class Tests
         }
 
         // Extract with IncludeThumbnailVideoStreams = true - should use embedded thumbnail stream:
-        var withThumbnailStreamPath = await ExtractThumbnail(VideoThumbnailProcessingOptions.Standard with
+        var withThumbnailStreamPath = await ExtractVideoFrame(VideoFrameExtractionProcessingOptions.Standard with
         {
             IncludeThumbnailVideoStreams = true,
         });
 
         // Extract with IncludeThumbnailVideoStreams = false - should use main video stream:
-        var withoutThumbnailStreamPath = await ExtractThumbnail(VideoThumbnailProcessingOptions.Standard with
+        var withoutThumbnailStreamPath = await ExtractVideoFrame(VideoFrameExtractionProcessingOptions.Standard with
         {
             IncludeThumbnailVideoStreams = false,
         });
@@ -142,9 +142,9 @@ partial class Tests
 
     [TestMethod]
     [DynamicData(nameof(ValidVideosWithVideoStreamsToCheck))]
-    public async Task TestThumbnailProcessorAllOptionsConfigurations(string fileName)
+    public async Task TestVideoFrameExtractionProcessorAllOptionsConfigurations(string fileName)
     {
-        // Brute force test that verifies ThumbnailProcessor can successfully process all valid video files
+        // Brute force test that verifies VideoFrameExtractionProcessor can successfully process all valid video files
         // with all important combinations of options.
 
         using var repoCtx = GetRepo(out var repo);
@@ -160,7 +160,7 @@ partial class Tests
             {
                 foreach (bool forceSquarePixels in forceSquarePixelsValues)
                 {
-                    var options = VideoThumbnailProcessingOptions.Standard with
+                    var options = VideoFrameExtractionProcessingOptions.Standard with
                     {
                         IncludeThumbnailVideoStreams = includeThumbnailVideoStreams,
                         RemapHDRToSDR = remapHDRToSDR,
@@ -169,7 +169,7 @@ partial class Tests
 
                     try
                     {
-                        var pipeline = new VideoThumbnailProcessor(options).ToPipeline();
+                        var pipeline = new VideoFrameExtractionProcessor(options).ToPipeline();
                         var origFile = _videoFilesDir.CombineFile(fileName);
                         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -200,14 +200,14 @@ partial class Tests
     [TestMethod]
     [DataRow(true)]
     [DataRow(false)]
-    public async Task TestThumbnailHDRColorSpaceRemapping(bool remapHDRToSDR)
+    public async Task TestVideoFrameHDRColorSpaceRemapping(bool remapHDRToSDR)
     {
-        // Tests that the HDR to SDR color space remapping works correctly for thumbnail extraction.
-        // Uses an HDR video and verifies the color properties of the resulting thumbnail using ffprobe.
+        // Tests that the HDR to SDR color space remapping works correctly for video frame extraction.
+        // Uses an HDR video and verifies the color properties of the resulting video frame using ffprobe.
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new VideoThumbnailProcessor(new VideoThumbnailProcessingOptions
+        var pipeline = new VideoFrameExtractionProcessor(new VideoFrameExtractionProcessingOptions
         {
             ImageTimestampFraction = 0.3,
             RemapHDRToSDR = remapHDRToSDR,
@@ -238,7 +238,7 @@ partial class Tests
         }
         catch (Exception ex)
         {
-            throw new Exception("Thumbnail HDR/SDR color property validation failed. Info: " + imageInfo, ex);
+            throw new Exception("Video frame HDR/SDR color property validation failed. Info: " + imageInfo, ex);
         }
     }
 
@@ -246,13 +246,13 @@ partial class Tests
     [DataRow("video159.ts")]
     [DataRow("video161.mp4")]
     [DataRow("video168.mp4")]
-    public async Task TestThumbnailFailsWithNoVideoStreams(string fileName)
+    public async Task TestVideoFrameExtractionFailsWithNoVideoStreams(string fileName)
     {
-        // Tests that ThumbnailProcessor fails with a clear error when the input file has no video streams.
+        // Tests that VideoFrameExtractionProcessor fails with a clear error when the input file has no video streams.
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new VideoThumbnailProcessor(new VideoThumbnailProcessingOptions
+        var pipeline = new VideoFrameExtractionProcessor(new VideoFrameExtractionProcessingOptions
         {
             ImageTimestampFraction = 0.5,
         }).ToPipeline();
@@ -266,18 +266,18 @@ partial class Tests
             await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         });
 
-        ex.Message.ShouldBe("No suitable video stream found to extract thumbnail from.");
+        ex.Message.ShouldBe("No suitable video stream found to extract a video frame from.");
     }
 
     [TestMethod]
-    public async Task TestThumbnailFailsWhenTimestampExceedsDuration()
+    public async Task TestVideoFrameExtractionFailsWhenTimestampExceedsDuration()
     {
-        // Tests that ThumbnailProcessor throws an exception when the requested timestamp exceeds the video duration.
+        // Tests that VideoFrameExtractionProcessor throws an exception when the requested timestamp exceeds the video duration.
         // Uses video1.mp4 which is 1 second long, with a 2 second timestamp request.
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new VideoThumbnailProcessor(new VideoThumbnailProcessingOptions
+        var pipeline = new VideoFrameExtractionProcessor(new VideoFrameExtractionProcessingOptions
         {
             ImageTimestamp = TimeSpan.FromSeconds(2),
         }).ToPipeline();
@@ -291,20 +291,20 @@ partial class Tests
             await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken);
         });
 
-        ex.Message.ShouldBe("Specified thumbnail timestamp is beyond the end of the video.");
+        ex.Message.ShouldBe("Specified video frame timestamp is beyond the end of the video.");
     }
 
     [TestMethod]
     [DataRow("video1.mp4", "rgb24")]
     [DataRow("video32.mp4", "rgb48be")]
     [DataRow("video43.mp4", "rgb48be")]
-    public async Task TestThumbnailBitDepthPreservation(string videoFileName, string expectedPixelFormat)
+    public async Task TestVideoFrameExtractionBitDepthPreservation(string videoFileName, string expectedPixelFormat)
     {
-        // Tests that 8-bit input videos produce 8-bpc PNG thumbnails, and higher bit depth videos produce 16-bpc PNG thumbnails.
+        // Tests that 8-bit input videos produce 8-bpc PNG video frames, and higher bit depth videos produce 16-bpc PNG video frames.
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard).ToPipeline();
+        var pipeline = new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard).ToPipeline();
 
         var origFile = _videoFilesDir.CombineFile(videoFileName);
         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
@@ -328,9 +328,9 @@ partial class Tests
     }
 
     [TestMethod]
-    public async Task TestThumbnailSelectsDefaultVideoStreamOverNonDefault()
+    public async Task TestVideoFrameExtractionSelectsDefaultVideoStreamOverNonDefault()
     {
-        // Tests that ThumbnailProcessor selects a non-first video stream that is marked as default over a first video stream that is not marked as default.
+        // Tests that VideoFrameExtractionProcessor selects a non-first video stream that is marked as default over a first video stream that is not marked as default.
         // Creates a test video with two video streams: first is non-default, second is default.
 
         using var repoCtx = GetRepo(out var repo);
@@ -358,8 +358,8 @@ partial class Tests
             ],
             TestContext.CancellationToken);
 
-        // Extract thumbnail from the combined video:
-        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard).ToPipeline();
+        // Extract video frame from the combined video:
+        var pipeline = new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard).ToPipeline();
 
         await using var stream = FilePath.ParseAbsolute(combinedVideoPath).OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
 
@@ -367,25 +367,25 @@ partial class Tests
         var fileId = (await txn.AddAsync(stream, ".mp4", true, pipeline, TestContext.CancellationToken)).FileId;
         await txn.CommitAsync(TestContext.CancellationToken);
 
-        var thumbnailPath = (await repo.GetAsync(fileId)).Path;
-        thumbnailPath.Exists.ShouldBeTrue();
+        var videoFramePath = (await repo.GetAsync(fileId)).Path;
+        videoFramePath.Exists.ShouldBeTrue();
 
-        // Also extract thumbnails from the individual source videos for comparison:
+        // Also extract video frames from the individual source videos for comparison:
         await using var stream1 = file1.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
         await using var txn1 = await repo.BeginTransactionAsync();
         var fileId1 = (await txn1.AddAsync(stream1, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn1.CommitAsync(TestContext.CancellationToken);
-        var thumbnail1Path = (await repo.GetAsync(fileId1)).Path;
+        var videoFrame1Path = (await repo.GetAsync(fileId1)).Path;
 
         await using var stream2 = file2.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
         await using var txn2 = await repo.BeginTransactionAsync();
         var fileId2 = (await txn2.AddAsync(stream2, true, pipeline, TestContext.CancellationToken)).FileId;
         await txn2.CommitAsync(TestContext.CancellationToken);
-        var thumbnail2Path = (await repo.GetAsync(fileId2)).Path;
+        var videoFrame2Path = (await repo.GetAsync(fileId2)).Path;
 
-        // The thumbnail from the combined video should match video2 (the default stream), not video1:
-        AreImagePixelsEqual(thumbnailPath.PathExport, thumbnail2Path.PathExport).ShouldBeTrue();
-        AreImagePixelsEqual(thumbnailPath.PathExport, thumbnail1Path.PathExport).ShouldBeFalse();
+        // The video frame from the combined video should match video2 (the default stream), not video1:
+        AreImagePixelsEqual(videoFramePath.PathExport, videoFrame2Path.PathExport).ShouldBeTrue();
+        AreImagePixelsEqual(videoFramePath.PathExport, videoFrame1Path.PathExport).ShouldBeFalse();
     }
 
     [TestMethod]
@@ -393,7 +393,7 @@ partial class Tests
     [DataRow("video111.mp4", false, 128, 128)]
     [DataRow("video166.mp4", true, 128, 128)]
     [DataRow("video166.mp4", false, 96, 128)]
-    public async Task TestThumbnailNonSquarePixelHandling(string fileName, bool forceSquarePixels, int expectedWidth, int expectedHeight)
+    public async Task TestVideoFrameExtractionNonSquarePixelHandling(string fileName, bool forceSquarePixels, int expectedWidth, int expectedHeight)
     {
         // Tests that ForceSquarePixels option correctly handles videos with non-square pixel aspect ratios (SAR).
         // When ForceSquarePixels is true, the output dimensions should be adjusted to account for the SAR.
@@ -401,7 +401,7 @@ partial class Tests
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard with
+        var pipeline = new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard with
         {
             ForceSquarePixels = forceSquarePixels,
         }).ToPipeline();
@@ -423,13 +423,13 @@ partial class Tests
     }
 
     [TestMethod]
-    public async Task TestThumbnailMaxResolutionCapping()
+    public async Task TestVideoFrameExtractionMaxResolutionCapping()
     {
-        // Tests that the ThumbnailProcessor correctly caps output dimensions to 32767x32767.
+        // Tests that the VideoFrameExtractionProcessor correctly caps output dimensions to 32767x32767.
 
         using var repoCtx = GetRepo(out var repo);
 
-        var pipeline = new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard).ToPipeline();
+        var pipeline = new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard).ToPipeline();
 
         // video143.mp4 has a resolution of 64x65534, which exceeds the max height.
         var videoPath = _videoFilesDir.CombineFile("video143.mp4");
