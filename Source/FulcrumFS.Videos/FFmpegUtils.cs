@@ -539,7 +539,7 @@ internal static class FFmpegUtils
                 int bytesRead;
                 bool justRead = false;
 #if !DEBUG
-                const int WaitTimeMs = 70;
+                const int WaitTimeMs = 90;
 #else
                 const int WaitTimeMs = 5;
 #endif
