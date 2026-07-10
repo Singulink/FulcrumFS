@@ -462,10 +462,10 @@ internal static class FFmpegUtils
             args.Add("-progress");
             args.Add(progressFilePath);
 
-            // Update stats every 1s (or 16ms in debug mode, so we can test progress reading properly):
+            // Update stats every 100ms (or 16ms in debug mode, so we can test progress reading properly):
             args.Add("-stats_period");
 #if !DEBUG
-            args.Add("1.0");
+            args.Add("0.1");
 #else
             args.Add("0.016");
 #endif
@@ -539,7 +539,7 @@ internal static class FFmpegUtils
                 int bytesRead;
                 bool justRead = false;
 #if !DEBUG
-                const int WaitTimeMs = 900;
+                const int WaitTimeMs = 90;
 #else
                 const int WaitTimeMs = 5;
 #endif
