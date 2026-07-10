@@ -13,6 +13,7 @@ Details of each component are provided below:
 | **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
 | **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| **Singulink.FulcrumFS.Pdf** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
 | **Singulink.FulcrumFS.Videos** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
 **Supported Runtimes**: .NET 10.0+
@@ -65,6 +66,12 @@ The main `FulcrumFS` library uses `FileFormat` via the `FileFormatValidationProc
 Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
 Image processing is provided by [`ImageSharp`](https://github.com/SixLabors/ImageSharp).
+
+#### FulcrumFS.Pdf
+
+Optional extension that adds PDF image extraction capabilities, rendering PDF pages to images (e.g. for thumbnail generation).
+
+PDF rendering is provided by PDFium via [`PDFtoImage`](https://github.com/sungaila/PDFtoImage).
 
 #### FulcrumFS.Videos
 

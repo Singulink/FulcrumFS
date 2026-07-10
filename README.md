@@ -24,6 +24,7 @@ Details of each component are provided below:
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Pdf** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Videos** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
 **Supported Runtimes**: .NET 10.0+
@@ -76,6 +77,12 @@ The main `FulcrumFS` library uses `FileFormat` via the `FileFormatValidationProc
 Extension package that adds customizable image processing capabilities to file processing pipelines, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
 Image processing is provided by the fantastic [ImageSharp](https://github.com/SixLabors/ImageSharp) library.
+
+#### FulcrumFS.Pdf
+
+Extension package that adds PDF image extraction capabilities to file processing pipelines, rendering PDF pages to images (e.g. for thumbnail generation).
+
+PDF rendering is provided by [PDFium](https://pdfium.googlesource.com/pdfium/) via the [PDFtoImage](https://github.com/sungaila/PDFtoImage) library.
 
 #### FulcrumFS.Videos
 

@@ -18,6 +18,7 @@
 
   <ItemGroup Label="Third-Party">
     <PackageVersion Include="Nito.AsyncEx.Coordination" Version="5.1.2" />
+    <PackageVersion Include="PDFtoImage" Version="5.2.1" />
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>
 

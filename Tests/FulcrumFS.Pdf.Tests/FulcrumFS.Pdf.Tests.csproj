@@ -1,0 +1,18 @@
+<Project Sdk="MSTest.Sdk/4.0.2">
+  <PropertyGroup>
+    <RootNamespace>FulcrumFS.Pdf</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- PDFtoImage APIs are annotated for specific OS platforms; tests run on the supported desktop platforms -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\FulcrumFS.Pdf\FulcrumFS.Pdf.csproj" />
+    <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" />
+  </ItemGroup>
+</Project>

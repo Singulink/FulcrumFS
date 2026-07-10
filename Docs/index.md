@@ -22,6 +22,7 @@ The libraries are available on NuGet. Install the packages that match your needs
 - `Singulink.FulcrumFS` - the main transactional storage and processing engine.
 - `Singulink.FulcrumFS.Core` - the lightweight `FileId`, repository paths, and `FileFormat` validation API (usable standalone, including in client apps).
 - `Singulink.FulcrumFS.Images` - image processing pipeline steps (powered by ImageSharp).
+- `Singulink.FulcrumFS.Pdf` - PDF image extraction pipeline steps (powered by PDFium / PDFtoImage).
 - `Singulink.FulcrumFS.Videos` - video processing pipeline steps (powered by FFmpeg / FFprobe).
 
 **Supported Runtimes**: .NET 10.0+
