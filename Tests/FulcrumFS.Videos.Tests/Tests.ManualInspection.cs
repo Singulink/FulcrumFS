@@ -744,6 +744,119 @@ partial class Tests
         File.Copy(videoPath3.PathExport, outputStripMetadata.PathExport);
     }
 
+    [TestMethod]
+    public async Task TestRotationMetadataResizingHandling()
+    {
+        // This test creates a video that is physically rotated 90 degrees clockwise, but has rotation metadata set to -90 (to display correctly).
+        // We then resize it to a smaller resolution & verify that it is handled correctly.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        var resultsDir = _appDir.CombineDirectory("TestRotationMetadataResizingResults");
+        resultsDir.Create();
+
+        var tempRotatedInputFile = resultsDir.CombineFile("temp_input_rotated.mp4");
+        var rotatedInputFile = resultsDir.CombineFile("input_rotated_with_metadata.mp4");
+        var outputPreserveMetadataReencoded = resultsDir.CombineFile("output_preserve_metadata_reencoded.mp4");
+        var outputStripMetadata = resultsDir.CombineFile("output_strip_metadata.mp4");
+        tempRotatedInputFile.Delete();
+        rotatedInputFile.Delete();
+        outputPreserveMetadataReencoded.Delete();
+        outputStripMetadata.Delete();
+
+        var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
+
+        // Create a video that is physically rotated 90 degrees clockwise, with rotation metadata set to -90 so that it displays correctly when played.
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", "transpose=1",
+                "-c:v", "libx264",
+                "-c:a", "copy",
+                "-y", tempRotatedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-display_rotation", "90",
+                "-i", tempRotatedInputFile.PathExport,
+                "-c", "copy",
+                "-y", rotatedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        tempRotatedInputFile.Delete();
+
+        // Process with metadata preservation (MetadataStrippingMode.None) and forced re-encoding:
+        var pipeline1 = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            MetadataStrippingMode = VideoMetadataStrippingMode.None,
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, 1280, 720),
+        }).ToPipeline();
+
+        await using var stream1 = rotatedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn1 = await repo.BeginTransactionAsync();
+        var fileId1 = (await txn1.AddAsync(stream1, true, pipeline1, TestContext.CancellationToken)).FileId;
+        await txn1.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath1 = (await repo.GetAsync(fileId1)).Path;
+        videoPath1.Exists.ShouldBeTrue();
+        File.Copy(videoPath1.PathExport, outputPreserveMetadataReencoded.PathExport);
+
+        // Process with metadata stripping (MetadataStrippingMode.Required):
+        var pipeline2 = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            MetadataStrippingMode = VideoMetadataStrippingMode.Required,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, 1280, 720),
+        }).ToPipeline();
+
+        await using var stream2 = rotatedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn2 = await repo.BeginTransactionAsync();
+        var fileId2 = (await txn2.AddAsync(stream2, true, pipeline2, TestContext.CancellationToken)).FileId;
+        await txn2.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath2 = (await repo.GetAsync(fileId2)).Path;
+        videoPath2.Exists.ShouldBeTrue();
+        File.Copy(videoPath2.PathExport, outputStripMetadata.PathExport);
+
+        // Validate that we don't have any rotation metadata & our size is correct
+        var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", rotatedInputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode0.ShouldBe(0);
+
+        var (probeOutput1, _, probeReturnCode1) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputPreserveMetadataReencoded.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode1.ShouldBe(0);
+
+        var (probeOutput2, _, probeReturnCode2) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputStripMetadata.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode2.ShouldBe(0);
+
+        probeOutput0.Contains("\"width\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"height\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        probeOutput1.Contains("\"width\": 1280", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"height\": 720", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+
+        probeOutput2.Contains("\"width\": 1280", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"height\": 720", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+    }
+
 #if !CI
     [TestMethod]
     [DataRow("video114")]

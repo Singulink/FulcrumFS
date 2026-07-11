@@ -122,7 +122,8 @@ internal static class FFprobeUtils
         string? ColorPrimaries,
         string? FieldOrder,
         int BitsPerSample,
-        bool AlphaMode)
+        bool AlphaMode,
+        int Rotation)
     : StreamInfo;
 
     public sealed record AudioStreamInfo(
@@ -213,7 +214,8 @@ internal static class FFprobeUtils
                     s.ColorPrimaries,
                     s.FieldOrder,
                     s.BitsPerRawSample ?? -1,
-                    t?.IsAlphaMode ?? false);
+                    t?.IsAlphaMode ?? false,
+                    s.SideDataList?.FirstOrDefault((sd) => sd?.SideDataType == "Display Matrix")?.Rotation ?? 0);
 
             case "audio":
                 return new AudioStreamInfo(s.CodecName!, s.Profile, language, s.Duration, s.Channels ?? -1, s.SampleRate, s.ChannelLayout);
@@ -520,7 +522,8 @@ internal sealed record FFprobeStreamData(
     string? FieldOrder,
     string? ChannelLayout,
     FFprobeDispositionData? Disposition,
-    FFprobeTagsData? Tags);
+    FFprobeTagsData? Tags,
+    FFprobeSideData?[]? SideDataList);
 
 internal sealed record FFprobeDispositionData(
     int? AttachedPic,
@@ -555,6 +558,8 @@ internal sealed record FFprobeTagsData(string? Language, string? Title, string? 
     [JsonIgnore]
     public bool IsAlphaMode => AlphaMode == "1";
 }
+
+internal sealed record FFprobeSideData(string? SideDataType, int? Rotation);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,

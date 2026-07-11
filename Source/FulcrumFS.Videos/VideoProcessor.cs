@@ -275,57 +275,64 @@ public sealed class VideoProcessor : FileProcessor
                     throw new FileProcessingException($"Video stream {idx} has unknown duration, cannot validate.");
                 }
 
+                int width = videoStream.Width, height = videoStream.Height;
+
+                if (videoStream.Rotation is -90 or 90)
+                {
+                    (width, height) = (height, width);
+                }
+
                 if (Options.VideoSourceValidation.MaxWidth.HasValue)
                 {
-                    if (videoStream.Width <= 0)
+                    if (width <= 0)
                         throw new FileProcessingException($"Video stream {idx} has unknown width, cannot validate.");
 
-                    if (videoStream.Width > Options.VideoSourceValidation.MaxWidth.Value)
+                    if (width > Options.VideoSourceValidation.MaxWidth.Value)
                         throw new FileProcessingException($"Video stream {idx} width exceeds the maximum allowed width.");
                 }
 
                 if (Options.VideoSourceValidation.MaxHeight.HasValue)
                 {
-                    if (videoStream.Height <= 0)
+                    if (height <= 0)
                         throw new FileProcessingException($"Video stream {idx} has unknown height, cannot validate.");
 
-                    if (videoStream.Height > Options.VideoSourceValidation.MaxHeight.Value)
+                    if (height > Options.VideoSourceValidation.MaxHeight.Value)
                         throw new FileProcessingException($"Video stream {idx} height exceeds the maximum allowed height.");
                 }
 
                 if (Options.VideoSourceValidation.MaxPixels.HasValue)
                 {
-                    if (videoStream.Width <= 0 || videoStream.Height <= 0)
+                    if (width <= 0 || height <= 0)
                         throw new FileProcessingException($"Video stream {idx} has unknown dimensions, cannot validate.");
 
-                    if ((long)videoStream.Width * videoStream.Height > Options.VideoSourceValidation.MaxPixels.Value)
+                    if ((long)width * height > Options.VideoSourceValidation.MaxPixels.Value)
                         throw new FileProcessingException($"Video stream {idx} exceeds the maximum allowed pixel count.");
                 }
 
                 if (Options.VideoSourceValidation.MinWidth.HasValue)
                 {
-                    if (videoStream.Width <= 0)
+                    if (width <= 0)
                         throw new FileProcessingException($"Video stream {idx} has unknown width, cannot validate.");
 
-                    if (videoStream.Width < Options.VideoSourceValidation.MinWidth.Value)
+                    if (width < Options.VideoSourceValidation.MinWidth.Value)
                         throw new FileProcessingException($"Video stream {idx} width is less than the minimum required width.");
                 }
 
                 if (Options.VideoSourceValidation.MinHeight.HasValue)
                 {
-                    if (videoStream.Height <= 0)
+                    if (height <= 0)
                         throw new FileProcessingException($"Video stream {idx} has unknown height, cannot validate.");
 
-                    if (videoStream.Height < Options.VideoSourceValidation.MinHeight.Value)
+                    if (height < Options.VideoSourceValidation.MinHeight.Value)
                         throw new FileProcessingException($"Video stream {idx} height is less than the minimum required height.");
                 }
 
                 if (Options.VideoSourceValidation.MinPixels.HasValue)
                 {
-                    if (videoStream.Width <= 0 || videoStream.Height <= 0)
+                    if (width <= 0 || height <= 0)
                         throw new FileProcessingException($"Video stream {idx} has unknown dimensions, cannot validate.");
 
-                    if ((long)videoStream.Width * videoStream.Height < Options.VideoSourceValidation.MinPixels.Value)
+                    if ((long)width * height < Options.VideoSourceValidation.MinPixels.Value)
                         throw new FileProcessingException($"Video stream {idx} is less than the minimum required pixel count.");
                 }
 
@@ -337,7 +344,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Check if we can resize if needed, which requires known dimensions:
-                if (videoStream.Width <= 0 || videoStream.Height <= 0)
+                if (width <= 0 || height <= 0)
                 {
                     throw new FileProcessingException($"Video stream {idx} has unknown dimensions, cannot determine resizing.");
                 }
@@ -601,6 +608,13 @@ public sealed class VideoProcessor : FileProcessor
                     continue;
                 }
 
+                int width = videoStream.Width, height = videoStream.Height;
+
+                if (videoStream.Rotation is -90 or 90)
+                {
+                    (width, height) = (height, width);
+                }
+
                 VideoCodec? codec = MatchVideoCodecByName(Options.ResultVideoCodecs, videoStream.CodecName, videoStream.CodecTagString);
                 bool reencodingStream = false;
                 bool mustReencodeStream = false;
@@ -649,8 +663,8 @@ public sealed class VideoProcessor : FileProcessor
                 // If resizing is enabled, check if we would resize:
                 if (Options.ResizeOptions is { } resizeOptions)
                 {
-                    if ((videoStream.Width > resizeOptions.Width) ||
-                        (videoStream.Height > resizeOptions.Height))
+                    if (((width > resizeOptions.Width) || (height > resizeOptions.Height)) &&
+                        (Options.ResizeOptions.MatchSourceOrientation != true || (height > resizeOptions.Width) || (width > resizeOptions.Height)))
                     {
                         reencodingStream = true;
                         mustReencodeStream = true;
@@ -737,11 +751,11 @@ public sealed class VideoProcessor : FileProcessor
                     // Check if the resizing is possible:
                     // Note: we only provide fps if we know the exact value we'll end up with right now.
                     var (mode, _, _) = CalculateVideoResize(
-                        videoStream.Width,
-                        videoStream.Height,
+                        width,
+                        height,
                         Options.ForceSquarePixels ? videoStream.SarNum : -1,
                         Options.ForceSquarePixels ? videoStream.SarDen : -1,
-                        GetResizeMaxDimensions(Options.ResizeOptions, videoStream.Width, videoStream.Height),
+                        GetResizeMaxDimensions(Options.ResizeOptions, width, height),
                         !changingFps && videoStream.FpsNum > 0 && videoStream.FpsDen > 0 ? (videoStream.FpsNum, videoStream.FpsDen) : null,
                         roundW,
                         roundH,
@@ -1160,8 +1174,15 @@ public sealed class VideoProcessor : FileProcessor
 
                 // Check for resizing:
 
+                int width = videoStream.Width, height = videoStream.Height;
+
+                if (videoStream.Rotation is -90 or 90)
+                {
+                    (width, height) = (height, width);
+                }
+
                 if (Options.ResizeOptions is { } resizeOptions &&
-                    ((videoStream.Width > resizeOptions.Width) || (videoStream.Height > resizeOptions.Height)))
+                    ((width > resizeOptions.Width) || (height > resizeOptions.Height)))
                 {
                     // Note: we already checked for invalid dimensions earlier, so no need to worry about 0 or -1.
                     // Note: we also checked for impossible to resize earlier.
@@ -1172,7 +1193,7 @@ public sealed class VideoProcessor : FileProcessor
                 // Note: MP4 supports only up to 65535x65535, so check if we exceed that here as it will require re-encoding with resizing, but doesn't cause
                 // it for the purposes of SelectSmallest.
 
-                if (videoStream.Width > 65535 || videoStream.Height > 65535)
+                if (width > 65535 || height > 65535)
                 {
                     reencode = true;
                     requiresReencodeForMP4FromSize = true;
@@ -1391,11 +1412,11 @@ public sealed class VideoProcessor : FileProcessor
                         : ((int, int)?)((int)fpsOverride.FPSNum, (int)fpsOverride.FPSDen);
 
                     var (mode, resultWidth, resultHeight) = CalculateVideoResize(
-                        videoStream.Width,
-                        videoStream.Height,
+                        width,
+                        height,
                         Options.ForceSquarePixels ? videoStream.SarNum : -1,
                         Options.ForceSquarePixels ? videoStream.SarDen : -1,
-                        GetResizeMaxDimensions(Options.ResizeOptions, videoStream.Width, videoStream.Height),
+                        GetResizeMaxDimensions(Options.ResizeOptions, width, height),
                         fpsValue,
                         roundW,
                         roundH,
@@ -1435,7 +1456,7 @@ public sealed class VideoProcessor : FileProcessor
                         }
 
                         // If we're meant to resize, then set up our filter:
-                        if (resultWidth != videoStream.Width || resultHeight != videoStream.Height)
+                        if (resultWidth != width || resultHeight != height)
                         {
                             if (filterOverride is null)
                             {
