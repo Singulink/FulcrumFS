@@ -163,13 +163,13 @@ internal static class FFmpegUtils
         // Note: the setter is public, but the CommandArgument is cached - correct usage requires setting all properties before first call to CommandArgument.
         public (long Num, long Den)? FPS { get; set; }
         public (int Width, int Height)? ResizeTo { get; set; }
-        public string? NewVideoRange { get; set; }
         public bool HDRToSDR { get; set; }
         public string? PixelFormat { get; set; }
         public bool Deinterlace { get; set; }
         public int MakePixelsSquareMode { get; set; } // 0 - keep 1:1, 1 - ignore, 2 - currently wider, 3 - currently taller
         protected override string CommandName => "filter";
         public bool AssumePotentialAlphaChannelForHDRToSDR { get; set; }
+        public bool ForceConvertToFullRange { get; set; }
         protected override string CommandArgument => field ??= string.Join(',', ((string?[])[Deinterlace switch
         {
             false => null,
@@ -181,20 +181,20 @@ internal static class FFmpegUtils
             // the 2^31 - 1 byte limit that ffmpeg imposes faster than usual).
             false => null,
             _ =>
-                $"zscale=t=linear:npl=500," +
+                $"zscale=t=linear:npl=500:r=full," +
                 $"format={(AssumePotentialAlphaChannelForHDRToSDR ? "gbrapf32le" : "gbrpf32le")}," +
                 $"zscale=p=bt709," +
                 $"tonemap=tonemap=mobius:param=0.3:desat=0," +
-                $"zscale=t=bt709:m=bt709:r={NewVideoRange ?? "pc"}",
+                $"zscale=t=bt709:m=bt709:r=full",
         }, PixelFormat switch
         {
             null => null,
             var pf => $"format={pf}",
-        }, NewVideoRange switch
+        }, ForceConvertToFullRange switch
         {
-            null => null,
+            false => null,
             _ when HDRToSDR => null, // We already handled this above.
-            var range => string.Create(CultureInfo.InvariantCulture, $"scale=out_range={range}"),
+            true => "scale=out_range=full",
         }, FPS switch
         {
             null => null,
