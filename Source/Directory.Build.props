@@ -2,7 +2,7 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
   <PropertyGroup>
-    <Version>1.0.0-preview5</Version>
+    <Version>1.0.0-preview6</Version>
 
     <SignAssembly>true</SignAssembly>
 
@@ -13,7 +13,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Copyright>© Singulink. All rights reserved.</Copyright>
     <PackageIcon>FulcrumFS Icon 128x128.png</PackageIcon>
-    <PackageProjectUrl>https://github.com/Singulink/Singulink.UI</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/Singulink/FulcrumFS</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
