@@ -3,7 +3,6 @@
     <TargetFramework>net10.0</TargetFramework>
 
     <PackageId>Singulink.FulcrumFS.Pdf</PackageId>
-    <Version>1.0.0-preview4</Version>
     <Description>
       FulcrumFS extension that adds PDF image extraction capabilities, rendering PDF pages to images (e.g. for generating thumbnails) for both original PDF
       documents and their derived variants.
