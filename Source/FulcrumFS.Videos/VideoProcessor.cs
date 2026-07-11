@@ -1340,7 +1340,7 @@ public sealed class VideoProcessor : FileProcessor
                         perOutputStreamOverrides.Add(filterOverride);
                     }
 
-                    filterOverride.NewVideoRange = "pc";
+                    filterOverride.ForceConvertToFullRange = videoStream.ColorRange != "pc";
                     filterOverride.PixelFormat = pixFormat;
                 }
 
