@@ -83,6 +83,7 @@ public sealed class FFprobeUtilsTests
                     if (videoStream.FieldOrder is not null) tw.WriteLine("Field Order: " + videoStream.FieldOrder);
                     if (videoStream.BitsPerSample > 0) tw.WriteLine("Bits Per Sample: " + videoStream.BitsPerSample);
                     if (videoStream.AlphaMode) tw.WriteLine("Alpha Mode: " + videoStream.AlphaMode);
+                    if (videoStream.Rotation != 0) tw.WriteLine("Rotation: " + videoStream.Rotation);
                     break;
 
                 case FFprobeUtils.AudioStreamInfo audioStream:
@@ -152,7 +153,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.MP3.Name,
                     ProfileName: AudioCodec.MP3.Profile,
@@ -191,7 +193,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.MP3.Name,
                     ProfileName: AudioCodec.MP3.Profile,
@@ -230,7 +233,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -269,7 +273,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -308,7 +313,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -347,7 +353,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Opus.Name,
                     ProfileName: AudioCodec.Opus.Profile,
@@ -386,7 +393,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -425,7 +433,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.MP3.Name,
                     ProfileName: AudioCodec.MP3.Profile,
@@ -464,7 +473,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.MP2.Name,
                     ProfileName: AudioCodec.MP2.Profile,
@@ -503,7 +513,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -542,7 +553,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: null, // FFprobe does not seem to report field order for H.263+ streams
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -581,7 +593,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -620,7 +633,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -659,7 +673,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -698,7 +713,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.HEAAC.Name,
                     ProfileName: AudioCodec.HEAAC.Profile,
@@ -737,7 +753,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
@@ -776,7 +793,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: null, // FFprobe does not seem to report field order for H.266 streams yet
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -815,7 +833,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -858,7 +877,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -901,7 +921,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -944,7 +965,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -987,7 +1009,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1030,7 +1053,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1073,7 +1097,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1116,7 +1141,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1159,7 +1185,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1202,7 +1229,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1245,7 +1273,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1288,7 +1317,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1331,7 +1361,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1374,7 +1405,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1417,7 +1449,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1456,7 +1489,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1495,7 +1529,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1534,7 +1569,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1573,7 +1609,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1612,7 +1649,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1651,7 +1689,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1690,7 +1729,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1729,7 +1769,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1768,7 +1809,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1807,7 +1849,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1846,7 +1889,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1885,7 +1929,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1924,7 +1969,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -1963,7 +2009,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2002,7 +2049,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2041,7 +2089,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2080,7 +2129,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2119,7 +2169,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2158,7 +2209,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2197,7 +2249,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2236,7 +2289,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: "bt709",
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: true),
+                    AlphaMode: true,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Opus.Name,
                     ProfileName: AudioCodec.Opus.Profile,
@@ -2275,7 +2329,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: "bt709",
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: true),
+                    AlphaMode: true,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Opus.Name,
                     ProfileName: AudioCodec.Opus.Profile,
@@ -2314,7 +2369,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2347,7 +2403,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: "bt709",
                     FieldOrder: null,
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
             ])
         ],
         [
@@ -2378,7 +2435,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2411,7 +2469,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: null,
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
             ])
         ],
         [
@@ -2442,7 +2501,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2481,7 +2541,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2520,7 +2581,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2559,7 +2621,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2598,7 +2661,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2637,7 +2701,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2676,7 +2741,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2715,7 +2781,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2754,7 +2821,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2793,7 +2861,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2832,7 +2901,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2871,7 +2941,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2910,7 +2981,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2949,7 +3021,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -2988,7 +3061,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3027,7 +3101,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3066,7 +3141,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3105,7 +3181,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3144,7 +3221,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3183,7 +3261,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3222,7 +3301,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3261,7 +3341,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3300,7 +3381,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3339,7 +3421,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
@@ -3378,7 +3461,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
@@ -3417,7 +3501,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
@@ -3456,7 +3541,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
@@ -3495,7 +3581,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
@@ -3534,7 +3621,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.Vorbis.Name,
                     ProfileName: AudioCodec.Vorbis.Profile,
@@ -3573,7 +3661,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3612,7 +3701,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3651,7 +3741,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 10,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3690,7 +3781,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3729,7 +3821,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3768,7 +3861,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3807,7 +3901,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3846,7 +3941,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3885,7 +3981,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3924,7 +4021,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -3963,7 +4061,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4002,7 +4101,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4041,7 +4141,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4080,7 +4181,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4119,7 +4221,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4158,7 +4261,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4197,7 +4301,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4236,7 +4341,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4275,7 +4381,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4314,7 +4421,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4353,7 +4461,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4392,7 +4501,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4431,7 +4541,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4470,7 +4581,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4509,7 +4621,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4548,7 +4661,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4587,7 +4701,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4626,7 +4741,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4665,7 +4781,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "tt",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4704,7 +4821,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "bb",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4743,7 +4861,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: "bt2020",
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4782,7 +4901,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4821,7 +4941,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4860,7 +4981,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4899,7 +5021,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4938,7 +5061,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -4977,7 +5101,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5016,7 +5141,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5055,7 +5181,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5094,7 +5221,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5133,7 +5261,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5172,7 +5301,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5211,7 +5341,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5250,7 +5381,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5289,7 +5421,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5328,7 +5461,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5367,7 +5501,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5406,7 +5541,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5445,7 +5581,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5484,7 +5621,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5517,7 +5655,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: "bt2020",
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
                     CodecTagString: "avc1",
@@ -5542,7 +5681,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5583,7 +5723,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "mov_text",
                     Language: "und",
@@ -5616,7 +5757,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5649,7 +5791,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
                     CodecTagString: "avc1",
@@ -5674,7 +5817,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: VideoCodec.H264.Name,
                     CodecTagString: "avc1",
@@ -5699,7 +5843,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.SubtitleStreamInfo(
                     CodecName: "mov_text",
                     Language: "und",
@@ -5728,7 +5873,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: null,
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: "png",
                     CodecTagString: "[0][0][0][0]",
@@ -5753,7 +5899,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: "bt709",
                     FieldOrder: null,
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.VideoStreamInfo(
                     CodecName: "png",
                     CodecTagString: "[0][0][0][0]",
@@ -5778,7 +5925,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: "bt709",
                     FieldOrder: null,
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
             ])
         ],
         [
@@ -5809,7 +5957,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5855,7 +6004,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5901,7 +6051,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5940,7 +6091,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -5979,7 +6131,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6018,7 +6171,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6057,7 +6211,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6096,7 +6251,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6135,7 +6291,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6174,7 +6331,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6213,7 +6371,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6252,7 +6411,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6291,7 +6451,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6330,7 +6491,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6369,7 +6531,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6408,7 +6571,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6447,7 +6611,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6486,7 +6651,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6525,7 +6691,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6564,7 +6731,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6603,7 +6771,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6642,7 +6811,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6681,7 +6851,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6720,7 +6891,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6759,7 +6931,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6811,7 +6984,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
             ])
         ],
         [
@@ -6856,7 +7030,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6895,7 +7070,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6934,7 +7110,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -6973,7 +7150,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7012,7 +7190,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7051,7 +7230,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7096,7 +7276,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7139,7 +7320,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7182,7 +7364,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7221,7 +7404,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7260,7 +7444,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7299,7 +7484,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7338,7 +7524,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7377,7 +7564,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7416,7 +7604,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7455,7 +7644,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7494,7 +7684,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7533,7 +7724,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7572,7 +7764,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7611,7 +7804,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7650,7 +7844,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7689,7 +7884,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7728,7 +7924,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7767,7 +7964,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7806,7 +8004,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7845,7 +8044,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7891,7 +8091,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7937,7 +8138,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -7983,7 +8185,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8029,7 +8232,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8068,7 +8272,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8107,7 +8312,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8146,7 +8352,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: -1,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8185,7 +8392,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8224,7 +8432,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8263,7 +8472,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8302,7 +8512,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8341,7 +8552,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8380,7 +8592,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8419,7 +8632,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
@@ -8458,7 +8672,8 @@ public sealed class FFprobeUtilsTests
                     ColorPrimaries: null,
                     FieldOrder: "progressive",
                     BitsPerSample: 8,
-                    AlphaMode: false),
+                    AlphaMode: false,
+                    Rotation: 0),
                 new FFprobeUtils.AudioStreamInfo(
                     CodecName: AudioCodec.AAC.Name,
                     ProfileName: AudioCodec.AAC.Profile,
