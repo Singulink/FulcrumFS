@@ -143,6 +143,14 @@ public sealed class VideoProcessor : FileProcessor
         private set;
     }
 
+    internal static IntPtr? ProcessorAffinity
+    {
+        get => field != 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        private set;
+#pragma warning disable SA1513 // Closing brace should be followed by blank line
+    } = 0;
+#pragma warning restore SA1513 // Closing brace should be followed by blank line
+
     /// <inheritdoc/>
     public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.SourceFormats.SelectMany(f => f.Extensions).Distinct()];
 
@@ -155,9 +163,8 @@ public sealed class VideoProcessor : FileProcessor
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.</para>
     /// </summary>
     /// <param name="dirPath">The directory path containing the ffmpeg executables.</param>
-    /// <param name="maxConcurrentProcesses">The maximum number of concurrent ffmpeg processes to allow. Default is currently
-    /// <see cref="Environment.ProcessorCount" />. Note: there is an additional process added used for short-lived processes.</param>
-    public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, int maxConcurrentProcesses = -1)
+    /// <param name="options">Configuration options for the video processor, such as maximum number of processes.</param>
+    public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, VideoProcessorConfigureOptions? options = null)
     {
         var (ffmpeg, ffprobe) = OperatingSystem.IsWindows()
             ? (dirPath.CombineFile("ffmpeg.exe"), dirPath.CombineFile("ffprobe.exe"))
@@ -169,11 +176,11 @@ public sealed class VideoProcessor : FileProcessor
         if (!ffprobe.Exists)
             throw new FileNotFoundException("FFprobe executable not found in specified directory.", ffprobe.ToString());
 
+        int maxConcurrentProcesses = options?.MaxConcurrentProcesses ?? -1;
+        IntPtr? processorAffinity = options?.ProcessorAffinity;
+
         if (maxConcurrentProcesses == -1)
             maxConcurrentProcesses = Environment.ProcessorCount;
-
-        if (maxConcurrentProcesses < 1)
-            throw new ArgumentOutOfRangeException(nameof(maxConcurrentProcesses), "Maximum concurrent processes must be at least 1.");
 
         if (!_ffmpegPathInitialized.TrySet())
             throw new InvalidOperationException("FFmpeg executable paths have already been initialized.");
@@ -181,6 +188,7 @@ public sealed class VideoProcessor : FileProcessor
         FFmpegExePath = ffmpeg;
         FFprobeExePath = ffprobe;
         MaxConcurrentProcesses = maxConcurrentProcesses;
+        ProcessorAffinity = processorAffinity;
     }
 
     /// <inheritdoc/>
