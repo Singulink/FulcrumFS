@@ -5,6 +5,7 @@ using Singulink.IO;
 using Singulink.Threading;
 
 #pragma warning disable SA1203 // Constants should appear before fields
+#pragma warning disable SA1513 // Closing brace should be followed by blank line
 #pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
 
 namespace FulcrumFS.Videos;
@@ -147,9 +148,13 @@ public sealed class VideoProcessor : FileProcessor
     {
         get => field != 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
         private set;
-#pragma warning disable SA1513 // Closing brace should be followed by blank line
     } = 0;
-#pragma warning restore SA1513 // Closing brace should be followed by blank line
+
+    internal static int ThreadLimit
+    {
+        get => field > 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        private set;
+    } = 0;
 
     /// <inheritdoc/>
     public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.SourceFormats.SelectMany(f => f.Extensions).Distinct()];
@@ -178,6 +183,7 @@ public sealed class VideoProcessor : FileProcessor
 
         int maxConcurrentProcesses = options?.MaxConcurrentProcesses ?? -1;
         IntPtr? processorAffinity = options?.ProcessorAffinity;
+        int threadLimit = options?.ThreadLimit ?? int.MaxValue;
 
         if (maxConcurrentProcesses == -1)
             maxConcurrentProcesses = Environment.ProcessorCount;
@@ -189,6 +195,7 @@ public sealed class VideoProcessor : FileProcessor
         FFprobeExePath = ffprobe;
         MaxConcurrentProcesses = maxConcurrentProcesses;
         ProcessorAffinity = processorAffinity;
+        ThreadLimit = threadLimit;
     }
 
     /// <inheritdoc/>
@@ -1550,6 +1557,9 @@ public sealed class VideoProcessor : FileProcessor
                         // Make the file more compatible by using 'hvc1' tag:
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamTagOverride(streamKind: 'v', streamIndexWithinKind: id, tag: "hvc1"));
 
+                        // We want to limit the threads for x265 if we have ThreadLimit set:
+                        string? threadLimitString = ThreadLimit < int.MaxValue ? string.Create(CultureInfo.InvariantCulture, $"pools={ThreadLimit}") : null;
+
                         // Level 8.5 support is now under allow-non-conformance=1 on some builds of x265
                         // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).
                         if (requiresLevel85ForX265)
@@ -1557,7 +1567,14 @@ public sealed class VideoProcessor : FileProcessor
                             perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamX265ParamsOverride(
                                 streamKind: 'v',
                                 streamIndexWithinKind: id,
-                                paramsToPass: "allow-non-conformance=1"));
+                                paramsToPass: threadLimitString is { } ? $"allow-non-conformance=1:{threadLimitString}" : "allow-non-conformance=1"));
+                        }
+                        else if (threadLimitString is { })
+                        {
+                            perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamX265ParamsOverride(
+                                streamKind: 'v',
+                                streamIndexWithinKind: id,
+                                paramsToPass: threadLimitString));
                         }
                     }
                     else
@@ -2058,6 +2075,7 @@ public sealed class VideoProcessor : FileProcessor
                     command,
                     localProgressCallback,
                     localProgressCallback != null ? progressTempFile : null,
+                    ThreadLimit,
                     context.CancellationToken)
                 .ConfigureAwait(false);
             }
@@ -2161,7 +2179,7 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, ThreadLimit, context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2209,7 +2227,7 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, ThreadLimit, context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2380,6 +2398,7 @@ public sealed class VideoProcessor : FileProcessor
                         mixCommand,
                         localProgressCallbackInner,
                         localProgressCallbackInner != null ? progressTempFile : null,
+                        ThreadLimit,
                         context.CancellationToken)
                     .ConfigureAwait(false);
                 }

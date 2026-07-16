@@ -27,7 +27,7 @@ public sealed record VideoProcessorConfigurationOptions()
     }
 
     /// <summary>
-    /// Gets or initializes the processor affinity for the ffmpeg processes. Default is <c>null</c> which means no affinity is set.
+    /// Gets or initializes the processor affinity for the ffmpeg processes. Default is <see langword="null" /> which means no affinity is set.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -56,6 +56,24 @@ public sealed record VideoProcessorConfigurationOptions()
             if (value == 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(value), "Processor affinity cannot be zero.");
+            }
+
+            field = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or initializes the maximum number of threads for each ffmpeg processing task; e.g., each decoder may get its own set of this many threads, along
+    /// with each filter, encoder, etc. Default is currently <see langword="null" /> which means ffmpeg will choose the number of threads automatically.
+    /// </summary>
+    public int? ThreadLimit
+    {
+        get;
+        init
+        {
+            if (value < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Thread limit must be at least 1 (or null for default).");
             }
 
             field = value;
