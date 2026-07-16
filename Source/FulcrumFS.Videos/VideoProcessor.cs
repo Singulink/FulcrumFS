@@ -164,7 +164,7 @@ public sealed class VideoProcessor : FileProcessor
     /// </summary>
     /// <param name="dirPath">The directory path containing the ffmpeg executables.</param>
     /// <param name="options">Configuration options for the video processor, such as maximum number of processes.</param>
-    public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, VideoProcessorConfigureOptions? options = null)
+    public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, VideoProcessorConfigurationOptions? options = null)
     {
         var (ffmpeg, ffprobe) = OperatingSystem.IsWindows()
             ? (dirPath.CombineFile("ffmpeg.exe"), dirPath.CombineFile("ffprobe.exe"))

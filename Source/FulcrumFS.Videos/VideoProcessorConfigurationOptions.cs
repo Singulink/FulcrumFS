@@ -6,7 +6,7 @@ namespace FulcrumFS.Videos;
 /// <summary>
 /// Extended options for initializing the video processor configuration.
 /// </summary>
-public sealed record VideoProcessorConfigureOptions()
+public sealed record VideoProcessorConfigurationOptions()
 {
     /// <summary>
     /// Gets or initializes the maximum number of concurrent ffmpeg processes to allow. Default is currently
