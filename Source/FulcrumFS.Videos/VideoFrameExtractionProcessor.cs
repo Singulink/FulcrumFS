@@ -178,6 +178,7 @@ public sealed class VideoFrameExtractionProcessor : FileProcessor
                         isToMov: false),
                     null,
                     null,
+                    VideoProcessor.ThreadLimit,
                     context.CancellationToken)
                 .ConfigureAwait(false);
             }
