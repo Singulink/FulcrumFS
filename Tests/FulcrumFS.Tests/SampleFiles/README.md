@@ -15,6 +15,7 @@ This directory contains small sample files used by `FileFormatValidationProcesso
 | `sample.ppt`  | Real Microsoft PowerPoint 97-2003 presentation (OLE Compound Document) |
 | `sample.docx` | Real Office Open XML Word document |
 | `sample.xlsx` | Real Office Open XML spreadsheet |
+| `sample.xlsm` | Real Office Open XML macro-enabled spreadsheet |
 | `sample.pptx` | Real Office Open XML presentation |
 | `sample.odt`  | Real OpenDocument text document |
 | `sample.ods`  | Real OpenDocument spreadsheet |

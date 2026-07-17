@@ -55,6 +55,7 @@ public sealed class FileFormatTests
         [FileFormat.Zip, "sample.zip"],
         [FileFormat.Docx, "sample.docx"],
         [FileFormat.Xlsx, "sample.xlsx"],
+        [FileFormat.Xlsm, "sample.xlsm"],
         [FileFormat.Pptx, "sample.pptx"],
         [FileFormat.Odt, "sample.odt"],
         [FileFormat.Ods, "sample.ods"],

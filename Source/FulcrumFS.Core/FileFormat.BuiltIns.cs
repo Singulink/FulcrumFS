@@ -152,7 +152,12 @@ public abstract partial class FileFormat
     public static FileFormat Docx { get; } = new OpenXmlFileFormat("DOCX", ".docx", "word/document.xml");
 
     /// <summary>Gets the XLSX (Office Open XML spreadsheet) file format. Extension: <c>.xlsx</c>.</summary>
-    public static FileFormat Xlsx { get; } = new OpenXmlFileFormat("XLSX", ".xlsx", "xl/workbook.xml");
+    public static FileFormat Xlsx { get; } = new OpenXmlFileFormat(
+        "XLSX", ".xlsx", "xl/workbook.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml");
+
+    /// <summary>Gets the XLSM (Office Open XML macro-enabled spreadsheet) file format. Extension: <c>.xlsm</c>.</summary>
+    public static FileFormat Xlsm { get; } = new OpenXmlFileFormat(
+        "XLSM", ".xlsm", "xl/workbook.xml", "application/vnd.ms-excel.sheet.macroEnabled.main+xml");
 
     /// <summary>Gets the PPTX (Office Open XML presentation) file format. Extension: <c>.pptx</c>.</summary>
     public static FileFormat Pptx { get; } = new OpenXmlFileFormat("PPTX", ".pptx", "ppt/presentation.xml");

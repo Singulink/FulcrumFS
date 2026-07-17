@@ -65,7 +65,7 @@ public abstract partial class FileFormat
         }
     }
 
-    private sealed class OpenXmlFileFormat(string name, string extension, string requiredEntry) : FileFormat
+    private sealed class OpenXmlFileFormat(string name, string extension, string requiredEntry, string? requiredContentType = null) : FileFormat
     {
         public override string Name { get; } = name;
 
@@ -79,11 +79,27 @@ public abstract partial class FileFormat
 
             using (archive)
             {
-                if (!HasEntry(archive, "[Content_Types].xml"))
+                var contentTypesEntry = archive.GetEntry("[Content_Types].xml");
+
+                if (contentTypesEntry is null)
                     return FileFormatValidationResult.Invalid($"ZIP archive is missing required '[Content_Types].xml' entry (required for {Name}).");
 
                 if (!HasEntry(archive, requiredEntry))
                     return FileFormatValidationResult.Invalid($"ZIP archive is missing required '{requiredEntry}' entry (required for {Name}).");
+
+                if (requiredContentType is not null)
+                {
+                    string contentTypes;
+                    var entryStream = contentTypesEntry.Open();
+                    await using (entryStream.ConfigureAwait(false))
+                    using (var reader = new StreamReader(entryStream, System.Text.Encoding.UTF8))
+                    {
+                        contentTypes = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+                    }
+
+                    if (!contentTypes.Contains(requiredContentType, StringComparison.OrdinalIgnoreCase))
+                        return FileFormatValidationResult.Invalid($"ZIP archive's '[Content_Types].xml' does not declare content type '{requiredContentType}' (required for {Name}).");
+                }
             }
 
             return FileFormatValidationResult.Success;
