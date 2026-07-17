@@ -13,6 +13,9 @@ public static class FFmpegPathInitializer
             DirectoryPath.ParseAbsolute(BinariesDirectoryPath),
             new()
             {
+#if DEBUG
+                ThreadLimit = Environment.ProcessorCount,
+#endif
             });
     }
 
