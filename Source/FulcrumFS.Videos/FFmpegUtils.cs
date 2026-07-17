@@ -414,8 +414,8 @@ internal static class FFmpegUtils
             args.Add("-filter_threads");
             args.Add(threadLimit);
 
-            // args.Add("-filter_complex_threads");
-            // args.Add(threadLimit);
+            args.Add("-filter_complex_threads");
+            args.Add(threadLimit);
         }
 
         // Input files:
@@ -427,11 +427,11 @@ internal static class FFmpegUtils
                 args.Add(offset.ToString("F6", CultureInfo.InvariantCulture));
             }
 
-            if (threadLimit is not null)
+            /*if (threadLimit is not null)
             {
                 args.Add("-threads");
                 args.Add(threadLimit);
-            }
+            }*/
 
             args.Add("-i");
             args.Add(command.InputFiles[i].File.PathExport);
