@@ -427,11 +427,11 @@ internal static class FFmpegUtils
                 args.Add(offset.ToString("F6", CultureInfo.InvariantCulture));
             }
 
-            /*if (threadLimit is not null)
+            if (threadLimit is not null)
             {
                 args.Add("-threads");
                 args.Add(threadLimit);
-            }*/
+            }
 
             args.Add("-i");
             args.Add(command.InputFiles[i].File.PathExport);
@@ -495,11 +495,11 @@ internal static class FFmpegUtils
         // Output file:
         args.Add("-y");
 
-        if (threadLimit is not null)
+        /*if (threadLimit is not null)
         {
             args.Add("-threads");
             args.Add(threadLimit);
-        }
+        }*/
 
         args.Add(command.OutputFile.PathExport);
         return args;
