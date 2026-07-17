@@ -1558,7 +1558,7 @@ public sealed class VideoProcessor : FileProcessor
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamTagOverride(streamKind: 'v', streamIndexWithinKind: id, tag: "hvc1"));
 
                         // We want to limit the threads for x265 if we have ThreadLimit set:
-                        string? threadLimitString = ThreadLimit < int.MaxValue ? string.Create(CultureInfo.InvariantCulture, $"pools={ThreadLimit}") : null;
+                        string? threadLimitString = null;
 
                         // Level 8.5 support is now under allow-non-conformance=1 on some builds of x265
                         // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).

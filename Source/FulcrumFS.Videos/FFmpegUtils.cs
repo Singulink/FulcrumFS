@@ -495,11 +495,11 @@ internal static class FFmpegUtils
         // Output file:
         args.Add("-y");
 
-        /*if (threadLimit is not null)
+        if (threadLimit is not null)
         {
             args.Add("-threads");
             args.Add(threadLimit);
-        }*/
+        }
 
         args.Add(command.OutputFile.PathExport);
         return args;
