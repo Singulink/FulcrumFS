@@ -411,11 +411,11 @@ internal static class FFmpegUtils
 
         if (threadLimit is not null)
         {
-            // args.Add("-filter_threads");
-            // args.Add(threadLimit);
-
-            args.Add("-filter_complex_threads");
+            args.Add("-filter_threads");
             args.Add(threadLimit);
+
+            // args.Add("-filter_complex_threads");
+            // args.Add(threadLimit);
         }
 
         // Input files:
