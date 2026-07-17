@@ -14,7 +14,7 @@ public static class FFmpegPathInitializer
             new()
             {
 #if DEBUG
-                ThreadLimit = Environment.ProcessorCount + 2,
+                ThreadLimit = Environment.ProcessorCount + 3,
 #endif
             });
     }
