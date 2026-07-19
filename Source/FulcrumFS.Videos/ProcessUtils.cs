@@ -138,6 +138,11 @@ internal static class ProcessUtils
                     }
                 }
 
+                if (VideoProcessor.ProcessPriorityClass is (not VideoProcessor.UnsetProcessPriorityClass) and { } priorityClass)
+                {
+                    process.PriorityClass = priorityClass;
+                }
+
                 if (OperatingSystem.IsWindows())
                 {
                     // On Windows, processes will not exit until their output streams are read, so we must redirect continually always.

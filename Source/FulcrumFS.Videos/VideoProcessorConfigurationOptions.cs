@@ -79,4 +79,25 @@ public sealed record VideoProcessorConfigurationOptions()
             field = value;
         }
     }
+
+    /// <summary>
+    /// Gets or initializes the process priority class for the ffmpeg processes. Default is currently <see langword="null" /> which means ffmpeg will run at the
+    /// default priority.
+    /// </summary>
+    public ProcessPriorityClass? ProcessPriorityClass
+    {
+        get;
+        init
+        {
+            Debug.Assert(!Enum.IsDefined((ProcessPriorityClass)0), "0 should not be defined - if it is, update VideoProcessor.ProcessPriorityClass");
+            Debug.Assert(!Enum.IsDefined((ProcessPriorityClass)(-1)), "-1 should not be defined - if it is, update VideoProcessor.ProcessPriorityClass");
+
+            if (value is not null && !Enum.IsDefined(value.Value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Invalid process priority class.");
+            }
+
+            field = value;
+        }
+    }
 }
