@@ -16,7 +16,11 @@ internal static class ProcessUtils
     private static SemaphoreSlim ProcessesSemaphore
         => _processesSemaphore ??= new SemaphoreSlim(VideoProcessor.MaxConcurrentProcesses, VideoProcessor.MaxConcurrentProcesses);
 
-    private static async ValueTask<SemaphoreSlim> JoinProcessSemaphoreAsync(bool isShortLived, bool runAsynchronously, CancellationToken cancellationToken)
+    private static async ValueTask<SemaphoreSlim> JoinProcessSemaphoreAsync(
+        bool isShortLived,
+        bool runAsynchronously,
+        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - not called if never queued.
+        CancellationToken cancellationToken)
     {
         // Try to enter the main semaphore without waiting first to avoid unnecessary context switches.
         // Note: short-lived can still use the main semaphore if available, we are just trying to prioritize them running since they're fast to allow tasks to
@@ -27,30 +31,44 @@ internal static class ProcessUtils
         // If the process is short-lived, try to enter its extra semaphore without waiting.
         if (isShortLived && _shortLivedProcessesSemaphore.Wait(0, cancellationToken: default)) return _shortLivedProcessesSemaphore;
 
-        // Otherwise, wait asynchronously for availability.
-        // Note: short-lived processes have their own semaphore to avoid being blocked by long-running ones, but if the process is not actually short-lived,
-        // the queue to run short-lived processes quickly may get starved as there's only one slot available for quick running.
-        var semaphore = isShortLived ? _shortLivedProcessesSemaphore : processesSemaphore;
-        if (runAsynchronously) await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        else semaphore.Wait(cancellationToken);
+        // Notify that we could not get a process slot immediately and have to start queueing.
+        if (queueingCallback is not null)
+            await queueingCallback(true).ConfigureAwait(false);
 
-        // If we entered the short-lived semaphore but a slot is available in the main semaphore, switch to that one.
+        // We always want to notify when we stop queueing; use a try/finally for that.
         try
         {
-            if (semaphore == _shortLivedProcessesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
-            {
-                _shortLivedProcessesSemaphore.Release();
-                semaphore = processesSemaphore;
-            }
-        }
-        catch
-        {
-            semaphore.Release();
-            throw;
-        }
+            // Otherwise, wait asynchronously for availability.
+            // Note: short-lived processes have their own semaphore to avoid being blocked by long-running ones, but if the process is not actually short-lived,
+            // the queue to run short-lived processes quickly may get starved as there's only one slot available for quick running.
+            var semaphore = isShortLived ? _shortLivedProcessesSemaphore : processesSemaphore;
+            if (runAsynchronously) await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            else semaphore.Wait(cancellationToken);
 
-        // Return the semaphore we acquired.
-        return semaphore;
+            // If we entered the short-lived semaphore but a slot is available in the main semaphore, switch to that one.
+            try
+            {
+                if (semaphore == _shortLivedProcessesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
+                {
+                    _shortLivedProcessesSemaphore.Release();
+                    semaphore = processesSemaphore;
+                }
+            }
+            catch
+            {
+                semaphore.Release();
+                throw;
+            }
+
+            // Return the semaphore we acquired.
+            return semaphore;
+        }
+        finally
+        {
+            // Notify that we finished queueing and got a process slot.
+            if (queueingCallback is not null)
+                await queueingCallback(false).ConfigureAwait(false);
+        }
     }
 
     private static void KillProcessSafely(Process process)
@@ -103,6 +121,7 @@ internal static class ProcessUtils
         bool isShortLived,
         bool redirectOutputContinually,
         bool runAsynchronously,
+        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - not called if never queued.
         CancellationToken cancellationToken)
     {
         List<Task>? redirectTasks = null;
@@ -111,7 +130,7 @@ internal static class ProcessUtils
 
         try
         {
-            var semaphore = await JoinProcessSemaphoreAsync(isShortLived, runAsynchronously, cancellationToken).ConfigureAwait(false);
+            var semaphore = await JoinProcessSemaphoreAsync(isShortLived, runAsynchronously, queueingCallback, cancellationToken).ConfigureAwait(false);
             try
             {
                 process = new Process
@@ -215,6 +234,7 @@ internal static class ProcessUtils
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
         bool isShortLived = false,
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -229,6 +249,7 @@ internal static class ProcessUtils
             isShortLived,
             redirectOutputContinually: false,
             runAsynchronously,
+            queueingCallback,
             cancellationToken).ConfigureAwait(false);
 
         return (standardOutputWriter.ToString(), standardErrorWriter.ToString(), returnCode);
@@ -238,6 +259,7 @@ internal static class ProcessUtils
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
         bool isShortLived = false,
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -252,6 +274,7 @@ internal static class ProcessUtils
             isShortLived,
             redirectOutputContinually: false,
             runAsynchronously,
+            queueingCallback,
             cancellationToken).ConfigureAwait(false);
 
         if (returnCode != 0)
@@ -287,6 +310,7 @@ internal static class ProcessUtils
         TextWriter? standardOutputWriter,
         bool isShortLived = false,
         bool runAsynchronously = true,
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
         CancellationToken cancellationToken = default)
     {
         using StringWriter standardErrorWriter = new();
@@ -299,6 +323,7 @@ internal static class ProcessUtils
             isShortLived,
             redirectOutputContinually: true,
             runAsynchronously,
+            queueingCallback,
             cancellationToken).ConfigureAwait(false);
 
         if (returnCode != 0)

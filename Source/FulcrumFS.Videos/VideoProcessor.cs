@@ -14,6 +14,11 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public sealed class VideoProcessor : FileProcessor
 {
+    /// <summary>
+    /// The stage display message reported while processing is waiting in the queue for an available ffmpeg process slot.
+    /// </summary>
+    public const string QueuedStageDisplayMessage = "Queued";
+
     private static InterlockedFlag _ffmpegPathInitialized;
 
     /// <summary>
@@ -188,6 +193,9 @@ public sealed class VideoProcessor : FileProcessor
     {
         // Get the progress callback:
         var progressCallback = context.ProgressCallback;
+
+        // Get the queueing callback, which sets the stage display message to Queued while waiting for a process allocation:
+        var queueingCallback = GetQueueingCallback(context);
 #if DEBUG
         // In debug mode, we will check that what we report to the callback is sensible.
         // The callback would fix up some issues anyway, but since our logic is so complicated, we want to have parity with before the new callback approach and
@@ -958,6 +966,7 @@ public sealed class VideoProcessor : FileProcessor
                 var (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                     FFmpegExePath,
                     testCommand,
+                    queueingCallback: queueingCallback,
                     cancellationToken: context.CancellationToken)
                 .ConfigureAwait(false);
 
@@ -972,6 +981,7 @@ public sealed class VideoProcessor : FileProcessor
                     (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                         FFmpegExePath,
                         testCommand,
+                        queueingCallback: queueingCallback,
                         cancellationToken: context.CancellationToken)
                     .ConfigureAwait(false);
                     isCompatibleSubtitleStreamAfterReencodingToMovText[i] = returnCode == 0;
@@ -985,6 +995,7 @@ public sealed class VideoProcessor : FileProcessor
                         (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                             FFmpegExePath,
                             testCommand,
+                            queueingCallback: queueingCallback,
                             cancellationToken: context.CancellationToken)
                         .ConfigureAwait(false);
                         isCompatibleSubtitleStreamAfterReencodingToDvdSubtitle[i] = returnCode == 0;
@@ -2050,6 +2061,7 @@ public sealed class VideoProcessor : FileProcessor
                     command,
                     localProgressCallback,
                     localProgressCallback != null ? progressTempFile : null,
+                    queueingCallback,
                     context.CancellationToken)
                 .ConfigureAwait(false);
             }
@@ -2153,7 +2165,7 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, queueingCallback, context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2201,7 +2213,7 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, queueingCallback, context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2372,6 +2384,7 @@ public sealed class VideoProcessor : FileProcessor
                         mixCommand,
                         localProgressCallbackInner,
                         localProgressCallbackInner != null ? progressTempFile : null,
+                        queueingCallback,
                         context.CancellationToken)
                     .ConfigureAwait(false);
                 }
@@ -2812,6 +2825,15 @@ public sealed class VideoProcessor : FileProcessor
 
     private static string NullDevicePath => OperatingSystem.IsWindows() ? "NUL" : "/dev/null";
 
+    // Gets a queueing callback that sets the stage display message to Queued while waiting for a process allocation (and clears it when one is acquired),
+    // or null if no display message callback is available.
+    private static Func<bool, ValueTask>? GetQueueingCallback(FileProcessingContext context)
+    {
+        return context.ProgressDisplayMessageCallback is { } displayMessageCallback
+            ? (queued) => displayMessageCallback(queued ? QueuedStageDisplayMessage : null)
+            : null;
+    }
+
     // This helper implements the logic for the ForceValidateAllStreams check. We separate it out into a helper so we can call it more cleverly.
     // In particular: since we expect it to be an edge case where it actually fails, we try to avoid doing it as much as possible, and try to do it as late as
     // possible. For when validating stream length thoroughly, we will call it early still, but otherwise we rely on the main processing pass to receive an
@@ -2846,6 +2868,9 @@ public sealed class VideoProcessor : FileProcessor
                 progressTempFile,
                 progressUsed + ((double)mappedStreamCount / totalStreamCount * ValidateProgressFraction));
         }
+
+        // Get the queueing callback, which sets the stage display message to Queued while waiting for a process allocation:
+        var queueingCallback = GetQueueingCallback(context);
 
         // Validate input by doing a decode-only ffmpeg run to ensure no decoding errors.
         // Note: when active, we set aside the first 20% of progress for this.
@@ -2918,6 +2943,7 @@ public sealed class VideoProcessor : FileProcessor
                     validateProgressCallback,
                     validateProgressCallback is null ? null : progressTempFile,
                     ensureAllProgressRead: reportDuration,
+                    queueingCallback: queueingCallback,
                     cancellationToken: linkedCts.Token)
                 .ConfigureAwait(false);
             }
@@ -2961,6 +2987,7 @@ public sealed class VideoProcessor : FileProcessor
                     validateProgressCallback,
                     validateProgressCallback is null ? null : progressTempFile,
                     ensureAllProgressRead: reportDuration,
+                    queueingCallback: queueingCallback,
                     cancellationToken: linkedCts.Token)
                 .ConfigureAwait(false);
             }

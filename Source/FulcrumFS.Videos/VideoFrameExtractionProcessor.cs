@@ -178,7 +178,7 @@ public sealed class VideoFrameExtractionProcessor : FileProcessor
                         isToMov: false),
                     null,
                     null,
-                    context.CancellationToken)
+                    cancellationToken: context.CancellationToken)
                 .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
