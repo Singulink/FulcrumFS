@@ -159,9 +159,14 @@ public sealed class VideoProcessor : FileProcessor
     /// <para>
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.</para>
     /// </summary>
-    /// <param name="dirPath">The directory path containing the ffmpeg executables.</param>
-    /// <param name="maxConcurrentProcesses">The maximum number of concurrent ffmpeg processes to allow. Default is currently
-    /// <see cref="Environment.ProcessorCount" />. Note: there is an additional process added used for short-lived processes.</param>
+    /// <param name="dirPath">
+    /// The directory path containing the ffmpeg executables.
+    /// </param>
+    /// <param name="maxConcurrentProcesses">
+    /// The maximum number of concurrent ffmpeg processes to allow. Default is currently <see cref="Environment.ProcessorCount" />. Note: there are a small set
+    /// of additional processes added used for short-to-medium-lived processes. In common usage, the limit will represent the actual number of concurrent
+    /// processes, with occasional relatively short-lived / low resource processes being able to run on top of that to not block finishing off those tasks.
+    /// </param>
     public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, int maxConcurrentProcesses = -1)
     {
         var (ffmpeg, ffprobe) = OperatingSystem.IsWindows()
@@ -963,9 +968,11 @@ public sealed class VideoProcessor : FileProcessor
                 IEnumerable<string> testCommand = BuildStreamCompatibilityTestCommand(codec: "copy", shortSegment: false);
 
                 // Run the test command:
+                // Note: we use cheap long lived as this is a cheap copy-based test run that shouldn't have to queue behind unrelated long renders.
                 var (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                     FFmpegExePath,
                     testCommand,
+                    lifetime: ProcessLifetime.CheapLongLived,
                     queueingCallback: queueingCallback,
                     cancellationToken: context.CancellationToken)
                 .ConfigureAwait(false);
@@ -978,9 +985,11 @@ public sealed class VideoProcessor : FileProcessor
                     testCommand = BuildStreamCompatibilityTestCommand(codec: "mov_text", shortSegment: true);
 
                     // Run the test command:
+                    // Note: we use cheap long lived as this is a cheap short-segment test run that shouldn't have to queue behind unrelated long renders.
                     (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                         FFmpegExePath,
                         testCommand,
+                        lifetime: ProcessLifetime.CheapLongLived,
                         queueingCallback: queueingCallback,
                         cancellationToken: context.CancellationToken)
                     .ConfigureAwait(false);
@@ -992,9 +1001,11 @@ public sealed class VideoProcessor : FileProcessor
                         testCommand = BuildStreamCompatibilityTestCommand(codec: "dvd_subtitle", shortSegment: true);
 
                         // Run the test command:
+                        // Note: we use cheap long lived as this is a cheap short-segment test run that shouldn't have to queue behind unrelated long renders.
                         (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                             FFmpegExePath,
                             testCommand,
+                            lifetime: ProcessLifetime.CheapLongLived,
                             queueingCallback: queueingCallback,
                             cancellationToken: context.CancellationToken)
                         .ConfigureAwait(false);
@@ -2062,7 +2073,7 @@ public sealed class VideoProcessor : FileProcessor
                     localProgressCallback,
                     localProgressCallback != null ? progressTempFile : null,
                     queueingCallback,
-                    context.CancellationToken)
+                    cancellationToken: context.CancellationToken)
                 .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException && Options.ForceValidateAllStreams && streamsValidatedImplicitly.Count > 0)
@@ -2165,7 +2176,8 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, queueingCallback, context.CancellationToken).ConfigureAwait(false);
+                    // Note: we use cheap long lived as this is a cheap copy-based extraction that shouldn't have to queue behind unrelated long renders.
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, queueingCallback, ProcessLifetime.CheapLongLived, cancellationToken: context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2213,7 +2225,8 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, queueingCallback, context.CancellationToken).ConfigureAwait(false);
+                    // Note: we use cheap long lived as this is a cheap copy-based extraction that shouldn't have to queue behind unrelated long renders.
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, queueingCallback, ProcessLifetime.CheapLongLived, cancellationToken: context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2380,12 +2393,14 @@ public sealed class VideoProcessor : FileProcessor
 
                 try
                 {
+                    // Note: we use cheap long lived as this is a cheap copy-based recombination that shouldn't have to queue behind unrelated long renders.
                     await FFmpegUtils.RunFFmpegCommandAsync(
                         mixCommand,
                         localProgressCallbackInner,
                         localProgressCallbackInner != null ? progressTempFile : null,
                         queueingCallback,
-                        context.CancellationToken)
+                        ProcessLifetime.CheapLongLived,
+                        cancellationToken: context.CancellationToken)
                     .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)

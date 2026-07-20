@@ -159,6 +159,8 @@ public sealed class VideoFrameExtractionProcessor : FileProcessor
         {
             try
             {
+                // Note: we use medium lived as we don't want to block on waiting for a video render, meaning we don't have to implement any progress reporting
+                // as we shouldn't be queued for an unreasonable amount of time.
                 await FFmpegUtils.RunFFmpegCommandAsync(
                     new FFmpegUtils.FFmpegCommand(
                         inputFiles: [(inputFile, Seek: seek)],
@@ -178,6 +180,7 @@ public sealed class VideoFrameExtractionProcessor : FileProcessor
                         isToMov: false),
                     null,
                     null,
+                    lifetime: ProcessLifetime.MediumLived,
                     cancellationToken: context.CancellationToken)
                 .ConfigureAwait(false);
             }

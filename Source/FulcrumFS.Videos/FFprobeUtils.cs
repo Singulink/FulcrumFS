@@ -157,7 +157,7 @@ internal static class FFprobeUtils
         string json = await ProcessUtils.RunProcessToStringWithErrorHandlingAsync(
             VideoProcessor.FFprobeExePath,
             ["-show_format", "-show_streams", "-print_format", "json", "-v", "error", "-hide_banner", "-i", filePath.PathExport],
-            isShortLived: true,
+            lifetime: ProcessLifetime.ShortLived,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -314,7 +314,7 @@ internal static class FFprobeUtils
         string result = ProcessUtils.RunProcessToStringWithErrorHandlingAsync(
             VideoProcessor.FFprobeExePath,
             [command, "-hide_banner", "-v", "error"],
-            isShortLived: true,
+            lifetime: ProcessLifetime.ShortLived,
             cancellationToken: cancellationToken,
             runAsynchronously: false).GetAwaiter().GetResult();
 
