@@ -49,6 +49,27 @@ internal sealed class RewriteProcessor : FileProcessor
 }
 
 /// <summary>
+/// A processor that reports a stage display message followed by a progress fraction (passing the source through unchanged), used to test message reporting
+/// through the pipeline.
+/// </summary>
+internal sealed class MessageReportingProcessor : FileProcessor
+{
+    public override IReadOnlyList<string> AllowedFileExtensions => [];
+
+    protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
+    {
+        if (context.ProgressDisplayMessageCallback is not null)
+            await context.ProgressDisplayMessageCallback("Working").ConfigureAwait(false);
+
+        if (context.ProgressCallback is not null)
+            await context.ProgressCallback(0.5).ConfigureAwait(false);
+
+        var sourceFile = await context.GetSourceAsFileAsync().ConfigureAwait(false);
+        return FileProcessingResult.File(sourceFile, hasChanges: false);
+    }
+}
+
+/// <summary>
 /// Helpers for building common variant pipelines used across the variant alias and retirement tests.
 /// </summary>
 internal static class VariantPipelines

@@ -167,6 +167,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
             var processor = Processors[i];
 
             Func<double, ValueTask>? processorProgressCallback = null;
+            Func<string?, ValueTask>? processorProgressDisplayMessageCallback = null;
 
             // Handle progress reporting if enabled:
             if (progressCallback is not null)
@@ -184,18 +185,31 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
                     processorName = string.Create(CultureInfo.InvariantCulture, $"{processorName} ({count + 1})");
                 }
 
-                // Create the callback to use for this one:
+                // State used to combine the processor's separately-reported fraction and display message into single progress values:
+                double currentFraction = 0.0;
+                string? currentMessage = null;
+
+                // Create the callbacks to use for this one:
                 processorProgressCallback = async (fraction) =>
                 {
-                    var progressValue = new ProgressValue(context.VariantId, processorName, fraction);
+                    currentFraction = fraction;
+                    var progressValue = new ProgressValue(context.VariantId, processorName, fraction, currentMessage);
+                    await progressCallback(progressValue).ConfigureAwait(false);
+                };
+
+                processorProgressDisplayMessageCallback = async (message) =>
+                {
+                    currentMessage = message;
+                    var progressValue = new ProgressValue(context.VariantId, processorName, currentFraction, message);
                     await progressCallback(progressValue).ConfigureAwait(false);
                 };
 
                 // Ensure we see some progress for this processor even if it doesn't report any:
                 await processorProgressCallback(0.0).ConfigureAwait(false);
 
-                // Set the callback on the context:
+                // Set the callbacks on the context:
                 context.ProgressCallback = processorProgressCallback;
+                context.ProgressDisplayMessageCallback = processorProgressDisplayMessageCallback;
             }
 
             var result = await processor.CallProcessAsync(context).ConfigureAwait(false);

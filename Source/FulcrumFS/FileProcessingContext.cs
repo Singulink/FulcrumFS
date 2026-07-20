@@ -52,10 +52,31 @@ public sealed class FileProcessingContext : IAsyncDisposable
     /// representing the progress fraction (between 0.0 and 1.0) and returns a <see cref="ValueTask" /> to await.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This value is only meant to be read by the <see cref="FileProcessor"/> instances in the pipeline. It is set by the <see cref="FileProcessingPipeline" />
     /// before each processor is executed and is not intended to be used outside of this.
+    /// </para>
+    /// <para>
+    /// Should not be called concurrently from multiple threads/tasks.
+    /// </para>
     /// </remarks>
     public Func<double, ValueTask>? ProgressCallback { get; internal set; }
+
+    /// <summary>
+    /// Gets a value that represents the callback function to report an optional informative display message for the current processing stage. The callback
+    /// function takes a string (or <see langword="null"/> to clear the message) and returns a <see cref="ValueTask" /> to await. The message is combined with
+    /// the most recently reported progress fraction when reported to the caller.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value is only meant to be read by the <see cref="FileProcessor"/> instances in the pipeline. It is set by the <see cref="FileProcessingPipeline" />
+    /// before each processor is executed and is not intended to be used outside of this.
+    /// </para>
+    /// <para>
+    /// Should not be called concurrently from multiple threads/tasks.
+    /// </para>
+    /// </remarks>
+    public Func<string?, ValueTask>? ProgressDisplayMessageCallback { get; internal set; }
 
     internal bool IsSourceInMemoryOrFile => _source is IAbsoluteFilePath or MemoryStream or FileStream;
 
