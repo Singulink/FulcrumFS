@@ -2177,7 +2177,13 @@ public sealed class VideoProcessor : FileProcessor
                 try
                 {
                     // Note: we use cheap long lived as this is a cheap copy-based extraction that shouldn't have to queue behind unrelated long renders.
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, queueingCallback, ProcessLifetime.CheapLongLived, cancellationToken: context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(
+                        extractCommandReencoded,
+                        null,
+                        null,
+                        queueingCallback, ProcessLifetime.CheapLongLived,
+                        cancellationToken: context.CancellationToken)
+                    .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2226,7 +2232,14 @@ public sealed class VideoProcessor : FileProcessor
                 try
                 {
                     // Note: we use cheap long lived as this is a cheap copy-based extraction that shouldn't have to queue behind unrelated long renders.
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, queueingCallback, ProcessLifetime.CheapLongLived, cancellationToken: context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(
+                        extractCommandOriginal,
+                        null,
+                        null,
+                        queueingCallback,
+                        ProcessLifetime.CheapLongLived,
+                        cancellationToken: context.CancellationToken)
+                    .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
