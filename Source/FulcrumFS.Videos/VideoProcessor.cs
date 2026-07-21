@@ -200,7 +200,30 @@ public sealed class VideoProcessor : FileProcessor
         var progressCallback = context.ProgressCallback;
 
         // Get the queueing callback, which sets the stage display message to Queued while waiting for a process allocation:
-        var queueingCallback = GetQueueingCallback(context);
+        Func<bool, ValueTask>? queueingCallback = null;
+
+        if (context.ProgressDisplayMessageCallback is { } displayMessageCallback)
+        {
+            bool currentlyQueued = false;
+
+            queueingCallback = async (queued) =>
+            {
+                if (currentlyQueued == queued)
+                    return;
+
+                currentlyQueued = queued;
+
+                if (queued)
+                {
+                    await displayMessageCallback(QueuedStageDisplayMessage).ConfigureAwait(false);
+                }
+                else
+                {
+                    await displayMessageCallback(null).ConfigureAwait(false);
+                }
+            };
+        }
+
 #if DEBUG
         // In debug mode, we will check that what we report to the callback is sensible.
         // The callback would fix up some issues anyway, but since our logic is so complicated, we want to have parity with before the new callback approach and
@@ -464,6 +487,7 @@ public sealed class VideoProcessor : FileProcessor
                 sourceInfo.Streams.Length,
                 progressTempFile,
                 countDuration,
+                queueingCallback,
                 context.CancellationToken).ConfigureAwait(false);
 
             streamsValidated += mappedInputIndicesOrdered.Length;
@@ -2082,6 +2106,10 @@ public sealed class VideoProcessor : FileProcessor
                 // This way we optimise the common case of no validation errors, while still executing as if we checked beforehand.
                 context.CancellationToken.ThrowIfCancellationRequested();
 
+                // Dequeue is not reported on exceptions, so ensure we are not left showing as queued while we continue with validation:
+                if (queueingCallback is not null)
+                    await queueingCallback(false).ConfigureAwait(false);
+
                 Func<double, ValueTask>? progressCallback2 = progressCallback is not null
                     ? async (double fraction) =>
                         await progressCallback(mostRecentClampedProgress + (fraction * (1.0 - mostRecentClampedProgress))).ConfigureAwait(false)
@@ -2105,6 +2133,7 @@ public sealed class VideoProcessor : FileProcessor
                     totalStreamCount: streamsValidatedImplicitly.Count,
                     progressTempFile,
                     reportDuration: false,
+                    queueingCallback,
                     context.CancellationToken).ConfigureAwait(false);
 
                 // If we got here, it was not a validation failure, re-throw the original exception:
@@ -2853,15 +2882,6 @@ public sealed class VideoProcessor : FileProcessor
 
     private static string NullDevicePath => OperatingSystem.IsWindows() ? "NUL" : "/dev/null";
 
-    // Gets a queueing callback that sets the stage display message to Queued while waiting for a process allocation (and clears it when one is acquired),
-    // or null if no display message callback is available.
-    private static Func<bool, ValueTask>? GetQueueingCallback(FileProcessingContext context)
-    {
-        return context.ProgressDisplayMessageCallback is { } displayMessageCallback
-            ? (queued) => displayMessageCallback(queued ? QueuedStageDisplayMessage : null)
-            : null;
-    }
-
     // This helper implements the logic for the ForceValidateAllStreams check. We separate it out into a helper so we can call it more cleverly.
     // In particular: since we expect it to be an edge case where it actually fails, we try to avoid doing it as much as possible, and try to do it as late as
     // possible. For when validating stream length thoroughly, we will call it early still, but otherwise we rely on the main processing pass to receive an
@@ -2884,6 +2904,7 @@ public sealed class VideoProcessor : FileProcessor
             int totalStreamCount,
             IAbsoluteFilePath? progressTempFile,
             bool reportDuration,
+            Func<bool, ValueTask>? queueingCallback,
             CancellationToken cancellationToken)
     {
         // First check if we're in a no-op case:
@@ -2896,9 +2917,6 @@ public sealed class VideoProcessor : FileProcessor
                 progressTempFile,
                 progressUsed + ((double)mappedStreamCount / totalStreamCount * ValidateProgressFraction));
         }
-
-        // Get the queueing callback, which sets the stage display message to Queued while waiting for a process allocation:
-        var queueingCallback = GetQueueingCallback(context);
 
         // Validate input by doing a decode-only ffmpeg run to ensure no decoding errors.
         // Note: when active, we set aside the first 20% of progress for this.
@@ -2983,6 +3001,11 @@ public sealed class VideoProcessor : FileProcessor
                 // If we get an exception here, we should try again & specify codecs for each stream, as sometimes ffmpeg doesn't want to auto-select properly
                 // (we don't do this by default since it's more expensive):
                 // Note: we only do this if there is at least one non-subtitle stream, since we already handle those above.
+
+                // Dequeue is not reported on exceptions, so ensure we are not left showing as queued while we retry (the retry re-reports if it queues again):
+                if (queueingCallback is not null)
+                    await queueingCallback(false).ConfigureAwait(false);
+
                 await FFmpegUtils.RunRawFFmpegCommandAsync(
                     [
                         "-i",
@@ -3024,6 +3047,10 @@ public sealed class VideoProcessor : FileProcessor
         {
             // Keep / re-throw exception if cancellation was requested by the caller only, discard if it was our early exit.
             if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(message: null, ex, cancellationToken);
+
+            // Dequeue is not reported on exceptions, so ensure we are not left showing as queued while we continue after the early exit:
+            if (queueingCallback is not null)
+                await queueingCallback(false).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
