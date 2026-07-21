@@ -21,7 +21,7 @@ internal static class ProcessUtils
     private static async ValueTask<SemaphoreSlim> JoinProcessSemaphoreAsync(
         ProcessLifetime lifetime,
         bool runAsynchronously,
-        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - may be partially or never called at all.
+        Func<bool, ValueTask>? queueingCallback,
         CancellationToken cancellationToken)
     {
         // Try to enter the main semaphore without waiting first to avoid unnecessary context switches.
@@ -151,7 +151,7 @@ internal static class ProcessUtils
         ProcessLifetime lifetime,
         bool redirectOutputContinually,
         bool runAsynchronously,
-        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - may be partially or never called at all.
+        Func<bool, ValueTask>? queueingCallback,
         CancellationToken cancellationToken)
     {
         List<Task>? redirectTasks = null;
@@ -260,11 +260,13 @@ internal static class ProcessUtils
         }
     }
 
+    // Note about queuingCallback: true means queued, false means dequeued - not called when never queued, and not called for dequeue on exception.
+
     public static async ValueTask<(string Output, string Error, int ReturnCode)> RunProcessToStringAsync(
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
+        Func<bool, ValueTask>? queueingCallback = null,
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -289,7 +291,7 @@ internal static class ProcessUtils
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
+        Func<bool, ValueTask>? queueingCallback = null,
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -340,7 +342,7 @@ internal static class ProcessUtils
         TextWriter? standardOutputWriter,
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
         bool runAsynchronously = true,
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
+        Func<bool, ValueTask>? queueingCallback = null,
         CancellationToken cancellationToken = default)
     {
         using StringWriter standardErrorWriter = new();
