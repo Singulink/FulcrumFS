@@ -52,6 +52,8 @@ internal static class ProcessUtils
 
         // We always want to notify when we stop queueing; use a try/finally for that.
         SemaphoreSlim? semaphore = null;
+        bool entered = true;
+
         try
         {
             // Otherwise, wait asynchronously for availability on the process's own tier semaphore.
@@ -65,8 +67,12 @@ internal static class ProcessUtils
                 _ => processesSemaphore,
             };
 
-            if (runAsynchronously) await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            else semaphore.Wait(cancellationToken);
+            if (runAsynchronously)
+                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            else
+                semaphore.Wait(cancellationToken);
+
+            entered = true;
 
             // If we entered an extra tier semaphore but a slot is available in a longer tier (main first, then cheap long, then medium over short), switch to
             // that one.
@@ -92,6 +98,7 @@ internal static class ProcessUtils
             catch
             {
                 semaphore.Release();
+                entered = false;
                 throw;
             }
 
@@ -111,7 +118,10 @@ internal static class ProcessUtils
                 // Ensure we don't leave the semaphore acquired if the queueing callback throws an exception.
                 // Note: we shouldn't ever get here anyway, so also include a debug assertion; this is just for safety in Release mode really.
                 Debug.Fail("Queueing callback threw an exception.");
-                semaphore?.Release();
+
+                if (entered)
+                    semaphore?.Release();
+
                 throw;
             }
         }
