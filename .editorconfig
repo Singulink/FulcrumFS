@@ -14,6 +14,23 @@ trim_trailing_whitespace = true
 insert_final_newline = true
 end_of_line = lf
 
+########### Patch File Settings ###########
+
+[*.{patch,diff}]
+indent_style = unset
+trim_trailing_whitespace = unset
+insert_final_newline = unset
+
+########### Powershell File Settings ###########
+
+[*.ps1]
+end_of_line = crlf
+
+############ INI File Settings ###########
+
+[*.ini]
+end_of_line = crlf
+
 ########### XML File Settings ###########
 
 [*.{csproj,props,targets,proj,projitems,shproj,slnx}]

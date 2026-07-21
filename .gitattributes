@@ -1,6 +1,10 @@
 # Use LF endings by default
 * text=auto eol=lf
 
+# Use CRLF for powershell scripts / ini files
+*.ps1 text eol=crlf
+*.ini text eol=crlf
+
 # Use CRLF for project-related files
 *.csproj text eol=crlf
 *.props text eol=crlf
