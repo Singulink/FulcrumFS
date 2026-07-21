@@ -10,7 +10,9 @@ public sealed record VideoProcessorConfigurationOptions()
 {
     /// <summary>
     /// Gets or initializes the maximum number of concurrent ffmpeg processes to allow. Default is currently
-    /// <see cref="Environment.ProcessorCount" />. Note: there is an additional process added used for short-lived processes.
+    /// <see cref="Environment.ProcessorCount" />. Note: there are a small set of additional processes added used for short-to-medium-lived processes. In common
+    /// usage, the limit will represent the actual number of concurrent processes, with occasional relatively short-lived / low resource processes being able to
+    /// run on top of that to not block finishing off those tasks.
     /// </summary>
     public int? MaxConcurrentProcesses
     {

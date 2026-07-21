@@ -52,17 +52,17 @@ Main library that enables transactional file storage and processing, providing a
 
 **Features**:
 
-✔️ **Commit-then-cleanup coordination** with transactional databases - orphaned files from failed commits are reclaimed automatically  
-✔️ **No distributed transactions required** - avoids 2PC coordinator overhead and indeterminate post-crash database states that block reopening  
-✔️ Validate, pre-process, and post-process files during storage and retrieval  
-✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)  
-✔️ Operates reliably on any file system, including local disks, NAS, and network file systems  
-✔️ Recovers gracefully from crashes, power failures and disconnected storage volumes  
-✔️ Scales to **millions of files** per repository while maintaining good file system performance characteristics  
-✔️ Provides **direct `FileStream` access** for efficient, low-overhead file I/O  
-✔️ Stored files remain browsable in standard file managers (e.g. File Explorer, Finder)  
-✔️ Fully compatible with file system features like encryption and compression  
-✔️ Designed to work seamlessly with existing backup, redundancy, replication, and storage tools  
+✔️ **Commit-then-cleanup coordination** with transactional databases - orphaned files from failed commits are reclaimed automatically
+✔️ **No distributed transactions required** - avoids 2PC coordinator overhead and indeterminate post-crash database states that block reopening
+✔️ Validate, pre-process, and post-process files during storage and retrieval
+✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)
+✔️ Operates reliably on any file system, including local disks, NAS, and network file systems
+✔️ Recovers gracefully from crashes, power failures and disconnected storage volumes
+✔️ Scales to **millions of files** per repository while maintaining good file system performance characteristics
+✔️ Provides **direct `FileStream` access** for efficient, low-overhead file I/O
+✔️ Stored files remain browsable in standard file managers (e.g. File Explorer, Finder)
+✔️ Fully compatible with file system features like encryption and compression
+✔️ Designed to work seamlessly with existing backup, redundancy, replication, and storage tools
 
 #### FulcrumFS.Core
 
@@ -125,7 +125,7 @@ var imagePipeline = new ImageProcessor(new ImageProcessingOptions {
 // the video frame extractor into the shared thumbnail processor.
 var videoPipeline = new VideoProcessor(VideoProcessingOptions.StandardizedH264AACMP4)
     .WithVariant("thumbnail", new FileProcessingPipeline(
-        new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard),
+        new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard),
         thumbnailProcessor,
     ));
 

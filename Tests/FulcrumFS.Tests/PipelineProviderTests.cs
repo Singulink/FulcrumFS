@@ -125,6 +125,30 @@ public sealed class PipelineProviderTests
     }
 
     [TestMethod]
+    public async Task Progress_ProcessorMessage_ReportedWithLatestFraction()
+    {
+        using var repo = CreateRepo();
+        var pipeline = new MessageReportingProcessor().ToPipeline();
+
+        await using var source = File.OpenRead(_sampleDir.CombineFile("sample.jpg").PathExport);
+        await using var txn = await repo.BeginTransactionAsync();
+
+        var progress = new List<ProgressValue>();
+        await foreach (var pv in txn.AddAsync(source, ".jpg", leaveOpen: true, pipeline, TestContext.CancellationToken).WithCancellation(TestContext.CancellationToken))
+            progress.Add(pv);
+
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        progress.ShouldBe(
+        [
+            new(null, "MessageReportingProcessor", 0.0),
+            new(null, "MessageReportingProcessor", 0.0, "Working"),
+            new(null, "MessageReportingProcessor", 0.5, "Working"),
+            new(null, "MessageReportingProcessor", 1.0, "Working"),
+        ]);
+    }
+
+    [TestMethod]
     public async Task Progress_MultipleProcessors_ReportZeroAndOneForEach()
     {
         using var repo = CreateRepo();

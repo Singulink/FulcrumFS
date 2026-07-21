@@ -15,6 +15,11 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public sealed class VideoProcessor : FileProcessor
 {
+    /// <summary>
+    /// The stage display message reported while processing is waiting in the queue for an available ffmpeg process slot.
+    /// </summary>
+    public const string QueuedStageDisplayMessage = "Queued";
+
     private static InterlockedFlag _ffmpegPathInitialized;
 
     /// <summary>
@@ -230,6 +235,32 @@ public sealed class VideoProcessor : FileProcessor
     {
         // Get the progress callback:
         var progressCallback = context.ProgressCallback;
+
+        // Get the queueing callback, which sets the stage display message to Queued while waiting for a process allocation:
+        Func<bool, ValueTask>? queueingCallback = null;
+
+        if (context.ProgressDisplayMessageCallback is { } displayMessageCallback)
+        {
+            bool currentlyQueued = false;
+
+            queueingCallback = async (queued) =>
+            {
+                if (currentlyQueued == queued)
+                    return;
+
+                currentlyQueued = queued;
+
+                if (queued)
+                {
+                    await displayMessageCallback(QueuedStageDisplayMessage).ConfigureAwait(false);
+                }
+                else
+                {
+                    await displayMessageCallback(null).ConfigureAwait(false);
+                }
+            };
+        }
+
 #if DEBUG
         // In debug mode, we will check that what we report to the callback is sensible.
         // The callback would fix up some issues anyway, but since our logic is so complicated, we want to have parity with before the new callback approach and
@@ -493,6 +524,7 @@ public sealed class VideoProcessor : FileProcessor
                 sourceInfo.Streams.Length,
                 progressTempFile,
                 countDuration,
+                queueingCallback,
                 context.CancellationToken).ConfigureAwait(false);
 
             streamsValidated += mappedInputIndicesOrdered.Length;
@@ -997,9 +1029,12 @@ public sealed class VideoProcessor : FileProcessor
                 IEnumerable<string> testCommand = BuildStreamCompatibilityTestCommand(codec: "copy", shortSegment: false);
 
                 // Run the test command:
+                // Note: we use cheap long lived as this is a cheap copy-based test run that shouldn't have to queue behind unrelated long renders.
                 var (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                     FFmpegExePath,
                     testCommand,
+                    lifetime: ProcessLifetime.CheapLongLived,
+                    queueingCallback: queueingCallback,
                     cancellationToken: context.CancellationToken)
                 .ConfigureAwait(false);
 
@@ -1011,9 +1046,12 @@ public sealed class VideoProcessor : FileProcessor
                     testCommand = BuildStreamCompatibilityTestCommand(codec: "mov_text", shortSegment: true);
 
                     // Run the test command:
+                    // Note: we use cheap long lived as this is a cheap short-segment test run that shouldn't have to queue behind unrelated long renders.
                     (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                         FFmpegExePath,
                         testCommand,
+                        lifetime: ProcessLifetime.CheapLongLived,
+                        queueingCallback: queueingCallback,
                         cancellationToken: context.CancellationToken)
                     .ConfigureAwait(false);
                     isCompatibleSubtitleStreamAfterReencodingToMovText[i] = returnCode == 0;
@@ -1024,9 +1062,12 @@ public sealed class VideoProcessor : FileProcessor
                         testCommand = BuildStreamCompatibilityTestCommand(codec: "dvd_subtitle", shortSegment: true);
 
                         // Run the test command:
+                        // Note: we use cheap long lived as this is a cheap short-segment test run that shouldn't have to queue behind unrelated long renders.
                         (_, _, returnCode) = await ProcessUtils.RunProcessToStringAsync(
                             FFmpegExePath,
                             testCommand,
+                            lifetime: ProcessLifetime.CheapLongLived,
+                            queueingCallback: queueingCallback,
                             cancellationToken: context.CancellationToken)
                         .ConfigureAwait(false);
                         isCompatibleSubtitleStreamAfterReencodingToDvdSubtitle[i] = returnCode == 0;
@@ -2102,7 +2143,8 @@ public sealed class VideoProcessor : FileProcessor
                     command,
                     localProgressCallback,
                     localProgressCallback != null ? progressTempFile : null,
-                    context.CancellationToken)
+                    queueingCallback,
+                    cancellationToken: context.CancellationToken)
                 .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException && Options.ForceValidateAllStreams && streamsValidatedImplicitly.Count > 0)
@@ -2134,6 +2176,7 @@ public sealed class VideoProcessor : FileProcessor
                     totalStreamCount: streamsValidatedImplicitly.Count,
                     progressTempFile,
                     reportDuration: false,
+                    queueingCallback,
                     context.CancellationToken).ConfigureAwait(false);
 
                 // If we got here, it was not a validation failure, re-throw the original exception:
@@ -2205,7 +2248,14 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, context.CancellationToken).ConfigureAwait(false);
+                    // Note: we use cheap long lived as this is a cheap copy-based extraction that shouldn't have to queue behind unrelated long renders.
+                    await FFmpegUtils.RunFFmpegCommandAsync(
+                        extractCommandReencoded,
+                        null,
+                        null,
+                        queueingCallback, ProcessLifetime.CheapLongLived,
+                        cancellationToken: context.CancellationToken)
+                    .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2253,7 +2303,15 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, context.CancellationToken).ConfigureAwait(false);
+                    // Note: we use cheap long lived as this is a cheap copy-based extraction that shouldn't have to queue behind unrelated long renders.
+                    await FFmpegUtils.RunFFmpegCommandAsync(
+                        extractCommandOriginal,
+                        null,
+                        null,
+                        queueingCallback,
+                        ProcessLifetime.CheapLongLived,
+                        cancellationToken: context.CancellationToken)
+                    .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2420,11 +2478,14 @@ public sealed class VideoProcessor : FileProcessor
 
                 try
                 {
+                    // Note: we use cheap long lived as this is a cheap copy-based recombination that shouldn't have to queue behind unrelated long renders.
                     await FFmpegUtils.RunFFmpegCommandAsync(
                         mixCommand,
                         localProgressCallbackInner,
                         localProgressCallbackInner != null ? progressTempFile : null,
-                        context.CancellationToken)
+                        queueingCallback,
+                        ProcessLifetime.CheapLongLived,
+                        cancellationToken: context.CancellationToken)
                     .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -2886,6 +2947,7 @@ public sealed class VideoProcessor : FileProcessor
             int totalStreamCount,
             IAbsoluteFilePath? progressTempFile,
             bool reportDuration,
+            Func<bool, ValueTask>? queueingCallback,
             CancellationToken cancellationToken)
     {
         // First check if we're in a no-op case:
@@ -2970,6 +3032,7 @@ public sealed class VideoProcessor : FileProcessor
                     validateProgressCallback,
                     validateProgressCallback is null ? null : progressTempFile,
                     ensureAllProgressRead: reportDuration,
+                    queueingCallback: queueingCallback,
                     cancellationToken: linkedCts.Token)
                 .ConfigureAwait(false);
             }
@@ -2981,6 +3044,7 @@ public sealed class VideoProcessor : FileProcessor
                 // If we get an exception here, we should try again & specify codecs for each stream, as sometimes ffmpeg doesn't want to auto-select properly
                 // (we don't do this by default since it's more expensive):
                 // Note: we only do this if there is at least one non-subtitle stream, since we already handle those above.
+
                 await FFmpegUtils.RunRawFFmpegCommandAsync(
                     [
                         "-i",
@@ -3013,6 +3077,7 @@ public sealed class VideoProcessor : FileProcessor
                     validateProgressCallback,
                     validateProgressCallback is null ? null : progressTempFile,
                     ensureAllProgressRead: reportDuration,
+                    queueingCallback: queueingCallback,
                     cancellationToken: linkedCts.Token)
                 .ConfigureAwait(false);
             }
@@ -3021,6 +3086,10 @@ public sealed class VideoProcessor : FileProcessor
         {
             // Keep / re-throw exception if cancellation was requested by the caller only, discard if it was our early exit.
             if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(message: null, ex, cancellationToken);
+
+            // Dequeue is not reported on exceptions, so ensure we are not left showing as queued while we continue after the early exit:
+            if (queueingCallback is not null)
+                await queueingCallback(false).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

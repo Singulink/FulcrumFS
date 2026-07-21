@@ -22,12 +22,12 @@ var added = await txn.AddAsync(reportStream, ".pdf", leaveOpen: true, FileProces
 
 ## Building a Pipeline
 
-Construct a pipeline from one or more processors. Processors run in order, each receiving the previous step's output, which is what lets you compose two transformations into a single step. A common case is producing a compact JPEG thumbnail of a video: <xref:FulcrumFS.Videos.VideoThumbnailProcessor> extracts a full-resolution PNG poster frame, then <xref:FulcrumFS.Images.ImageProcessor> resizes that frame and converts it to JPEG.
+Construct a pipeline from one or more processors. Processors run in order, each receiving the previous step's output, which is what lets you compose two transformations into a single step. A common case is producing a compact JPEG thumbnail of a video: <xref:FulcrumFS.Videos.VideoFrameExtractionProcessor> extracts a full-resolution PNG poster frame, then <xref:FulcrumFS.Images.ImageProcessor> resizes that frame and converts it to JPEG.
 
 ```csharp
 // Extract a poster frame, then resize/convert it to a 256x256 JPEG thumbnail.
 var pipeline = new FileProcessingPipeline(
-    new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard),
+    new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard),
     new ImageProcessor(new ImageProcessingOptions {
         Formats = [new ImageFormatMapping(ImageFormat.Png, ImageFormat.Jpeg)],
         Resize = new ImageResizeOptions(ImageResizeMode.FitDown, 256, 256),

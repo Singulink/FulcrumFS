@@ -509,6 +509,8 @@ internal static class FFmpegUtils
         FFmpegCommand command,
         Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
+        Func<bool, ValueTask>? queueingCallback = null,
+        ProcessLifetime lifetime = ProcessLifetime.LongLived,
         CancellationToken cancellationToken = default)
     {
         // Validate progress callback and progress temp file path args:
@@ -528,6 +530,8 @@ internal static class FFmpegUtils
             progressCallback,
             progressFilePath,
             ensureAllProgressRead: false,
+            queueingCallback: queueingCallback,
+            lifetime: lifetime,
             cancellationToken: cancellationToken)
         .ConfigureAwait(false);
     }
@@ -537,6 +541,8 @@ internal static class FFmpegUtils
         Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
         bool ensureAllProgressRead, // Ensures that all progress is read if at least one progress callback is invoked.
+        Func<bool, ValueTask>? queueingCallback = null,
+        ProcessLifetime lifetime = ProcessLifetime.LongLived,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -649,6 +655,8 @@ internal static class FFmpegUtils
                     VideoProcessor.FFmpegExePath,
                     args,
                     standardOutputWriter: null,
+                    lifetime: lifetime,
+                    queueingCallback: queueingCallback,
                     cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
             }

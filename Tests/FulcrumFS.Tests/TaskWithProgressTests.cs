@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace FulcrumFS;
@@ -780,6 +781,167 @@ public sealed class TaskWithProgressTests
         var t = Make([new(null, "A", 0.5), new(null, "B", 0.5), new(null, "A", 0.7)]);
         var ex = await Should.ThrowAsync<InvalidOperationException>(async () => await CollectFullAsync(t, TestContext.CancellationToken));
         ex.Message.ShouldBe("Stage 'A' for variant '' has already been reported.");
+    }
+
+    // --- Stage display messages ---
+
+    [TestMethod]
+    public async Task Message_FlowsThrough_AndAppliesToSynthesizedValues()
+    {
+        var t = Make([new(null, "S", 0.5, "working")]);
+        var p = await CollectFullAsync(t, TestContext.CancellationToken);
+        p.ShouldBe(
+        [
+            new(null, "S", 0.0), // The synthesized 0.0 carries no message - the message only applies from the reported value onward.
+            new(null, "S", 0.5, "working"),
+            new(null, "S", 1.0, "working"),
+        ]);
+    }
+
+    [TestMethod]
+    public async Task Message_OnlyChange_ReportedAtSameProgress()
+    {
+        var t = Make([new(null, "S", 0.5, "a"), new(null, "S", 0.5, "b")]);
+        var p = await CollectFullAsync(t, TestContext.CancellationToken);
+        p.ShouldBe(
+        [
+            new(null, "S", 0.0),
+            new(null, "S", 0.5, "a"),
+            new(null, "S", 0.5, "b"),
+            new(null, "S", 1.0, "b"),
+        ]);
+    }
+
+    [TestMethod]
+    public async Task Message_ChangeWithLowerProgress_ReusesLastProgress()
+    {
+        var t = Make([new(null, "S", 0.5, "a"), new(null, "S", 0.3, "b")]);
+        var p = await CollectFullAsync(t, TestContext.CancellationToken);
+        p.ShouldBe(
+        [
+            new(null, "S", 0.0),
+            new(null, "S", 0.5, "a"),
+            new(null, "S", 0.5, "b"),
+            new(null, "S", 1.0, "b"),
+        ]);
+    }
+
+    [TestMethod]
+    public async Task Message_Unchanged_NonIncreasingProgress_Dropped()
+    {
+        var t = Make([new(null, "S", 0.5, "a"), new(null, "S", 0.5, "a"), new(null, "S", 0.3, "a")]);
+        var p = await CollectFullAsync(t, TestContext.CancellationToken);
+        p.ShouldBe(
+        [
+            new(null, "S", 0.0),
+            new(null, "S", 0.5, "a"),
+            new(null, "S", 1.0, "a"),
+        ]);
+    }
+
+    [TestMethod]
+    public async Task Message_ClearedToNull_Reported()
+    {
+        var t = Make([new(null, "S", 0.5, "a"), new(null, "S", 0.6, null)]);
+        var p = await CollectFullAsync(t, TestContext.CancellationToken);
+        p.ShouldBe(
+        [
+            new(null, "S", 0.0),
+            new(null, "S", 0.5, "a"),
+            new(null, "S", 0.6),
+            new(null, "S", 1.0),
+        ]);
+    }
+
+    [TestMethod]
+    public async Task Message_NewStage_ResetsMessage()
+    {
+        var t = Make([new(null, "A", 0.5, "a"), new(null, "B", 0.5)]);
+        var p = await CollectFullAsync(t, TestContext.CancellationToken);
+        p.ShouldBe(
+        [
+            new(null, "A", 0.0),
+            new(null, "A", 0.5, "a"),
+            new(null, "A", 1.0, "a"), // Stage close carries the last message for the stage.
+            new(null, "B", 0.0),
+            new(null, "B", 0.5),
+            new(null, "B", 1.0),
+        ]);
+    }
+
+    [TestMethod]
+    public async Task Message_BeyondQueueLimit_CoalescedKeepsLatestMessage()
+    {
+        // Same coalescing shape as Progress_BeyondQueueLimit_ExcessCoalescedIntoLastSlot, but each report carries a distinct message: the coalesced tail must
+        // keep the latest message, and the close inherits it.
+        var reports = new List<ProgressValue> { new(null, "S", 0.0, "m0") };
+
+        for (int i = 1; i <= 50; i++)
+            reports.Add(new(null, "S", i / 64.0, string.Create(CultureInfo.InvariantCulture, $"m{i}")));
+
+        var t = Make([.. reports], result: 1);
+        var seen = await CollectAfterCompletionAsync(t);
+
+        var expected = new List<ProgressValue>();
+
+        for (int i = 0; i <= 14; i++)
+            expected.Add(new(null, "S", i / 64.0, string.Create(CultureInfo.InvariantCulture, $"m{i}")));
+
+        expected.Add(new(null, "S", 50 / 64.0, "m50"));
+        expected.Add(new(null, "S", 1.0, "m50"));
+
+        seen.ShouldBe(expected);
+    }
+
+    [TestMethod]
+    public async Task Message_MultipleUpdatesAtOne_BeyondQueueLimit_KeepsOnlyLatest()
+    {
+        // Fill the stage's queue to the 16-item coalescing limit, then report several message-only updates at 1.0: only the latest 1.0 should be kept.
+        var reports = new List<ProgressValue> { new(null, "S", 0.0) };
+
+        for (int i = 1; i <= 15; i++)
+            reports.Add(new(null, "S", i / 64.0));
+
+        reports.Add(new(null, "S", 1.0, "a"));
+        reports.Add(new(null, "S", 1.0, "b"));
+        reports.Add(new(null, "S", 1.0, "c"));
+
+        var t = Make([.. reports], result: 1);
+        var seen = await CollectAfterCompletionAsync(t);
+
+        // 0.0 plus 1/64..14/64 are preserved, 15/64 is coalesced away by the first 1.0, and each subsequent 1.0 replaces the previous one.
+        var expected = new List<ProgressValue>();
+
+        for (int i = 0; i <= 14; i++)
+            expected.Add(new(null, "S", i / 64.0));
+
+        expected.Add(new(null, "S", 1.0, "c"));
+
+        seen.ShouldBe(expected);
+    }
+
+    [TestMethod]
+    public async Task Message_MultipleUpdatesAtZero_BeyondQueueLimit_KeepsOnlyLatest()
+    {
+        // Message-only updates at 0.0 accumulate until the 16-item coalescing limit, after which each replaces the previous queued 0.0.
+        var reports = new List<ProgressValue>();
+
+        for (int i = 0; i <= 20; i++)
+            reports.Add(new(null, "S", 0.0, string.Create(CultureInfo.InvariantCulture, $"m{i}")));
+
+        var t = Make([.. reports], result: 1);
+        var seen = await CollectAfterCompletionAsync(t);
+
+        // m0..m14 fill under the limit, m15 hits the 16th slot, then m16..m20 each replace it, leaving m20; the stage then closes at 1.0 with the last message.
+        var expected = new List<ProgressValue>();
+
+        for (int i = 0; i <= 14; i++)
+            expected.Add(new(null, "S", 0.0, string.Create(CultureInfo.InvariantCulture, $"m{i}")));
+
+        expected.Add(new(null, "S", 0.0, "m20"));
+        expected.Add(new(null, "S", 1.0, "m20"));
+
+        seen.ShouldBe(expected);
     }
 
     // --- Progress queue coalescing ---

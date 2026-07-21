@@ -6,7 +6,7 @@ The `Singulink.FulcrumFS.Videos` package adds video processing built on FFmpeg a
 
 ### Where it fits
 
-<xref:FulcrumFS.Videos.VideoProcessor> and <xref:FulcrumFS.Videos.VideoThumbnailProcessor> are both <xref:FulcrumFS.FileProcessor> types, so they compose into pipelines and variants. Add `using FulcrumFS.Videos;` alongside `using FulcrumFS;`.
+<xref:FulcrumFS.Videos.VideoProcessor> and <xref:FulcrumFS.Videos.VideoFrameExtractionProcessor> are both <xref:FulcrumFS.FileProcessor> types, so they compose into pipelines and variants. Add `using FulcrumFS.Videos;` alongside `using FulcrumFS;`.
 
 > [!NOTE]
 > Video transcoding is CPU-intensive, often taking many seconds (or minutes) per file. A synchronous upload handler that transcodes during the request will tie up a worker thread for the duration. For large videos, consider queueing the add to a background service so the upload endpoint returns quickly.
@@ -33,7 +33,7 @@ There are also additional configuration options that can be used:
 - And `ProcessPriorityClass` can be used to set the priority class for `ffmpeg`/`ffprobe` processes, to ensure that other tasks have higher priority for example (by setting the `ffmpeg`/`ffprobe` ones to `BelowNormal`) - see `Process.ProcessPriorityClass` for more information.
 
 > [!IMPORTANT]
-> Constructing a <xref:FulcrumFS.Videos.VideoProcessor> or <xref:FulcrumFS.Videos.VideoThumbnailProcessor> before configuring the executables throws. The constructor also verifies that the configured FFmpeg build supports the codecs, demuxers, and encoders the options require, and throws <xref:System.NotSupportedException> if something is missing, so a misconfigured deployment fails fast at startup rather than on the first upload.
+> Constructing a <xref:FulcrumFS.Videos.VideoProcessor> or <xref:FulcrumFS.Videos.VideoFrameExtractionProcessor> before configuring the executables throws. The constructor also verifies that the configured FFmpeg build supports the codecs, demuxers, and encoders the options require, and throws <xref:System.NotSupportedException> if something is missing, so a misconfigured deployment fails fast at startup rather than on the first upload.
 
 ## The Video Processor
 
@@ -59,14 +59,14 @@ var options = VideoProcessingOptions.StandardizedH264AACMP4 with {
 
 ## Extracting a Thumbnail
 
-<xref:FulcrumFS.Videos.VideoThumbnailProcessor> extracts a poster frame as a PNG, which is what a gallery view needs so the user can see what each video looks like without playing it. It performs no validation itself, so when validation matters, run a <xref:FulcrumFS.Videos.VideoProcessor> first and chain the thumbnail step after it. Configure it with <xref:FulcrumFS.Videos.VideoThumbnailProcessingOptions>, and use the predefined <xref:FulcrumFS.Videos.VideoThumbnailProcessingOptions.Standard> for typical needs.
+<xref:FulcrumFS.Videos.VideoFrameExtractionProcessor> extracts a poster frame as a PNG, which is what a gallery view needs so the user can see what each video looks like without playing it. It performs no validation itself, so when validation matters, run a <xref:FulcrumFS.Videos.VideoProcessor> first and chain the thumbnail step after it. Configure it with <xref:FulcrumFS.Videos.VideoThumbnailProcessingOptions>, and use the predefined <xref:FulcrumFS.Videos.VideoThumbnailProcessingOptions.Standard> for typical needs.
 
 A full-resolution PNG poster frame is usually larger than a gallery tile needs, so a real thumbnail variant chains the extractor with an <xref:FulcrumFS.Images.ImageProcessor> that resizes it down and converts to JPEG:
 
 ```csharp
 // Resize the extracted poster frame down to a 256x256 JPEG.
 var thumbnailPipeline = new FileProcessingPipeline(
-    new VideoThumbnailProcessor(VideoThumbnailProcessingOptions.Standard),
+    new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard),
     new ImageProcessor(new ImageProcessingOptions {
         Formats = [new ImageFormatMapping(ImageFormat.Png, ImageFormat.Jpeg)],
         Resize = new ImageResizeOptions(ImageResizeMode.FitDown, 256, 256),

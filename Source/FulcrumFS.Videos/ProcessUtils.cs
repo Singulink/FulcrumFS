@@ -12,45 +12,102 @@ namespace FulcrumFS.Videos;
 internal static class ProcessUtils
 {
     private static readonly SemaphoreSlim _shortLivedProcessesSemaphore = new(1, 1);
+    private static readonly SemaphoreSlim _mediumLivedProcessesSemaphore = new(1, 1);
+    private static readonly SemaphoreSlim _cheapLongLivedProcessesSemaphore = new(1, 1);
     private static SemaphoreSlim? _processesSemaphore;
     private static SemaphoreSlim ProcessesSemaphore
         => _processesSemaphore ??= new SemaphoreSlim(VideoProcessor.MaxConcurrentProcesses, VideoProcessor.MaxConcurrentProcesses);
 
-    private static async ValueTask<SemaphoreSlim> JoinProcessSemaphoreAsync(bool isShortLived, bool runAsynchronously, CancellationToken cancellationToken)
+    private static async ValueTask<SemaphoreSlim> JoinProcessSemaphoreAsync(
+        ProcessLifetime lifetime,
+        bool runAsynchronously,
+        Func<bool, ValueTask>? queueingCallback,
+        CancellationToken cancellationToken)
     {
         // Try to enter the main semaphore without waiting first to avoid unnecessary context switches.
-        // Note: short-lived can still use the main semaphore if available, we are just trying to prioritize them running since they're fast to allow tasks to
-        // continue asap.
+        // Note: short/medium-lived can still use the main semaphore if available, we are just trying to prioritize them running since they're faster to allow
+        // tasks to continue asap & not be blocked by a set of long renders for example.
+        // Note: we preferentially use more constrained (i.e., ones that are more likely to be wanted to be used, such as the main one; not constrained in terms
+        // of what is able to use the semaphore) semaphores always; this ensures that we don't try to get too far into too many tasks at once such that they all
+        // slow down / queue repeatedly; it tries to limit slowdown / queueing to happening fewer times overall, even if for a bit longer, and to reduce
+        // slowdown of already-running things by minimizing number of extra tasks above normal, while keeping the benefits of getting quicker things done
+        // quickly.
+
         var processesSemaphore = ProcessesSemaphore;
-        if (processesSemaphore.Wait(0, cancellationToken: default)) return processesSemaphore;
+        if (processesSemaphore.Wait(0, cancellationToken: default))
+            return processesSemaphore;
 
-        // If the process is short-lived, try to enter its extra semaphore without waiting.
-        if (isShortLived && _shortLivedProcessesSemaphore.Wait(0, cancellationToken: default)) return _shortLivedProcessesSemaphore;
+        // If the process is not fully long-lived, try to enter the cheap long-lived extra semaphore without waiting.
+        if (lifetime is not ProcessLifetime.LongLived && _cheapLongLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+            return _cheapLongLivedProcessesSemaphore;
 
-        // Otherwise, wait asynchronously for availability.
-        // Note: short-lived processes have their own semaphore to avoid being blocked by long-running ones, but if the process is not actually short-lived,
-        // the queue to run short-lived processes quickly may get starved as there's only one slot available for quick running.
-        var semaphore = isShortLived ? _shortLivedProcessesSemaphore : processesSemaphore;
-        if (runAsynchronously) await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        else semaphore.Wait(cancellationToken);
+        // If the process is medium-lived or short-lived, try to enter the medium-lived extra semaphore without waiting.
+        if (lifetime is ProcessLifetime.MediumLived or ProcessLifetime.ShortLived && _mediumLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+            return _mediumLivedProcessesSemaphore;
 
-        // If we entered the short-lived semaphore but a slot is available in the main semaphore, switch to that one.
+        // If the process is short-lived, try to enter the short-lived extra semaphore without waiting.
+        if (lifetime is ProcessLifetime.ShortLived && _shortLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+            return _shortLivedProcessesSemaphore;
+
+        // Notify that we could not get a process slot immediately and have to start queueing.
+        if (queueingCallback is not null)
+            await queueingCallback(true).ConfigureAwait(false);
+
+        // We always want to report as dequeued when we exit the method, even if throwing.
         try
         {
-            if (semaphore == _shortLivedProcessesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
+            // Otherwise, wait asynchronously for availability on the process's own tier semaphore.
+            // Note: short/medium-lived processes have their own semaphores to avoid being blocked by long-running ones, but if the process is not actually
+            // short/medium-lived, the queue to run such processes quickly may get starved as there's only one slot available per tier for quick running.
+            var semaphore = lifetime switch
             {
-                _shortLivedProcessesSemaphore.Release();
-                semaphore = processesSemaphore;
-            }
-        }
-        catch
-        {
-            semaphore.Release();
-            throw;
-        }
+                ProcessLifetime.ShortLived => _shortLivedProcessesSemaphore,
+                ProcessLifetime.MediumLived => _mediumLivedProcessesSemaphore,
+                ProcessLifetime.CheapLongLived => _cheapLongLivedProcessesSemaphore,
+                _ => processesSemaphore,
+            };
 
-        // Return the semaphore we acquired.
-        return semaphore;
+            if (runAsynchronously)
+                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            else
+                semaphore.Wait(cancellationToken);
+
+            // If we entered an extra tier semaphore but a slot is available in a longer tier (main first, then cheap long, then medium over short), switch to
+            // that one.
+            try
+            {
+                if (semaphore != processesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
+                {
+                    semaphore.Release();
+                    semaphore = processesSemaphore;
+                }
+                else if ((semaphore == _mediumLivedProcessesSemaphore || semaphore == _shortLivedProcessesSemaphore) &&
+                    _cheapLongLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+                {
+                    semaphore.Release();
+                    semaphore = _cheapLongLivedProcessesSemaphore;
+                }
+                else if (semaphore == _shortLivedProcessesSemaphore && _mediumLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+                {
+                    semaphore.Release();
+                    semaphore = _mediumLivedProcessesSemaphore;
+                }
+            }
+            catch
+            {
+                semaphore.Release();
+                throw;
+            }
+
+            // Return the semaphore we acquired.
+            return semaphore;
+        }
+        finally
+        {
+            // We successfully acquired a semaphore slot, so notify that we are dequeued if applicable.
+            if (queueingCallback is not null)
+                await queueingCallback(false).ConfigureAwait(false);
+        }
     }
 
     private static void KillProcessSafely(Process process)
@@ -100,9 +157,10 @@ internal static class ProcessUtils
         IEnumerable<string> arguments,
         TextWriter? standardOutputWriter,
         TextWriter? standardErrorWriter,
-        bool isShortLived,
+        ProcessLifetime lifetime,
         bool redirectOutputContinually,
         bool runAsynchronously,
+        Func<bool, ValueTask>? queueingCallback,
         CancellationToken cancellationToken)
     {
         List<Task>? redirectTasks = null;
@@ -111,7 +169,7 @@ internal static class ProcessUtils
 
         try
         {
-            var semaphore = await JoinProcessSemaphoreAsync(isShortLived, runAsynchronously, cancellationToken).ConfigureAwait(false);
+            var semaphore = await JoinProcessSemaphoreAsync(lifetime, runAsynchronously, queueingCallback, cancellationToken).ConfigureAwait(false);
             try
             {
                 process = new Process
@@ -225,10 +283,15 @@ internal static class ProcessUtils
         }
     }
 
+    // Note about queueingCallback: true means queued, false means dequeued - not called when never queued, and always called with false, even when throwing.
+    // - Throwing from queueingCallback results in undefined behavior.
+    // - If runAsynchronously is false, the callback should not yield (not a correctness issue though, just means we run on the thread pool instead).
+
     public static async ValueTask<(string Output, string Error, int ReturnCode)> RunProcessToStringAsync(
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
-        bool isShortLived = false,
+        ProcessLifetime lifetime = ProcessLifetime.LongLived,
+        Func<bool, ValueTask>? queueingCallback = null,
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -240,9 +303,10 @@ internal static class ProcessUtils
             arguments,
             standardOutputWriter,
             standardErrorWriter,
-            isShortLived,
+            lifetime,
             redirectOutputContinually: false,
             runAsynchronously,
+            queueingCallback,
             cancellationToken).ConfigureAwait(false);
 
         return (standardOutputWriter.ToString(), standardErrorWriter.ToString(), returnCode);
@@ -251,7 +315,8 @@ internal static class ProcessUtils
     public static async ValueTask<string> RunProcessToStringWithErrorHandlingAsync(
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
-        bool isShortLived = false,
+        ProcessLifetime lifetime = ProcessLifetime.LongLived,
+        Func<bool, ValueTask>? queueingCallback = null,
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -263,9 +328,10 @@ internal static class ProcessUtils
             arguments,
             standardOutputWriter,
             standardErrorWriter,
-            isShortLived,
+            lifetime,
             redirectOutputContinually: false,
             runAsynchronously,
+            queueingCallback,
             cancellationToken).ConfigureAwait(false);
 
         if (returnCode != 0)
@@ -299,8 +365,9 @@ internal static class ProcessUtils
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
         TextWriter? standardOutputWriter,
-        bool isShortLived = false,
+        ProcessLifetime lifetime = ProcessLifetime.LongLived,
         bool runAsynchronously = true,
+        Func<bool, ValueTask>? queueingCallback = null,
         CancellationToken cancellationToken = default)
     {
         using StringWriter standardErrorWriter = new();
@@ -310,9 +377,10 @@ internal static class ProcessUtils
             arguments,
             standardOutputWriter,
             standardErrorWriter,
-            isShortLived,
+            lifetime,
             redirectOutputContinually: true,
             runAsynchronously,
+            queueingCallback,
             cancellationToken).ConfigureAwait(false);
 
         if (returnCode != 0)

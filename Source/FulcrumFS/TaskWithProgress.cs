@@ -21,8 +21,9 @@ namespace FulcrumFS;
 /// enumerations concurrently. You can, however, run multiple normal awaits concurrently (like with <see cref="Task{TResult}" />).
 /// </para>
 /// <para>
-/// Progress values for each stage are reported in the range [0.0, 1.0], are strictly monotonically increasing, and always include both 0.0 and 1.0 (unless a
-/// failure occurs partway through).
+/// Progress values for each stage are reported in the range [0.0, 1.0], are monotonically increasing, and always include both 0.0 and 1.0 (unless a
+/// failure occurs partway through). Progress values are strictly increasing except when only the stage display message changes, in which case a value may be
+/// reported that repeats the previous progress fraction with the updated message.
 /// </para>
 /// <para>
 /// If an exception occurs in the underlying operation and it is not observed by the caller through either <see cref="GetAwaiter" /> or
@@ -215,6 +216,7 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                 // Local state:
                 bool isCancelledLocal = false;
                 double lastProgressValue = -1.0; // Store last value so we can perform normalization.
+                string? lastMessage = null; // Last reported stage display message (reset for each new stage).
                 string? lastStage = null;
                 string? lastVariantId = null;
                 HashSet<(string? VariantId, string Stage)> reportedStages = [];
@@ -228,10 +230,11 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                         isCancelledLocal = true;
 
                     // Read parameter:
-                    var (variantId, stage, progress) = (progressValue.VariantId, progressValue.Stage, progressValue.Progress);
+                    var (variantId, stage, progress, message) =
+                        (progressValue.VariantId, progressValue.Stage, progressValue.Progress, progressValue.StageDisplayMessage);
 
                     // Normalize what report as follows: always report a 0.0 first, and then only ever report in strictly monotonically increasing order, up to
-                    // 1.0 as a maximum (also always reported).
+                    // 1.0 as a maximum (also always reported). Or, if the display message changes, then we allow re-reporting with same progress value.
 
                     // If we got a value outside of [0.0, 1.0] throw an exception:
                     if (progress < 0.0 || progress > 1.0 || double.IsNaN(progress))
@@ -250,7 +253,7 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                             {
                                 lock (progressQueueLock)
                                 {
-                                    progressQueue.AddLast(new ProgressValue(lastVariantId, lastStage, 1.0));
+                                    progressQueue.AddLast(new ProgressValue(lastVariantId, lastStage, 1.0, lastMessage));
                                 }
 
                                 progressSemaphore.Release();
@@ -270,17 +273,21 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                             lastStage = stage;
                             lastVariantId = variantId;
                             lastProgressValue = -1.0;
+                            lastMessage = null;
                         }
 
                         // Normalize -0.0 to 0.0.
                         if (progress == 0.0)
                             progress = 0.0;
 
-                        // If progress has increased.
-                        if (progress > lastProgressValue)
+                        // If progress has increased or the stage display message has changed.
+                        if (progress > lastProgressValue || message != lastMessage)
                         {
-                            // If we missed 0.0, enqueue it first.
-                            if (lastProgressValue < 0.0 && progress > 0.0)
+                            // Never report a lower progress than what we already reported (message-only updates re-use the last reported progress).
+                            double effectiveProgress = double.Max(progress, lastProgressValue);
+
+                            // If we missed 0.0, enqueue it first (with no message - the reported message only applies from the reported value onward).
+                            if (lastProgressValue < 0.0 && effectiveProgress > 0.0)
                             {
                                 lock (progressQueueLock)
                                 {
@@ -294,24 +301,26 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                             bool addedNew = true;
                             lock (progressQueueLock)
                             {
-                                // If we just added one for this before, and nobody has read it yet, then we should just replace that, except for 0.0 and 1.0.
-                                // This ensures our queue doesn't get way fuller than a caller can handle.
-                                // We only do this if we have at least 16 in the current stage in the queue.
-                                if (progressQueue.Count - int.Max(fromPreviousStage - processedSinceNewStage, 0) >= 16 && progressQueue.Last is { Value: ProgressValue lastValue } && lastValue.VariantId == variantId && lastValue.Stage == stage && lastValue.Progress is > 0.0 and < 1.0)
+                                // If we just added one for this before, and nobody has read it yet, then we should just replace that, except for 0.0 and 1.0 -
+                                // however, a message-only update at the same progress (including 0.0 and 1.0) also replaces, since it only refreshes the
+                                // message and never loses a distinct progress value. This ensures our queue doesn't get way fuller than a caller can handle
+                                // (and we only care about the latest message). We only do this if we have at least 16 in the current stage in the queue.
+                                if (progressQueue.Count - int.Max(fromPreviousStage - processedSinceNewStage, 0) >= 16 && progressQueue.Last is { Value: ProgressValue lastValue } && lastValue.VariantId == variantId && lastValue.Stage == stage && (lastValue.Progress is > 0.0 and < 1.0 || lastValue.Progress == effectiveProgress))
                                 {
                                     progressQueue.RemoveLast();
                                     addedNew = false;
                                 }
 
                                 // Add our new value
-                                progressQueue.AddLast(new ProgressValue(variantId, stage, progress));
+                                progressQueue.AddLast(new ProgressValue(variantId, stage, effectiveProgress, message));
                             }
 
                             if (addedNew)
                                 progressSemaphore.Release();
 
-                            // Update the last progress value.
-                            lastProgressValue = progress;
+                            // Update the last progress value and message.
+                            lastProgressValue = effectiveProgress;
+                            lastMessage = message;
                         }
                     }
                 };
@@ -332,7 +341,7 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                 {
                     lock (progressQueueLock)
                     {
-                        progressQueue.AddLast(new ProgressValue(lastVariantId, lastStage, 1.0));
+                        progressQueue.AddLast(new ProgressValue(lastVariantId, lastStage, 1.0, lastMessage));
                     }
 
                     progressSemaphore.Release();
