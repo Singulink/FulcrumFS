@@ -214,11 +214,13 @@ public sealed class VideoProcessor : FileProcessor
         if (!_ffmpegPathInitialized.TrySet())
             throw new InvalidOperationException("FFmpeg executable paths have already been initialized.");
 
+        // Note: we could see a partially initialized state in a race condition if a user tries to initialize and use simultaneously; we could handle this, but
+        // it is unlikely to be worth the complication since there's no good reason to do this anyway, as they should be ensuring that initialization is visible
+        // before they try to use it for consistent results anyway.
         MaxConcurrentProcesses = maxConcurrentProcesses;
         ProcessorAffinity = processorAffinity;
         ThreadLimit = threadLimit;
         ProcessPriorityClass = processPriorityClass;
-        Volatile.WriteBarrier(); // Ensure initializations before setting the paths are visible by the time we set them.
         FFmpegExePath = ffmpeg;
         FFprobeExePath = ffprobe;
     }
@@ -1583,7 +1585,7 @@ public sealed class VideoProcessor : FileProcessor
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamTagOverride(streamKind: 'v', streamIndexWithinKind: id, tag: "hvc1"));
 
                         // We want to limit the threads for x265 if we have ThreadLimit set:
-                        string? threadLimitString = ThreadLimit < int.MaxValue ? string.Create(CultureInfo.InvariantCulture, $"pools={ThreadLimit}") : null;
+                        string? threadLimitString = ThreadLimit is { } tl ? string.Create(CultureInfo.InvariantCulture, $"pools={tl}") : null;
 
                         // Level 8.5 support is now under allow-non-conformance=1 on some builds of x265
                         // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).
