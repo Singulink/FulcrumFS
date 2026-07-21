@@ -51,12 +51,13 @@ internal static class ProcessUtils
             await queueingCallback(true).ConfigureAwait(false);
 
         // We always want to notify when we stop queueing; use a try/finally for that.
+        SemaphoreSlim? semaphore = null;
         try
         {
             // Otherwise, wait asynchronously for availability on the process's own tier semaphore.
             // Note: short/medium-lived processes have their own semaphores to avoid being blocked by long-running ones, but if the process is not actually
             // short/medium-lived, the queue to run such processes quickly may get starved as there's only one slot available per tier for quick running.
-            var semaphore = lifetime switch
+            semaphore = lifetime switch
             {
                 ProcessLifetime.ShortLived => _shortLivedProcessesSemaphore,
                 ProcessLifetime.MediumLived => _mediumLivedProcessesSemaphore,
@@ -100,8 +101,19 @@ internal static class ProcessUtils
         finally
         {
             // Notify that we finished queueing and got a process slot.
-            if (queueingCallback is not null)
-                await queueingCallback(false).ConfigureAwait(false);
+            try
+            {
+                if (queueingCallback is not null)
+                    await queueingCallback(false).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Ensure we don't leave the semaphore acquired if the queueing callback throws an exception.
+                // Note: we shouldn't ever get here anyway, so also include a debug assertion; this is just for safety in Release mode really.
+                Debug.Fail("Queueing callback threw an exception.");
+                semaphore?.Release();
+                throw;
+            }
         }
     }
 
