@@ -21,7 +21,7 @@ internal static class ProcessUtils
     private static async ValueTask<SemaphoreSlim> JoinProcessSemaphoreAsync(
         ProcessLifetime lifetime,
         bool runAsynchronously,
-        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - not called if never queued.
+        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - may be partially or never called at all.
         CancellationToken cancellationToken)
     {
         // Try to enter the main semaphore without waiting first to avoid unnecessary context switches.
@@ -50,81 +50,55 @@ internal static class ProcessUtils
         if (queueingCallback is not null)
             await queueingCallback(true).ConfigureAwait(false);
 
-        // We always want to notify when we stop queueing; use a try/finally for that.
-        SemaphoreSlim? semaphore = null;
-        bool entered = true;
+        // Otherwise, wait asynchronously for availability on the process's own tier semaphore.
+        // Note: short/medium-lived processes have their own semaphores to avoid being blocked by long-running ones, but if the process is not actually
+        // short/medium-lived, the queue to run such processes quickly may get starved as there's only one slot available per tier for quick running.
+        var semaphore = lifetime switch
+        {
+            ProcessLifetime.ShortLived => _shortLivedProcessesSemaphore,
+            ProcessLifetime.MediumLived => _mediumLivedProcessesSemaphore,
+            ProcessLifetime.CheapLongLived => _cheapLongLivedProcessesSemaphore,
+            _ => processesSemaphore,
+        };
 
+        if (runAsynchronously)
+            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        else
+            semaphore.Wait(cancellationToken);
+
+        // If we entered an extra tier semaphore but a slot is available in a longer tier (main first, then cheap long, then medium over short), switch to
+        // that one.
         try
         {
-            // Otherwise, wait asynchronously for availability on the process's own tier semaphore.
-            // Note: short/medium-lived processes have their own semaphores to avoid being blocked by long-running ones, but if the process is not actually
-            // short/medium-lived, the queue to run such processes quickly may get starved as there's only one slot available per tier for quick running.
-            semaphore = lifetime switch
-            {
-                ProcessLifetime.ShortLived => _shortLivedProcessesSemaphore,
-                ProcessLifetime.MediumLived => _mediumLivedProcessesSemaphore,
-                ProcessLifetime.CheapLongLived => _cheapLongLivedProcessesSemaphore,
-                _ => processesSemaphore,
-            };
-
-            if (runAsynchronously)
-                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            else
-                semaphore.Wait(cancellationToken);
-
-            entered = true;
-
-            // If we entered an extra tier semaphore but a slot is available in a longer tier (main first, then cheap long, then medium over short), switch to
-            // that one.
-            try
-            {
-                if (semaphore != processesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
-                {
-                    semaphore.Release();
-                    semaphore = processesSemaphore;
-                }
-                else if ((semaphore == _mediumLivedProcessesSemaphore || semaphore == _shortLivedProcessesSemaphore) &&
-                    _cheapLongLivedProcessesSemaphore.Wait(0, cancellationToken: default))
-                {
-                    semaphore.Release();
-                    semaphore = _cheapLongLivedProcessesSemaphore;
-                }
-                else if (semaphore == _shortLivedProcessesSemaphore && _mediumLivedProcessesSemaphore.Wait(0, cancellationToken: default))
-                {
-                    semaphore.Release();
-                    semaphore = _mediumLivedProcessesSemaphore;
-                }
-            }
-            catch
+            if (semaphore != processesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
             {
                 semaphore.Release();
-                entered = false;
-                throw;
+                semaphore = processesSemaphore;
             }
-
-            // Return the semaphore we acquired.
-            return semaphore;
+            else if ((semaphore == _mediumLivedProcessesSemaphore || semaphore == _shortLivedProcessesSemaphore) &&
+                _cheapLongLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+            {
+                semaphore.Release();
+                semaphore = _cheapLongLivedProcessesSemaphore;
+            }
+            else if (semaphore == _shortLivedProcessesSemaphore && _mediumLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+            {
+                semaphore.Release();
+                semaphore = _mediumLivedProcessesSemaphore;
+            }
         }
-        finally
+        catch
         {
-            // Notify that we finished queueing and got a process slot.
-            try
-            {
-                if (queueingCallback is not null)
-                    await queueingCallback(false).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Ensure we don't leave the semaphore acquired if the queueing callback throws an exception.
-                // Note: we shouldn't ever get here anyway, so also include a debug assertion; this is just for safety in Release mode really.
-                Debug.Fail("Queueing callback threw an exception.");
-
-                if (entered)
-                    semaphore?.Release();
-
-                throw;
-            }
+            semaphore.Release();
+            throw;
         }
+
+        // We successfully acquired a semaphore slot, so notify that we are dequeued if applicable.
+        if (queueingCallback is not null)
+            await queueingCallback(false).ConfigureAwait(false);
+
+        // Return the semaphore we acquired.
+        return semaphore;
     }
 
     private static void KillProcessSafely(Process process)
@@ -177,7 +151,7 @@ internal static class ProcessUtils
         ProcessLifetime lifetime,
         bool redirectOutputContinually,
         bool runAsynchronously,
-        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - not called if never queued.
+        Func<bool, ValueTask>? queueingCallback, // true means queued, false means dequeued - may be partially or never called at all.
         CancellationToken cancellationToken)
     {
         List<Task>? redirectTasks = null;
@@ -290,7 +264,7 @@ internal static class ProcessUtils
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -315,7 +289,7 @@ internal static class ProcessUtils
         IAbsoluteFilePath fileName,
         IEnumerable<string> arguments,
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
         CancellationToken cancellationToken = default,
         bool runAsynchronously = true)
     {
@@ -366,7 +340,7 @@ internal static class ProcessUtils
         TextWriter? standardOutputWriter,
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
         bool runAsynchronously = true,
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
         CancellationToken cancellationToken = default)
     {
         using StringWriter standardErrorWriter = new();

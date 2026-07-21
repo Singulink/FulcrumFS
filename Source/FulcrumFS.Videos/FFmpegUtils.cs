@@ -487,7 +487,7 @@ internal static class FFmpegUtils
         FFmpegCommand command,
         Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
         CancellationToken cancellationToken = default)
     {
@@ -518,7 +518,7 @@ internal static class FFmpegUtils
         Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
         bool ensureAllProgressRead, // Ensures that all progress is read if at least one progress callback is invoked.
-        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - not called if never queued.
+        Func<bool, ValueTask>? queueingCallback = null, // true means queued, false means dequeued - may be partially or never called at all.
         ProcessLifetime lifetime = ProcessLifetime.LongLived,
         CancellationToken cancellationToken = default)
     {
