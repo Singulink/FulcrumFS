@@ -84,6 +84,11 @@ public sealed record VideoProcessorConfigurationOptions()
     /// Gets or initializes the process priority class for the ffmpeg processes. Default is currently <see langword="null" /> which means ffmpeg will run at the
     /// default priority.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// See <see cref="Process.PriorityClass" /> for more details.
+    /// </para>
+    /// </remarks>
     public ProcessPriorityClass? ProcessPriorityClass
     {
         get;

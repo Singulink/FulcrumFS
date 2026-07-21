@@ -28,9 +28,9 @@ VideoProcessor.ConfigureWithFFmpegExecutables(ffmpegDir, new() { MaxConcurrentPr
 The optional `MaxConcurrentProcesses` configuration option caps how many FFmpeg processes run at once, which protects a server from being overwhelmed when many users upload videos at the same time. A good starting value is roughly the number of physical CPU cores divided by two, since each FFmpeg process is itself multi-threaded.
 
 There are also additional configuration options that can be used:
-- `ProcessorAffinity` (only Windows and Linux) sets the CPU processor / hardware thread affinity mask to run all of the `ffmpeg`/`ffprobe` processes on to ensure they only can consume so much of the computer's resources.
+- `ProcessorAffinity` (only Windows and Linux) sets the CPU processor / hardware thread affinity mask to run all of the `ffmpeg`/`ffprobe` processes on to ensure they only can consume up to a certain limit of the computer's CPU resources - see `Process.ProcessorAffinity` for more information.
 - `ThreadLimit` sets an approximate thread limit (per activity, not per process) for `ffmpeg`.
-- And `ProcessPriorityClass` can be used to set the priority class for `ffmpeg`/`ffprobe` processes, to ensure that other tasks have higher priority for example (by setting the `ffmpeg`/`ffprobe` ones to `BelowNormal`).
+- And `ProcessPriorityClass` can be used to set the priority class for `ffmpeg`/`ffprobe` processes, to ensure that other tasks have higher priority for example (by setting the `ffmpeg`/`ffprobe` ones to `BelowNormal`) - see `Process.ProcessPriorityClass` for more information.
 
 > [!IMPORTANT]
 > Constructing a <xref:FulcrumFS.Videos.VideoProcessor> or <xref:FulcrumFS.Videos.VideoThumbnailProcessor> before configuring the executables throws. The constructor also verifies that the configured FFmpeg build supports the codecs, demuxers, and encoders the options require, and throws <xref:System.NotSupportedException> if something is missing, so a misconfigured deployment fails fast at startup rather than on the first upload.
