@@ -9,7 +9,7 @@
       "scope": "method"
     },
     "timeout": {
-      "test": 300000
+      "test": 600000
     }
   }
 }

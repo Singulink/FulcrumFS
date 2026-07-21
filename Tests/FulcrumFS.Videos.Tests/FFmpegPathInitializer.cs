@@ -8,7 +8,15 @@ public static class FFmpegPathInitializer
     [ModuleInitializer]
     public static void Initialize()
     {
-        VideoProcessor.ConfigureWithFFmpegExecutables(DirectoryPath.ParseAbsolute(BinariesDirectoryPath));
+        // Note: we test thread limiting in debug mode, to ensure we are setting options syntactically correctly.
+        VideoProcessor.ConfigureWithFFmpegExecutables(
+            DirectoryPath.ParseAbsolute(BinariesDirectoryPath),
+            new()
+            {
+#if DEBUG
+                ThreadLimit = Environment.ProcessorCount,
+#endif
+            });
     }
 
     public static string BinariesDirectoryPath

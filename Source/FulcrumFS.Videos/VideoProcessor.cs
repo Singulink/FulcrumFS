@@ -5,6 +5,7 @@ using Singulink.IO;
 using Singulink.Threading;
 
 #pragma warning disable SA1203 // Constants should appear before fields
+#pragma warning disable SA1513 // Closing brace should be followed by blank line
 #pragma warning disable SA1642 // Constructor summary documentation should begin with standard text
 
 namespace FulcrumFS.Videos;
@@ -144,7 +145,41 @@ public sealed class VideoProcessor : FileProcessor
 
     internal static int MaxConcurrentProcesses
     {
-        get => field > 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
+        private set;
+    }
+
+    internal static IntPtr? ProcessorAffinity
+    {
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
+        private set;
+    }
+
+    internal static int? ThreadLimit
+    {
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
+        private set;
+    }
+
+    internal static ProcessPriorityClass? ProcessPriorityClass
+    {
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
         private set;
     }
 
@@ -159,15 +194,9 @@ public sealed class VideoProcessor : FileProcessor
     /// <para>
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.</para>
     /// </summary>
-    /// <param name="dirPath">
-    /// The directory path containing the ffmpeg executables.
-    /// </param>
-    /// <param name="maxConcurrentProcesses">
-    /// The maximum number of concurrent ffmpeg processes to allow. Default is currently <see cref="Environment.ProcessorCount" />. Note: there are a small set
-    /// of additional processes added used for short-to-medium-lived processes. In common usage, the limit will represent the actual number of concurrent
-    /// processes, with occasional relatively short-lived / low resource processes being able to run on top of that to not block finishing off those tasks.
-    /// </param>
-    public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, int maxConcurrentProcesses = -1)
+    /// <param name="dirPath">The directory path containing the ffmpeg executables.</param>
+    /// <param name="options">Configuration options for the video processor, such as maximum number of processes.</param>
+    public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, VideoProcessorConfigurationOptions? options = null)
     {
         var (ffmpeg, ffprobe) = OperatingSystem.IsWindows()
             ? (dirPath.CombineFile("ffmpeg.exe"), dirPath.CombineFile("ffprobe.exe"))
@@ -179,18 +208,26 @@ public sealed class VideoProcessor : FileProcessor
         if (!ffprobe.Exists)
             throw new FileNotFoundException("FFprobe executable not found in specified directory.", ffprobe.ToString());
 
+        int maxConcurrentProcesses = options?.MaxConcurrentProcesses ?? -1;
+        IntPtr? processorAffinity = options?.ProcessorAffinity;
+        int? threadLimit = options?.ThreadLimit;
+        ProcessPriorityClass? processPriorityClass = options?.ProcessPriorityClass;
+
         if (maxConcurrentProcesses == -1)
             maxConcurrentProcesses = Environment.ProcessorCount;
-
-        if (maxConcurrentProcesses < 1)
-            throw new ArgumentOutOfRangeException(nameof(maxConcurrentProcesses), "Maximum concurrent processes must be at least 1.");
 
         if (!_ffmpegPathInitialized.TrySet())
             throw new InvalidOperationException("FFmpeg executable paths have already been initialized.");
 
+        // Note: we could see a partially initialized state in a race condition if a user tries to initialize and use simultaneously; we could handle this, but
+        // it is unlikely to be worth the complication since there's no good reason to do this anyway, as they should be ensuring that initialization is visible
+        // before they try to use it for consistent results anyway.
+        MaxConcurrentProcesses = maxConcurrentProcesses;
+        ProcessorAffinity = processorAffinity;
+        ThreadLimit = threadLimit;
+        ProcessPriorityClass = processPriorityClass;
         FFmpegExePath = ffmpeg;
         FFprobeExePath = ffprobe;
-        MaxConcurrentProcesses = maxConcurrentProcesses;
     }
 
     /// <inheritdoc/>
@@ -1588,6 +1625,9 @@ public sealed class VideoProcessor : FileProcessor
                         // Make the file more compatible by using 'hvc1' tag:
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamTagOverride(streamKind: 'v', streamIndexWithinKind: id, tag: "hvc1"));
 
+                        // We want to limit the threads for x265 if we have ThreadLimit set:
+                        string? threadLimitString = ThreadLimit is { } tl ? string.Create(CultureInfo.InvariantCulture, $"pools={tl}") : null;
+
                         // Level 8.5 support is now under allow-non-conformance=1 on some builds of x265
                         // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).
                         if (requiresLevel85ForX265)
@@ -1595,7 +1635,14 @@ public sealed class VideoProcessor : FileProcessor
                             perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamX265ParamsOverride(
                                 streamKind: 'v',
                                 streamIndexWithinKind: id,
-                                paramsToPass: "allow-non-conformance=1"));
+                                paramsToPass: threadLimitString is { } ? $"allow-non-conformance=1:{threadLimitString}" : "allow-non-conformance=1"));
+                        }
+                        else if (threadLimitString is { })
+                        {
+                            perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamX265ParamsOverride(
+                                streamKind: 'v',
+                                streamIndexWithinKind: id,
+                                paramsToPass: threadLimitString));
                         }
                     }
                     else
