@@ -89,9 +89,6 @@ public sealed record VideoProcessorConfigurationOptions()
         get;
         init
         {
-            Debug.Assert(!Enum.IsDefined((ProcessPriorityClass)0), "0 should not be defined - if it is, update VideoProcessor.ProcessPriorityClass");
-            Debug.Assert(!Enum.IsDefined((ProcessPriorityClass)(-1)), "-1 should not be defined - if it is, update VideoProcessor.ProcessPriorityClass");
-
             if (value is not null && !Enum.IsDefined(value.Value))
             {
                 throw new ArgumentOutOfRangeException(nameof(value), "Invalid process priority class.");

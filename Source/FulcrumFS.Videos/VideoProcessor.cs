@@ -140,29 +140,43 @@ public sealed class VideoProcessor : FileProcessor
 
     internal static int MaxConcurrentProcesses
     {
-        get => field > 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
         private set;
     }
 
     internal static IntPtr? ProcessorAffinity
     {
-        get => field != 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
         private set;
-    } = 0;
+    }
 
     internal static int ThreadLimit
     {
-        get => field > 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
         private set;
-    } = 0;
+    }
 
-    internal static ProcessPriorityClass ProcessPriorityClass
+    internal static ProcessPriorityClass? ProcessPriorityClass
     {
-        get => field != 0 ? field : throw new InvalidOperationException("ConfigureWithFFmpegExecutables must be called before using VideoProcessor.");
+        get
+        {
+            _ = FFmpegExePath; // Ensure ConfigureWithFFmpegExecutables has been called.
+            return field;
+        }
         private set;
-    } = 0; // 0 is an invalid member on ProcessPriorityClass
-
-    internal const ProcessPriorityClass UnsetProcessPriorityClass = (ProcessPriorityClass)(-1);
+    }
 
     /// <inheritdoc/>
     public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.SourceFormats.SelectMany(f => f.Extensions).Distinct()];
@@ -192,7 +206,7 @@ public sealed class VideoProcessor : FileProcessor
         int maxConcurrentProcesses = options?.MaxConcurrentProcesses ?? -1;
         IntPtr? processorAffinity = options?.ProcessorAffinity;
         int threadLimit = options?.ThreadLimit ?? int.MaxValue;
-        ProcessPriorityClass processPriorityClass = options?.ProcessPriorityClass ?? UnsetProcessPriorityClass;
+        ProcessPriorityClass? processPriorityClass = options?.ProcessPriorityClass;
 
         if (maxConcurrentProcesses == -1)
             maxConcurrentProcesses = Environment.ProcessorCount;
@@ -200,12 +214,13 @@ public sealed class VideoProcessor : FileProcessor
         if (!_ffmpegPathInitialized.TrySet())
             throw new InvalidOperationException("FFmpeg executable paths have already been initialized.");
 
-        FFmpegExePath = ffmpeg;
-        FFprobeExePath = ffprobe;
         MaxConcurrentProcesses = maxConcurrentProcesses;
         ProcessorAffinity = processorAffinity;
         ThreadLimit = threadLimit;
         ProcessPriorityClass = processPriorityClass;
+        Volatile.WriteBarrier(); // Ensure initializations before setting the paths are visibile by the time we set them.
+        FFmpegExePath = ffmpeg;
+        FFprobeExePath = ffprobe;
     }
 
     /// <inheritdoc/>

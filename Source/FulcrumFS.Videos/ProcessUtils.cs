@@ -138,7 +138,7 @@ internal static class ProcessUtils
                     }
                 }
 
-                if (VideoProcessor.ProcessPriorityClass is (not VideoProcessor.UnsetProcessPriorityClass) and { } priorityClass)
+                if (VideoProcessor.ProcessPriorityClass is { } priorityClass)
                 {
                     process.PriorityClass = priorityClass;
                 }
