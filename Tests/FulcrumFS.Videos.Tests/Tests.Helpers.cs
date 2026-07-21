@@ -10,7 +10,7 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace FulcrumFS.Videos;
 
-// This file contains the helper methods and properties used by all of the Tests.*.cs test files, both for VideoProcessor and ThumbnailProcessor.
+// This file contains the helper methods and properties used by all of the Tests.*.cs test files, both for VideoProcessor and VideoFrameExtractionProcessor.
 
 partial class Tests
 {
