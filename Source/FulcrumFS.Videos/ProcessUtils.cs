@@ -129,6 +129,20 @@ internal static class ProcessUtils
 
                 process.Start();
 
+                // Set processor affinity if specified
+                if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
+                {
+                    if (VideoProcessor.ProcessorAffinity is { } affinity)
+                    {
+                        process.ProcessorAffinity = affinity;
+                    }
+                }
+
+                if (VideoProcessor.ProcessPriorityClass is { } priorityClass)
+                {
+                    process.PriorityClass = priorityClass;
+                }
+
                 if (OperatingSystem.IsWindows())
                 {
                     // On Windows, processes will not exit until their output streams are read, so we must redirect continually always.

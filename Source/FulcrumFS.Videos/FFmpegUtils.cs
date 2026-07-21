@@ -405,9 +405,18 @@ internal static class FFmpegUtils
         }
     }
 
-    private static IEnumerable<string> CreateArguments(FFmpegCommand command, string? progressFilePath)
+    private static IEnumerable<string> CreateArguments(FFmpegCommand command, string? progressFilePath, string? threadLimit)
     {
         List<string> args = [];
+
+        if (threadLimit is not null)
+        {
+            args.Add("-filter_threads");
+            args.Add(threadLimit);
+
+            args.Add("-filter_complex_threads");
+            args.Add(threadLimit);
+        }
 
         // Input files:
         for (int i = 0; i < command.InputFiles.Length; i++)
@@ -416,6 +425,12 @@ internal static class FFmpegUtils
             {
                 args.Add(fromEnd ? "-sseof" : "-ss");
                 args.Add(offset.ToString("F6", CultureInfo.InvariantCulture));
+            }
+
+            if (threadLimit is not null)
+            {
+                args.Add("-threads");
+                args.Add(threadLimit);
             }
 
             args.Add("-i");
@@ -479,6 +494,13 @@ internal static class FFmpegUtils
 
         // Output file:
         args.Add("-y");
+
+        if (threadLimit is not null)
+        {
+            args.Add("-threads");
+            args.Add(threadLimit);
+        }
+
         args.Add(command.OutputFile.PathExport);
         return args;
     }
@@ -500,8 +522,9 @@ internal static class FFmpegUtils
         command.OutputFile.ParentDirectory.Create();
 
         // Run actual ffmpeg command:
+        int? threadLimit = VideoProcessor.ThreadLimit;
         await RunRawFFmpegCommandAsync(
-            CreateArguments(command, progressFilePath?.PathExport),
+            CreateArguments(command, progressFilePath?.PathExport, threadLimit?.ToString(CultureInfo.InvariantCulture)),
             progressCallback,
             progressFilePath,
             ensureAllProgressRead: false,
