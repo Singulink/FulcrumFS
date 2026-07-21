@@ -509,7 +509,6 @@ internal static class FFmpegUtils
         FFmpegCommand command,
         Func<double, ValueTask>? progressCallback,
         IAbsoluteFilePath? progressFilePath,
-        int threadLimit,
         CancellationToken cancellationToken = default)
     {
         // Validate progress callback and progress temp file path args:
@@ -523,8 +522,9 @@ internal static class FFmpegUtils
         command.OutputFile.ParentDirectory.Create();
 
         // Run actual ffmpeg command:
+        int? threadLimit = VideoProcessor.ThreadLimit;
         await RunRawFFmpegCommandAsync(
-            CreateArguments(command, progressFilePath?.PathExport, threadLimit < int.MaxValue ? threadLimit.ToString(CultureInfo.InvariantCulture) : null),
+            CreateArguments(command, progressFilePath?.PathExport, threadLimit?.ToString(CultureInfo.InvariantCulture)),
             progressCallback,
             progressFilePath,
             ensureAllProgressRead: false,

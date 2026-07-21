@@ -158,7 +158,7 @@ public sealed class VideoProcessor : FileProcessor
         private set;
     }
 
-    internal static int ThreadLimit
+    internal static int? ThreadLimit
     {
         get
         {
@@ -205,7 +205,7 @@ public sealed class VideoProcessor : FileProcessor
 
         int maxConcurrentProcesses = options?.MaxConcurrentProcesses ?? -1;
         IntPtr? processorAffinity = options?.ProcessorAffinity;
-        int threadLimit = options?.ThreadLimit ?? int.MaxValue;
+        int? threadLimit = options?.ThreadLimit;
         ProcessPriorityClass? processPriorityClass = options?.ProcessPriorityClass;
 
         if (maxConcurrentProcesses == -1)
@@ -218,7 +218,7 @@ public sealed class VideoProcessor : FileProcessor
         ProcessorAffinity = processorAffinity;
         ThreadLimit = threadLimit;
         ProcessPriorityClass = processPriorityClass;
-        Volatile.WriteBarrier(); // Ensure initializations before setting the paths are visibile by the time we set them.
+        Volatile.WriteBarrier(); // Ensure initializations before setting the paths are visible by the time we set them.
         FFmpegExePath = ffmpeg;
         FFprobeExePath = ffprobe;
     }
@@ -2100,7 +2100,6 @@ public sealed class VideoProcessor : FileProcessor
                     command,
                     localProgressCallback,
                     localProgressCallback != null ? progressTempFile : null,
-                    ThreadLimit,
                     context.CancellationToken)
                 .ConfigureAwait(false);
             }
@@ -2204,7 +2203,7 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, ThreadLimit, context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandReencoded, null, null, context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2252,7 +2251,7 @@ public sealed class VideoProcessor : FileProcessor
                     isToMov: true);
                 try
                 {
-                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, ThreadLimit, context.CancellationToken).ConfigureAwait(false);
+                    await FFmpegUtils.RunFFmpegCommandAsync(extractCommandOriginal, null, null, context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -2423,7 +2422,6 @@ public sealed class VideoProcessor : FileProcessor
                         mixCommand,
                         localProgressCallbackInner,
                         localProgressCallbackInner != null ? progressTempFile : null,
-                        ThreadLimit,
                         context.CancellationToken)
                     .ConfigureAwait(false);
                 }

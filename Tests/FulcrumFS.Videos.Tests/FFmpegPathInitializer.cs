@@ -16,7 +16,6 @@ public static class FFmpegPathInitializer
 #if DEBUG
                 ThreadLimit = Environment.ProcessorCount,
 #endif
-                ProcessPriorityClass = null, // Check debug asserts in setter
             });
     }
 
