@@ -27,12 +27,15 @@ internal static class ProcessUtils
         // Try to enter the main semaphore without waiting first to avoid unnecessary context switches.
         // Note: short/medium-lived can still use the main semaphore if available, we are just trying to prioritize them running since they're faster to allow
         // tasks to continue asap & not be blocked by a set of long renders for example.
-        // Note: we preferentially use more constrained semaphores always; this ensures that we don't try to get too far into too many tasks at once such that
-        // they all slow down / queue repeatedly; it tries to limit slowdown / queueing to happening fewer times overall, even if for a bit longer, and to
-        // reduce slowdown of already-running things by minimizing number of extra tasks above normal, while keeping the benefits of getting quicker things done
+        // Note: we preferentially use more constrained (i.e., ones that are more likely to be wanted to be used, such as the main one; not constrained in terms
+        // of what is able to use the semaphore) semaphores always; this ensures that we don't try to get too far into too many tasks at once such that they all
+        // slow down / queue repeatedly; it tries to limit slowdown / queueing to happening fewer times overall, even if for a bit longer, and to reduce
+        // slowdown of already-running things by minimizing number of extra tasks above normal, while keeping the benefits of getting quicker things done
         // quickly.
+
         var processesSemaphore = ProcessesSemaphore;
-        if (processesSemaphore.Wait(0, cancellationToken: default)) return processesSemaphore;
+        if (processesSemaphore.Wait(0, cancellationToken: default))
+            return processesSemaphore;
 
         // If the process is not fully long-lived, try to enter the cheap long-lived extra semaphore without waiting.
         if (lifetime is not ProcessLifetime.LongLived && _cheapLongLivedProcessesSemaphore.Wait(0, cancellationToken: default))
@@ -267,6 +270,8 @@ internal static class ProcessUtils
     }
 
     // Note about queueingCallback: true means queued, false means dequeued - not called when never queued, and always called with false, even when throwing.
+    // - Throwing from queueingCallback results in undefined behavior.
+    // - If runAsynchronously is false, the callback should not yield (not a correctness issue though, just means we run on the thread pool instead).
 
     public static async ValueTask<(string Output, string Error, int ReturnCode)> RunProcessToStringAsync(
         IAbsoluteFilePath fileName,
