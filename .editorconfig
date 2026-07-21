@@ -13,11 +13,37 @@ indent_style = space
 trim_trailing_whitespace = true
 insert_final_newline = true
 
+# Default line endings for all files
+end_of_line = lf
+
+########### Patch File Settings ###########
+
+[*.{patch,diff}]
+indent_style = unset
+trim_trailing_whitespace = unset
+insert_final_newline = unset
+
+########### Powershell File Settings ###########
+
+[*.ps1]
+end_of_line = crlf
+
+############ INI File Settings ###########
+
+[*.ini]
+end_of_line = crlf
+
 ########### XML File Settings ###########
 
-[*.{csproj,props,targets,proj,projitems,shproj}]
+[*.{csproj,props,targets,proj,projitems,shproj,slnx}]
 end_of_line = crlf
 indent_size = 2
+
+[*.csproj]
+charset = utf-8-bom
+
+[*.slnx]
+end_of_line = crlf
 
 [*.xml]
 end_of_line = lf
@@ -28,11 +54,21 @@ charset = utf-8-bom
 end_of_line = crlf
 indent_size = 2
 
+[*.resw]
+end_of_line = lf
+indent_size = 2
+
 [web.config]
 end_of_line = lf
 indent_size = 2
 
 [*.plist]
+end_of_line = lf
+indent_size = 2
+indent_style = tab
+
+[*.xcprivacy]
+charset = utf-8-bom
 end_of_line = lf
 indent_size = 2
 indent_style = tab
@@ -45,7 +81,7 @@ indent_size = 2
 
 ########### JSON File Settings ###########
 
-[*.{json,slnf}]
+[*.{json,slnf,ipproj}]
 end_of_line = lf
 indent_size = 2
 
@@ -65,13 +101,17 @@ indent_size = 4
 
 [*.html]
 end_of_line = lf
-indent_size = 2
+indent_size = 4
 
 ########### Markdown File Settings ###########
 
 [*.md]
 end_of_line = lf
 indent_size = 4
+
+########### C# Migrations File Settings ###########
+[**/Migrations/*.cs]
+charset = utf-8-bom
 
 ########### C# File Settings ###########
 [*.cs]
@@ -391,7 +431,7 @@ dotnet_diagnostic.SA1204.severity = none
 dotnet_diagnostic.SA1311.severity = suggestion
 
 # CA1034: Nested types should not be visible
-dotnet_diagnostic.CA1034.severity = suggestion
+dotnet_diagnostic.CA1034.severity = none
 
 # CA2225: Operator overloads have named alternates
 dotnet_diagnostic.CA2225.severity = none
@@ -435,6 +475,9 @@ dotnet_diagnostic.IDE0059.severity = warning
 # RS0030: Do not use banned APIs
 dotnet_diagnostic.RS0030.severity = error
 
+# CS9113: Parameter is unread.
+dotnet_diagnostic.CS9113.severity = suggestion
+
 # SA1116: Split parameters should start on line after declaration
 dotnet_diagnostic.SA1116.severity = none
 
@@ -464,3 +507,12 @@ dotnet_diagnostic.RS0026.severity = none
 
 # CA2208: Instantiate argument exceptions correctly
 dotnet_diagnostic.CA2208.severity = warning
+
+# SA1405: Debug.Assert should provide message text
+dotnet_diagnostic.SA1405.severity = suggestion
+
+# SA1009: Closing parenthesis should be spaced correctly
+dotnet_diagnostic.SA1009.severity = suggestion
+
+# SA1111: Closing parenthesis should be on line of last parameter
+dotnet_diagnostic.SA1111.severity = suggestion

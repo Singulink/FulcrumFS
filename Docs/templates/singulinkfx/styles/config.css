@@ -1,6 +1,6 @@
 /* Theme Configuration Options */
 
-:root 
+:root
 {
     /* General */
 
@@ -31,10 +31,10 @@
     --text-color: #e1e1e1;
     --link-color: #35bbee;
     --link-hover-color: #5fd2ff;
-    
+
     /* Mobile Topbar */
     --topbar-bg-color: #18191c;
-    
+
     /* Button */
     --button-color: #747f8d;
 
@@ -58,7 +58,7 @@
     --scrollbar-bg-color: transparent;
     --scrollbar-thumb-bg-color: rgba(0,0,0,.4);
     --scrollbar-thumb-border-color: transparent;
- 
+
     /* Alerts and Blocks */
     /* alert-info (used by NOTE) */
     --alert-info-title-color: #7c9dff;
@@ -128,10 +128,10 @@
     --text-color: #333333;
     --link-color: #0078d4;
     --link-hover-color: #096ec4;
-    
+
     /* Mobile Topbar */
     --topbar-bg-color: #f5f5f5;
-    
+
     /* Button */
     --button-color: #616161;
 
