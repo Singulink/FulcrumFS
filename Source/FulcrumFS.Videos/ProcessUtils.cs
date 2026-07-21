@@ -50,55 +50,61 @@ internal static class ProcessUtils
         if (queueingCallback is not null)
             await queueingCallback(true).ConfigureAwait(false);
 
-        // Otherwise, wait asynchronously for availability on the process's own tier semaphore.
-        // Note: short/medium-lived processes have their own semaphores to avoid being blocked by long-running ones, but if the process is not actually
-        // short/medium-lived, the queue to run such processes quickly may get starved as there's only one slot available per tier for quick running.
-        var semaphore = lifetime switch
-        {
-            ProcessLifetime.ShortLived => _shortLivedProcessesSemaphore,
-            ProcessLifetime.MediumLived => _mediumLivedProcessesSemaphore,
-            ProcessLifetime.CheapLongLived => _cheapLongLivedProcessesSemaphore,
-            _ => processesSemaphore,
-        };
-
-        if (runAsynchronously)
-            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        else
-            semaphore.Wait(cancellationToken);
-
-        // If we entered an extra tier semaphore but a slot is available in a longer tier (main first, then cheap long, then medium over short), switch to
-        // that one.
+        // We always want to report as dequeued when we exit the method, even if throwing.
         try
         {
-            if (semaphore != processesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
+            // Otherwise, wait asynchronously for availability on the process's own tier semaphore.
+            // Note: short/medium-lived processes have their own semaphores to avoid being blocked by long-running ones, but if the process is not actually
+            // short/medium-lived, the queue to run such processes quickly may get starved as there's only one slot available per tier for quick running.
+            var semaphore = lifetime switch
+            {
+                ProcessLifetime.ShortLived => _shortLivedProcessesSemaphore,
+                ProcessLifetime.MediumLived => _mediumLivedProcessesSemaphore,
+                ProcessLifetime.CheapLongLived => _cheapLongLivedProcessesSemaphore,
+                _ => processesSemaphore,
+            };
+
+            if (runAsynchronously)
+                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            else
+                semaphore.Wait(cancellationToken);
+
+            // If we entered an extra tier semaphore but a slot is available in a longer tier (main first, then cheap long, then medium over short), switch to
+            // that one.
+            try
+            {
+                if (semaphore != processesSemaphore && processesSemaphore.Wait(0, cancellationToken: default))
+                {
+                    semaphore.Release();
+                    semaphore = processesSemaphore;
+                }
+                else if ((semaphore == _mediumLivedProcessesSemaphore || semaphore == _shortLivedProcessesSemaphore) &&
+                    _cheapLongLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+                {
+                    semaphore.Release();
+                    semaphore = _cheapLongLivedProcessesSemaphore;
+                }
+                else if (semaphore == _shortLivedProcessesSemaphore && _mediumLivedProcessesSemaphore.Wait(0, cancellationToken: default))
+                {
+                    semaphore.Release();
+                    semaphore = _mediumLivedProcessesSemaphore;
+                }
+            }
+            catch
             {
                 semaphore.Release();
-                semaphore = processesSemaphore;
+                throw;
             }
-            else if ((semaphore == _mediumLivedProcessesSemaphore || semaphore == _shortLivedProcessesSemaphore) &&
-                _cheapLongLivedProcessesSemaphore.Wait(0, cancellationToken: default))
-            {
-                semaphore.Release();
-                semaphore = _cheapLongLivedProcessesSemaphore;
-            }
-            else if (semaphore == _shortLivedProcessesSemaphore && _mediumLivedProcessesSemaphore.Wait(0, cancellationToken: default))
-            {
-                semaphore.Release();
-                semaphore = _mediumLivedProcessesSemaphore;
-            }
+
+            // Return the semaphore we acquired.
+            return semaphore;
         }
-        catch
+        finally
         {
-            semaphore.Release();
-            throw;
+            // We successfully acquired a semaphore slot, so notify that we are dequeued if applicable.
+            if (queueingCallback is not null)
+                await queueingCallback(false).ConfigureAwait(false);
         }
-
-        // We successfully acquired a semaphore slot, so notify that we are dequeued if applicable.
-        if (queueingCallback is not null)
-            await queueingCallback(false).ConfigureAwait(false);
-
-        // Return the semaphore we acquired.
-        return semaphore;
     }
 
     private static void KillProcessSafely(Process process)
@@ -260,7 +266,7 @@ internal static class ProcessUtils
         }
     }
 
-    // Note about queueingCallback: true means queued, false means dequeued - not called when never queued, and not called for dequeue on exception.
+    // Note about queueingCallback: true means queued, false means dequeued - not called when never queued, and always called with false, even when throwing.
 
     public static async ValueTask<(string Output, string Error, int ReturnCode)> RunProcessToStringAsync(
         IAbsoluteFilePath fileName,

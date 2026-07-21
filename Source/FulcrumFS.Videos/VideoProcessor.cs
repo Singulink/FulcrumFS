@@ -2106,10 +2106,6 @@ public sealed class VideoProcessor : FileProcessor
                 // This way we optimise the common case of no validation errors, while still executing as if we checked beforehand.
                 context.CancellationToken.ThrowIfCancellationRequested();
 
-                // Dequeue is not reported on exceptions, so ensure we are not left showing as queued while we continue with validation:
-                if (queueingCallback is not null)
-                    await queueingCallback(false).ConfigureAwait(false);
-
                 Func<double, ValueTask>? progressCallback2 = progressCallback is not null
                     ? async (double fraction) =>
                         await progressCallback(mostRecentClampedProgress + (fraction * (1.0 - mostRecentClampedProgress))).ConfigureAwait(false)
@@ -3001,10 +2997,6 @@ public sealed class VideoProcessor : FileProcessor
                 // If we get an exception here, we should try again & specify codecs for each stream, as sometimes ffmpeg doesn't want to auto-select properly
                 // (we don't do this by default since it's more expensive):
                 // Note: we only do this if there is at least one non-subtitle stream, since we already handle those above.
-
-                // Dequeue is not reported on exceptions, so ensure we are not left showing as queued while we retry (the retry re-reports if it queues again):
-                if (queueingCallback is not null)
-                    await queueingCallback(false).ConfigureAwait(false);
 
                 await FFmpegUtils.RunRawFFmpegCommandAsync(
                     [
