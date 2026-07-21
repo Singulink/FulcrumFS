@@ -22,6 +22,7 @@
 
 # Use LF for other text files
 *.xml eol=lf
+*.resw text eol=lf
 web.config eol=lf
 *.plist eol=lf
 *.xcprivacy text eol=lf
@@ -34,6 +35,7 @@ web.config eol=lf
 *.js eol=lf
 *.html eol=lf
 *.md eol=lf
+*.ipproj text eol=lf
 
 # Mark some files as not text
 *.sub -text
