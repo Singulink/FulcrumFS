@@ -13,7 +13,7 @@ The `Singulink.FulcrumFS.Videos` package adds video processing built on FFmpeg a
 
 ## Configuring FFmpeg
 
-Video processing shells out to FFmpeg, so you must point the library at the directory containing the executables once at startup, before constructing any processor. Call <xref:FulcrumFS.Videos.VideoProcessor.ConfigureWithFFmpegExecutables*> with the directory and an optional concurrency limit.
+Video processing shells out to FFmpeg, so you must point the library at the directory containing the executables once at startup, before constructing any processor. Call <xref:FulcrumFS.Videos.VideoProcessor.ConfigureWithFFmpegExecutables*> with the directory and optional configuration options.
 
 ```csharp
 using FulcrumFS;
