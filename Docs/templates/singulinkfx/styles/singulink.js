@@ -22,17 +22,17 @@ if (window.matchMedia) {
 }
 
 function toggleMenu() {
-               
+
     var sidebar = document.getElementById("sidebar");
     var blackout = document.getElementById("blackout");
 
-    if (sidebar.style.left === "0px") 
+    if (sidebar.style.left === "0px")
     {
         sidebar.style.left = "-" + sidebar.getBoundingClientRect().width + "px";
         blackout.classList.remove("showThat");
         blackout.classList.add("hideThat");
-    } 
-    else 
+    }
+    else
     {
         sidebar.style.left = "0px";
         blackout.classList.remove("hideThat");
@@ -47,7 +47,7 @@ function toggleMenu() {
         var deepestLevel  = 0,
             $deepestChild,
             $deepestChildSet;
-     
+
         this.each(function () {
             $parent = $(this);
             $parent
@@ -65,7 +65,7 @@ function toggleMenu() {
                 });
             $deepestChildSet = !$deepestChildSet ? $deepestChild : $deepestChildSet.add($deepestChild);
         });
-            
+
         return this.pushStack($deepestChildSet || [], 'deepest', selector || '');
     };
 }(jQuery));
@@ -95,7 +95,7 @@ $(function() {
 
     function scrollToc() {
         var activeTocItem = $('.sidebar').deepest('.sidebar-item.active')[0]
-    
+
         if (activeTocItem) {
             activeTocItem.scrollIntoView({ block: "center" });
         }

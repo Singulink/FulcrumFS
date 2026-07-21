@@ -34,3 +34,8 @@ web.config eol=lf
 *.js eol=lf
 *.html eol=lf
 *.md eol=lf
+
+# Mark some files as not text
+*.sub -text
+*.ts -text
+*.idx -text
