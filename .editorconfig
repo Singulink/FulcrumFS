@@ -12,10 +12,11 @@ charset = utf-8
 indent_style = space
 trim_trailing_whitespace = true
 insert_final_newline = true
+end_of_line = lf
 
 ########### XML File Settings ###########
 
-[*.{csproj,props,targets,proj,projitems,shproj}]
+[*.{csproj,props,targets,proj,projitems,shproj,slnx}]
 end_of_line = crlf
 indent_size = 2
 
