@@ -260,7 +260,7 @@ internal static class ProcessUtils
         }
     }
 
-    // Note about queuingCallback: true means queued, false means dequeued - not called when never queued, and not called for dequeue on exception.
+    // Note about queueingCallback: true means queued, false means dequeued - not called when never queued, and not called for dequeue on exception.
 
     public static async ValueTask<(string Output, string Error, int ReturnCode)> RunProcessToStringAsync(
         IAbsoluteFilePath fileName,
