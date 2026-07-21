@@ -234,7 +234,7 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
                         (progressValue.VariantId, progressValue.Stage, progressValue.Progress, progressValue.StageDisplayMessage);
 
                     // Normalize what report as follows: always report a 0.0 first, and then only ever report in strictly monotonically increasing order, up to
-                    // 1.0 as a maximum (also always reported).
+                    // 1.0 as a maximum (also always reported). Or, if the display message changes, then we allow re-reporting with same progress value.
 
                     // If we got a value outside of [0.0, 1.0] throw an exception:
                     if (progress < 0.0 || progress > 1.0 || double.IsNaN(progress))
