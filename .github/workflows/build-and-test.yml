@@ -34,9 +34,14 @@ jobs:
     - name: Test
       run: dotnet test FulcrumFS.NoVideos.slnf --configuration ${{ matrix.configuration }} --no-build --verbosity normal
 
-  build-and-test-video-linux:
-    runs-on: ubuntu-latest
-    name: test-video-linux-x64
+  build-and-test-video:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-video-linux-x64' || 'test-video-macos-arm64' }}
 
     steps:
     - name: Checkout
@@ -46,81 +51,16 @@ jobs:
       with:
         dotnet-version: |
           10.0.x
-    - name: Build ffmpeg binaries
+    - name: Build ffmpeg binaries (Unix)
+      if: runner.os != 'Windows'
       env:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
       run: |
         mkdir -p "$FFMPEG_OUTPUT_DIR"
         bash .github/scripts/build-ffmpeg/unix/bootstrap-unix.sh
         chmod +x "$FFMPEG_OUTPUT_DIR"/*
-    - name: Clean
-      run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
-    - name: Install dependencies
-      run: dotnet restore FulcrumFS.slnx
-    - name: Build (Debug)
-      run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
-    - name: Build (Release)
-      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
-    - name: Test (Debug)
-      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
-      env:
-        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-    - name: Test (Release)
-      if: ${{ !cancelled() }}
-      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
-      env:
-        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-
-  build-and-test-video-macos:
-    runs-on: macos-latest
-    name: test-video-macos-arm64
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: |
-          10.0.x
-    - name: Build ffmpeg binaries
-      env:
-        FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
-      run: |
-        mkdir -p "$FFMPEG_OUTPUT_DIR"
-        bash .github/scripts/build-ffmpeg/unix/bootstrap-unix.sh
-        chmod +x "$FFMPEG_OUTPUT_DIR"/*
-    - name: Clean
-      run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
-    - name: Install dependencies
-      run: dotnet restore FulcrumFS.slnx
-    - name: Build (Debug)
-      run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
-    - name: Build (Release)
-      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
-    - name: Test (Debug)
-      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
-      env:
-        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-    - name: Test (Release)
-      if: ${{ !cancelled() }}
-      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
-      env:
-        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-
-  build-and-test-video-windows:
-    runs-on: windows-latest
-    name: test-video-windows-x64
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: |
-          10.0.x
-    - name: Build ffmpeg binaries
+    - name: Build ffmpeg binaries (Windows)
+      if: runner.os == 'Windows'
       env:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
       run: |
