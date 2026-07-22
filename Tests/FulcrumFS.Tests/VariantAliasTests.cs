@@ -311,9 +311,9 @@ public sealed class VariantAliasTests
             };
 
             if (i % 2 == 0)
-                await Task.WhenAll(makeDeleteTask(), makeAddTask());
+                await Task.WhenAll(Task.Run(makeDeleteTask()), Task.Run(makeAddTask()));
             else
-                await Task.WhenAll(makeAddTask(), makeDeleteTask());
+                await Task.WhenAll(Task.Run(makeAddTask()), Task.Run(makeDeleteTask()));
 
             // Regardless of ordering, 'a' is gone afterwards.
             await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
