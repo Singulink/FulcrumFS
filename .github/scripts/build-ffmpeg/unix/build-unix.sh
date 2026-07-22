@@ -20,7 +20,7 @@ rm -rf ~/Clones
 
 # Install pre-requisites
 if [[ "$(uname)" == "Darwin" ]]; then
-  sudo brew install curl zip
+  brew install curl zip
 else
   sudo apt -y install build-essential curl zip
 fi
