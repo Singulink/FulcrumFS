@@ -302,7 +302,7 @@ public sealed class VariantAliasTests
                 catch (RepoFileNotFoundException) { }
             };
 
-            var makeAddTask = async () =>
+            var makeAddTask = () => async () =>
             {
                 gate.SignalAndWait();
 
