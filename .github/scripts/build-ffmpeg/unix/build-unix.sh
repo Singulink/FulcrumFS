@@ -18,8 +18,14 @@ mkdir -p "$FFMPEG_OUTPUT_DIR"
 # (e.g. a partial git clone, an already-applied patch, or a partial build tree).
 rm -rf ~/Clones
 
-# Build ffmpeg for Linux (output goes to ~/Clones/ffmpeg-build/packages/FFmpeg-release-X.Y)
-sudo apt -y install build-essential curl zip
+# Install pre-requisites
+if [[ "$(uname)" == "Darwin" ]]; then
+  sudo brew install curl zip
+else
+  sudo apt -y install build-essential curl zip
+fi
+
+# Build ffmpeg for Unix (output goes to ~/Clones/ffmpeg-build/packages/FFmpeg-release-X.Y)
 mkdir -p ~/Clones
 cd ~/Clones
 git clone https://github.com/markus-perl/ffmpeg-build-script.git
