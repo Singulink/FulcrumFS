@@ -9,6 +9,10 @@
       metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.
     </Description>
     <PackageTags></PackageTags>
+
+    <!-- Handling for special custom hwaccel config mode -->
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' != '' ">$(DefineConstants);CUSTOM_HWACCEL_MODE</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'none' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_NONE</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

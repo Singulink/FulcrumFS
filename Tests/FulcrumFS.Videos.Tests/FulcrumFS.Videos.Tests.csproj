@@ -5,6 +5,10 @@
 
     <!-- Disable parts of tests that require manual inspection in CI to save on CI testing time -->
     <DefineConstants Condition=" '$(CI)' == 'true' ">$(DefineConstants);CI</DefineConstants>
+
+    <!-- Handling for special custom hwaccel config mode -->
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' != '' ">$(DefineConstants);CUSTOM_HWACCEL_MODE</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'none' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_NONE</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

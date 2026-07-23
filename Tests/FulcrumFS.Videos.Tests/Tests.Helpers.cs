@@ -27,7 +27,8 @@ partial class Tests
 
     // Note: we use 'ForceValidateAllStreams = false' for most tests in this file to reduce test time.
     // Note: this is only done in Release mode, so that Debug tests still run validation logic on all streams for better coverage.
-#if DEBUG
+    // Note: we also use true in none hwaccel mode, so we can compare that behavior in CI to the default mode (opportunistic).
+#if DEBUG || CUSTOM_HWACCEL_MODE_NONE
     public const bool DefaultForceValidateAllStreams = true;
 #else
     public const bool DefaultForceValidateAllStreams = false;

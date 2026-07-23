@@ -433,8 +433,13 @@ internal static class FFmpegUtils
                 args.Add(threadLimit);
             }
 
+#if !CUSTOM_HWACCEL_MODE_NONE
             args.Add("-hwaccel");
             args.Add("auto");
+#else
+            args.Add("-hwaccel");
+            args.Add("none");
+#endif
 
             args.Add("-i");
             args.Add(command.InputFiles[i].File.PathExport);
