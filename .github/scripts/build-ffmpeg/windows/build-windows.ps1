@@ -41,7 +41,8 @@ foreach ($f in 'media-autobuild_suite.ini', 'ffmpeg_options.txt', 'mpv_options.t
 $PSNativeCommandUseErrorActionPreference = $false
 Push-Location $suiteDir
 try {
-    & cmd.exe /c 'media-autobuild_suite.bat'
+    # Redirect stdin from NUL so the suite can never block on interactive prompts, rather than waiting 6 hours for CI to fail & not retrying.
+    & cmd.exe /c 'media-autobuild_suite.bat < NUL'
 }
 finally {
     Pop-Location
