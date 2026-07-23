@@ -71,6 +71,9 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path $env:FFMPEG_OUTPUT_DIR | Out-Null
         .\.github\scripts\build-ffmpeg\windows\bootstrap-windows.ps1
+    - name: Copy test config
+      shell: bash
+      run: cp ".github/config/testconfig.${{ runner.os == 'Windows' && 'windows' || runner.os == 'Linux' && 'linux' || 'macos' }}.json" Tests/FulcrumFS.Videos.Tests/testconfig.json
     - name: Clean
       run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
     - name: Install dependencies

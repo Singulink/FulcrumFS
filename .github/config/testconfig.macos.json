@@ -5,6 +5,7 @@
     },
     "parallelism": {
       "enabled": true,
+      "workers": 1,
       "scope": "method"
     },
     "timeout": {
