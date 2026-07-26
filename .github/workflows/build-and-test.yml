@@ -53,7 +53,7 @@ jobs:
     - name: Set hwaccel modes
       if: ${{ matrix.run-mode == 'hwaccel' }}
       shell: bash
-      run: echo "HWACCEL_MODES=${{ matrix.os == 'windows-latest' && 'none' || matrix.os == 'ubuntu-latest' && 'none' || 'none' }}" >> "$GITHUB_ENV"
+      run: echo "HWACCEL_MODES=${{ matrix.os == 'windows-latest' && 'none qsv amf d3d12va d3d11va vulkan' || matrix.os == 'ubuntu-latest' && 'none qsv amf vulkan' || 'none videotoolbox vulkan' }}" >> "$GITHUB_ENV"
     - name: Checkout
       uses: actions/checkout@v6
     - name: Setup .NET
@@ -105,10 +105,29 @@ jobs:
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
       run: |
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          cpu_vendor=$(grep -m1 vendor_id /proc/cpuinfo | awk '{print $3}')
+        elif [[ "$RUNNER_OS" == "Windows" ]]; then
+          cpu_vendor=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Manufacturer" | tr -d '\r')
+        else
+          cpu_vendor=""
+        fi
         for mode in $HWACCEL_MODES; do
+          if [[ "$mode" == "qsv" && -n "$cpu_vendor" && "$cpu_vendor" != *Intel* ]]; then
+            echo "Skipping HWACCEL_MODE=qsv (CPU vendor is '$cpu_vendor', not Intel)"
+            continue
+          fi
+          if [[ "$mode" == "amf" && -n "$cpu_vendor" && "$cpu_vendor" != *AMD* && "$cpu_vendor" != *Advanced* ]]; then
+            echo "Skipping HWACCEL_MODE=amf (CPU vendor is '$cpu_vendor', not AMD)"
+            continue
+          fi
           echo "::group::HWACCEL_MODE=$mode"
           export HWACCEL_MODE="$mode"
           dotnet build FulcrumFS.slnx --configuration Release --no-restore
           dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+          cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Short.txt
+          echo "::endgroup::"
+          echo "::group::HWACCEL_MODE=$mode (Detailed Report of Hardware Acceleration Failures)"
+          cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Detailed.txt
           echo "::endgroup::"
         done

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
+using System.Text;
 using Singulink.IO;
 using Singulink.Threading;
 
@@ -491,12 +492,15 @@ public sealed class VideoProcessor : FileProcessor
         bool finishedValidateStreams = false;
 
         // Helper to make stream validation easier - returns a bool indicating if we exceeded max length:
+        // Note: progressOffset shifts the reported progress range without affecting how much progress is consumed - used when the caller has reported
+        // partial progress of its own that is not yet folded into progressUsed (e.g. the compatibility check loop), so reports cannot go backwards.
         async ValueTask<(bool Exceeded, double? MeasuredDuration)> ValidateStreamsAsync(
             double? maxLength,
             double expectedMaxDuration,
             int[] mappedInputIndicesOrdered,
             IEnumerable<FFmpegUtils.PerStreamMapOverride>? mappedStreams,
-            bool countDuration)
+            bool countDuration,
+            double progressOffset = 0.0)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
             Debug.Assert(!mappedInputIndicesOrdered.Any((x) => validatedStreams[x]), "None of the streams to validate should have already been validated.");
@@ -510,18 +514,22 @@ public sealed class VideoProcessor : FileProcessor
                     streamIndexWithinKind: x,
                     mapToOutput: true));
 
-            var (exceededMaxLength, actualMaxDuration, progressTempFile2, progressUsed2) = await FullyValidateStreamsAsync(
+            // Scale the [0.0, 1.0] fraction reported by FullyValidateStreamsAsync into this validation's share of the overall progress:
+            double progressBudget = (double)mappedInputIndicesOrdered.Length / sourceInfo.Streams.Length * ValidateProgressFraction;
+            Func<double, ValueTask>? scaledProgressCallback = progressCallback is not null
+                ? async (fraction) => await progressCallback(progressUsed + progressOffset + (fraction * progressBudget)).ConfigureAwait(false)
+                : null;
+
+            var (exceededMaxLength, actualMaxDuration, progressTempFile2) = await FullyValidateStreamsAsync(
                 context,
                 sourceFile,
                 sourceInfo,
-                progressCallback,
+                scaledProgressCallback,
                 maxLength,
                 expectedMaxDuration,
                 (i) => mappedInputIndicesOrdered.BinarySearch(i) switch { < 0 => null, var x => x },
                 mappedStreams,
                 mappedInputIndicesOrdered.Length,
-                progressUsed,
-                sourceInfo.Streams.Length,
                 progressTempFile,
                 countDuration,
                 queueingCallback,
@@ -544,7 +552,7 @@ public sealed class VideoProcessor : FileProcessor
             }
 
             progressTempFile = progressTempFile2;
-            progressUsed = progressUsed2;
+            progressUsed += progressBudget;
             return (exceededMaxLength, actualMaxDuration);
         }
 
@@ -723,7 +731,7 @@ public sealed class VideoProcessor : FileProcessor
                 if (targetFps is not null && (
                     videoStream.FpsNum <= 0 ||
                     videoStream.FpsDen <= 0 ||
-                    videoStream.FpsNum > (long)videoStream.FpsDen * targetFps.Value))
+                    checked(videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2)) > (long)videoStream.FpsDen * targetFps.Value))
                 {
                     reencodingStream = true;
                     mustReencodeStream = true;
@@ -830,7 +838,7 @@ public sealed class VideoProcessor : FileProcessor
                         Options.ForceSquarePixels ? videoStream.SarNum : -1,
                         Options.ForceSquarePixels ? videoStream.SarDen : -1,
                         GetResizeMaxDimensions(Options.ResizeOptions, width, height),
-                        !changingFps && videoStream.FpsNum > 0 && videoStream.FpsDen > 0 ? (videoStream.FpsNum, videoStream.FpsDen) : null,
+                        !changingFps && videoStream.FpsNum > 0 && videoStream.FpsDen > 0 ? (checked(videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2)), videoStream.FpsDen) : null,
                         roundW,
                         roundH,
                         Options.ResultVideoCodecs[0] != VideoCodec.H264,
@@ -1104,12 +1112,15 @@ public sealed class VideoProcessor : FileProcessor
                     !isCompatibleSubtitleStreamAfterReencodingToDvdSubtitle[i] &&
                     !validatedStreams[i])
                 {
+                    // Note: we offset the validation's progress range by the compatibility progress already reported for previous iterations, so its reports
+                    // cannot go backwards (that portion is only folded into progressUsed after the loop).
                     await ValidateStreamsAsync(
                         maxLength: null,
                         expectedMaxDuration: maxDuration,
                         mappedInputIndicesOrdered: [i],
                         mappedStreams: null,
-                        countDuration: false).ConfigureAwait(false);
+                        countDuration: false,
+                        progressOffset: StreamCompatibilityCheckProgressFraction * ((double)i / (sourceInfo.Streams.Length + 2))).ConfigureAwait(false);
                 }
 
                 reportProgress:
@@ -1177,6 +1188,12 @@ public sealed class VideoProcessor : FileProcessor
 
         List<(char Kind, int InputIndex, int OutputIndex, bool MapMetadata, FFmpegUtils.PerStreamMetadataOverride? MetadataOverrides)> streamMapping = [];
         List<(int StreamMappingIndex, string SourceValidFileExtension, bool RequiresReencodeForMP4)> streamsToCheckSize = [];
+
+        // Tracks whether we can use hardware acceleration probably - some things require handling that we have not added and/or are extremely likely to fail,
+        // so we disable it if we detect any of those things.
+        // Note: if we loosen the check here, we need to ensure we have correct handling for all new edge cases on all supported hardware acceleration types,
+        // and that all the unit tests pass for that hardware acceleration type when running in its special mode (CI does not cover all of this).
+        bool canUseHardwareAcceleration = true;
 
         foreach (var stream in sourceInfo.Streams)
         {
@@ -1252,7 +1269,10 @@ public sealed class VideoProcessor : FileProcessor
                     Options.VideoReencodeMode != StreamReencodeMode.AvoidReencoding ||
                     !isCompatibleStream[inputStreamIndex];
 
-                FFmpegUtils.PerStreamFilterOverride? filterOverride = null;
+                FFmpegUtils.PerStreamFilterOverride filterOverride = new(streamKind: 'v', streamIndexWithinKind: id)
+                {
+                    Critical = false,
+                };
                 int outputStreamOverridesInitialCount = perOutputStreamOverrides.Count;
 
                 // Check for resizing:
@@ -1288,8 +1308,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     reencode = true;
                     isRequiredReencode = true;
-                    filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                    perOutputStreamOverrides.Add(filterOverride);
+                    filterOverride.Critical = true;
                     filterOverride.MakePixelsSquareMode = videoStream.SarNum > videoStream.SarDen ? 2 : 3;
                 }
 
@@ -1299,12 +1318,7 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     reencode = true;
                     isRequiredReencode = true;
-                    if (filterOverride is null)
-                    {
-                        filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                        perOutputStreamOverrides.Add(filterOverride);
-                    }
-
+                    filterOverride.Critical = true;
                     filterOverride.Deinterlace = true;
                 }
 
@@ -1319,16 +1333,14 @@ public sealed class VideoProcessor : FileProcessor
                     // exceptions that would occur as a result happen.
                     int maxFpsNum = fpsOptions.TargetFps;
 
-                    if (videoStream.FpsNum <= 0 || videoStream.FpsDen <= 0 || videoStream.FpsNum > (long)videoStream.FpsDen * maxFpsNum)
+                    if (videoStream.FpsNum <= 0 ||
+                        videoStream.FpsDen <= 0 ||
+                        checked(videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2)) > (long)videoStream.FpsDen * maxFpsNum)
                     {
                         reencode = true;
                         isRequiredReencode = true;
 
-                        if (filterOverride is null)
-                        {
-                            filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                            perOutputStreamOverrides.Add(filterOverride);
-                        }
+                        filterOverride.Critical = true;
 
                         long newFpsNum, newFpsDen;
 
@@ -1344,20 +1356,20 @@ public sealed class VideoProcessor : FileProcessor
                                 "Unimplemented FpsOptions.LimitMode value.");
 
                             // Find division factor: ceil(currentFps / maxFps)
-                            int lhs = videoStream.FpsNum;
+                            int lhs = videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2);
                             long rhs = (long)videoStream.FpsDen * maxFpsNum;
                             long divideBy = (lhs + rhs - 1) / rhs;
 
                             // Apply division
-                            int gcd = (int)BigInteger.GreatestCommonDivisor(videoStream.FpsNum, divideBy);
+                            int gcd = (int)BigInteger.GreatestCommonDivisor(lhs, divideBy);
                             if (gcd != 1)
                             {
-                                newFpsNum = videoStream.FpsNum / gcd;
+                                newFpsNum = lhs / gcd;
                                 divideBy /= gcd;
                             }
                             else
                             {
-                                newFpsNum = videoStream.FpsNum;
+                                newFpsNum = lhs;
                             }
 
                             newFpsDen = videoStream.FpsDen * divideBy;
@@ -1417,14 +1429,16 @@ public sealed class VideoProcessor : FileProcessor
                     perOutputStreamOverrides.Add(
                         new FFmpegUtils.PerStreamColorRangeOverride(streamKind: 'v', streamIndexWithinKind: id, colorRange: "pc"));
 
-                    if (filterOverride is null)
-                    {
-                        filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                        perOutputStreamOverrides.Add(filterOverride);
-                    }
-
+                    filterOverride.Critical = true;
                     filterOverride.ForceConvertToFullRange = videoStream.ColorRange != "pc";
                     filterOverride.PixelFormat = pixFormat;
+
+                    // If we have more than 4:2:0 chroma subsampling or more than 10bpc, then we do not try to use hardware acceleration, as it is likely to
+                    // fail on most hardware and we have not implemented appropriate handling for it yet. These are also very uncommon inputs.
+                    if (finalChromaSubsampling != 420 || finalBitsPerChannel > 10)
+                    {
+                        canUseHardwareAcceleration = false;
+                    }
                 }
 
                 // Deal with HDR:
@@ -1436,12 +1450,7 @@ public sealed class VideoProcessor : FileProcessor
                     if (isHdr && Options.RemapHDRToSDR)
                         isRequiredReencode = true;
 
-                    if (filterOverride is null)
-                    {
-                        filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                        perOutputStreamOverrides.Add(filterOverride);
-                    }
-
+                    filterOverride.Critical = true;
                     filterOverride.HDRToSDR = true;
 
                     // Just use BT.709 for everything as our standardized SDR profile:
@@ -1454,7 +1463,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Determine round to even info:
-                int chromaSubsampling = GetPixelFormatCharacteristics(filterOverride?.PixelFormat)?.ChromaSubsampling
+                int chromaSubsampling = GetPixelFormatCharacteristics(filterOverride.Critical ? filterOverride.PixelFormat : null)?.ChromaSubsampling
                     ?? pixFormatInfo?.ChromaSubsampling
                     ?? 444;
                 var (roundW, roundH) = GetChromaSubsamplingRounding(chromaSubsampling);
@@ -1491,7 +1500,7 @@ public sealed class VideoProcessor : FileProcessor
                     // Determine the resulting size of the video:
 
                     var fpsValue = fpsOverride is null
-                        ? (videoStream.FpsNum > 0 && videoStream.FpsDen > 0 ? (videoStream.FpsNum, videoStream.FpsDen) : null)
+                        ? (videoStream.FpsNum > 0 && videoStream.FpsDen > 0 ? (checked(videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2)), videoStream.FpsDen) : null)
                         : ((int, int)?)((int)fpsOverride.FPSNum, (int)fpsOverride.FPSDen);
 
                     var (mode, resultWidth, resultHeight) = CalculateVideoResize(
@@ -1541,13 +1550,16 @@ public sealed class VideoProcessor : FileProcessor
                         // If we're meant to resize, then set up our filter:
                         if (resultWidth != width || resultHeight != height)
                         {
-                            if (filterOverride is null)
-                            {
-                                filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                                perOutputStreamOverrides.Add(filterOverride);
-                            }
-
+                            filterOverride.Critical = true;
                             filterOverride.ResizeTo = (resultWidth, resultHeight);
+                        }
+
+                        // If the size is over 8192x4608, don't try to use hardware acceleration. It is extremely unlikely to work, and if it does, is
+                        // likely to be very slow and/or crash, especially if we end up running this on some kind of integrated GPU or similar.
+                        // Inputs that match this are also not common (it is just above 8K), so we don't expect this to slow down most real cases unnecessarily.
+                        if (resultWidth > 8192 || resultHeight > 8192 || resultWidth * resultHeight > 8192 * 4608)
+                        {
+                            canUseHardwareAcceleration = false;
                         }
 
                         // If resolution is above level 7.2 limit, enable level 8.5 support.
@@ -1572,12 +1584,7 @@ public sealed class VideoProcessor : FileProcessor
 
                 if (reencode && !IsProgressive(videoStream.FieldOrder))
                 {
-                    if (filterOverride is null)
-                    {
-                        filterOverride = new FFmpegUtils.PerStreamFilterOverride(streamKind: 'v', streamIndexWithinKind: id);
-                        perOutputStreamOverrides.Add(filterOverride);
-                    }
-
+                    filterOverride.Critical = true;
                     filterOverride.Deinterlace = true;
                 }
 
@@ -1589,6 +1596,20 @@ public sealed class VideoProcessor : FileProcessor
                     // adjust", which we want to do if we're not converting to square pixels.
 
                     filterOverride.MakePixelsSquareMode = Options.ForceSquarePixels ? 0 : 1;
+                }
+
+                // Ensure hardware acceleration info is available on 'filterOverride' for if we need it:
+                // Note: PixelFormat is always set when re-encoding (via the pixel format block above), so the fallback is defensive only.
+                if (reencode)
+                {
+                    Debug.Assert(filterOverride.PixelFormat != null);
+                    filterOverride.PixelFormatAfterHWDownload = filterOverride.PixelFormat;
+                    filterOverride.Is10BitForHW = bitsPerSample > 8;
+                    perOutputStreamOverrides.Add(filterOverride); // We only need 'filterOverride' if we're re-encoding.
+
+                    // Check if we were unable to determine Is10BitForHW accurately
+                    if (bitsPerSample <= 0)
+                        canUseHardwareAcceleration = false;
                 }
 
                 // Set up codec to use:
@@ -2099,6 +2120,45 @@ public sealed class VideoProcessor : FileProcessor
             forceProgressiveDownloadSupport: Options.ForceProgressiveDownload,
             isToMov: true);
 
+        // Set up the hardware acceleration if we can use it:
+        if (canUseHardwareAcceleration)
+        {
+            command.HWAccel = null;
+            if (Options.HardwareAccelerationMode.Kind == HardwareAccelerationKind.None)
+            {
+                command.HWAccel = "none";
+            }
+            else if (Options.HardwareAccelerationMode.Kind != HardwareAccelerationKind.DecodeOnly)
+            {
+                command.HWAccel = Options.HardwareAccelerationMode.Kind switch
+                {
+                    HardwareAccelerationKind.VideoToolbox => FFprobeUtils.Configuration.SupportsVideoToolboxHWAccel ? "videotoolbox" : null,
+                    HardwareAccelerationKind.Cuda => FFprobeUtils.Configuration.SupportsCudaHWAccel ? "cuda" : null,
+                    HardwareAccelerationKind.Qsv => FFprobeUtils.Configuration.SupportsQsvHWAccel ? "qsv" : null,
+                    HardwareAccelerationKind.Amf => FFprobeUtils.Configuration.SupportsAmfHWAccel ? "amf" : null,
+                    HardwareAccelerationKind.D3D12 => FFprobeUtils.Configuration.SupportsD3D12VAHWAccel ? "d3d12va" : null,
+                    HardwareAccelerationKind.D3D11 => FFprobeUtils.Configuration.SupportsD3D11VAHWAccel ? "d3d11va" : null,
+                    HardwareAccelerationKind.Vulkan => FFprobeUtils.Configuration.SupportsVulkanHWAccel ? "vulkan" : null,
+                    _ => FFprobeUtils.Configuration switch
+                    {
+                        { SupportsVideoToolboxHWAccel: true } => "videotoolbox",
+                        { SupportsCudaHWAccel: true } => "cuda",
+
+                        // Note: we may move AMF & QSV down the list further if we get false matches of CPU over GPU - it is already documented that users
+                        // should be explicitly selecting these modes if they want to use them. We also keep AMF above QSV, since AMD GPUs are much more common
+                        // than Intel GPUs, and Intel CPUs are still very common, and we want to reduce chance of falsely matching CPU over GPU.
+                        { SupportsAmfHWAccel: true } => "amf",
+                        { SupportsQsvHWAccel: true } => "qsv",
+                        { SupportsD3D12VAHWAccel: true } => "d3d12va",
+                        { SupportsD3D11VAHWAccel: true } => "d3d11va",
+                        { SupportsVulkanHWAccel: true } => "vulkan",
+                        _ => null,
+                    },
+                };
+                command.HWAccelStrictMode = Options.HardwareAccelerationMode.IsStrict;
+            }
+        }
+
         // Run the command
         // Note: The last 5% of progress is reserved for the "checking if smaller" pass & since the progress reported is the highest timestamp completed of any
         // stream, so we want to leave some headroom.
@@ -2106,14 +2166,15 @@ public sealed class VideoProcessor : FileProcessor
             progressTempFile ??= context.GetNewWorkFile(".txt");
 
         double lastDone = 0.0;
-        double mostRecentClampedProgress = 0.0;
+        double mostRecentClampedProgress = progressUsed;
         const double ReservedProgress = 0.05;
 
         Func<double, ValueTask>? localProgressCallback = (progressCallback != null && maxDuration != 0.0) ? async (durationDone) =>
         {
             // Avoid going backwards or repeating the same progress:
+            // Note: NaN must be rejected before it can poison lastDone (comparisons with NaN are false, so it would pass the checks below otherwise).
 
-            if (durationDone <= lastDone)
+            if (double.IsNaN(durationDone) || durationDone <= lastDone)
                 return;
             if (durationDone > maxDuration && lastDone < maxDuration)
                 (durationDone, lastDone) = (maxDuration, durationDone);
@@ -2129,7 +2190,6 @@ public sealed class VideoProcessor : FileProcessor
                 progressUsed,
                 1.0 - ReservedProgress);
 
-            lastDone = durationDone;
             mostRecentClampedProgress = clampedProgress;
 
             await progressCallback!(clampedProgress).ConfigureAwait(false);
@@ -2139,13 +2199,50 @@ public sealed class VideoProcessor : FileProcessor
         {
             try
             {
-                await FFmpegUtils.RunFFmpegCommandAsync(
-                    command,
-                    localProgressCallback,
-                    localProgressCallback != null ? progressTempFile : null,
-                    queueingCallback,
-                    cancellationToken: context.CancellationToken)
-                .ConfigureAwait(false);
+                try
+                {
+                    await FFmpegUtils.RunFFmpegCommandAsync(
+                        command,
+                        localProgressCallback,
+                        localProgressCallback != null ? progressTempFile : null,
+                        queueingCallback,
+                        cancellationToken: context.CancellationToken)
+                    .ConfigureAwait(false);
+
+                    // If we are in a forced hardware acceleration mode, we want to keep track of all that succeeded with hardware acceleration.
+#if CUSTOM_HWACCEL_MODE
+                    if (command.HWAccel is not ("none" or null))
+                        OnHWAccelAttemptSuccess();
+#endif
+                }
+                catch (Exception ex) when (command.HWAccel is not ("none" or null))
+                {
+                    progressUsed = mostRecentClampedProgress;
+
+                    // Reset the duration high-water mark, since the re-run starts from zero again - the updated progressUsed keeps reports monotonic.
+                    lastDone = 0.0;
+
+                    // Re-run with only opportunistic hardware acceleration for decoding if it failed with hardware acceleration enabled.
+                    command.UseHWAccelFiltersWhenPossible = false;
+                    command.HWAccel = null;
+                    await FFmpegUtils.RunFFmpegCommandAsync(
+                        command,
+                        localProgressCallback,
+                        localProgressCallback != null ? progressTempFile : null,
+                        queueingCallback,
+                        cancellationToken: context.CancellationToken)
+                    .ConfigureAwait(false);
+
+                    // If we are in a forced hardware acceleration mode, we want to keep track of all that failed to decode with hardware acceleration but
+                    // succeeded normally. This allows us to track regressions in hardware acceleration support & investigate any cases that should be excluded
+                    // in bulk too.
+                    _ = ex;
+#if CUSTOM_HWACCEL_MODE
+                    OnHWAccelAttemptFailure(ex);
+#endif
+                }
+
+                progressUsed = mostRecentClampedProgress;
             }
             catch (Exception ex) when (ex is not OperationCanceledException && Options.ForceValidateAllStreams && streamsValidatedImplicitly.Count > 0)
             {
@@ -2153,9 +2250,11 @@ public sealed class VideoProcessor : FileProcessor
                 // This way we optimise the common case of no validation errors, while still executing as if we checked beforehand.
                 context.CancellationToken.ThrowIfCancellationRequested();
 
+                // Stretch the [0.0, 1.0] validation fraction over the remaining progress range:
                 Func<double, ValueTask>? progressCallback2 = progressCallback is not null
                     ? async (double fraction) =>
-                        await progressCallback(mostRecentClampedProgress + (fraction * (1.0 - mostRecentClampedProgress))).ConfigureAwait(false)
+                        await progressCallback(double.Min(mostRecentClampedProgress + (fraction * (1.0 - mostRecentClampedProgress)), 1.0))
+                            .ConfigureAwait(false)
                     : null;
 
                 await FullyValidateStreamsAsync(
@@ -2172,8 +2271,6 @@ public sealed class VideoProcessor : FileProcessor
                         streamIndexWithinKind: x,
                         mapToOutput: true))],
                     mappedStreamCount: streamsValidatedImplicitly.Count,
-                    progressUsed: progressUsed,
-                    totalStreamCount: streamsValidatedImplicitly.Count,
                     progressTempFile,
                     reportDuration: false,
                     queueingCallback,
@@ -2460,14 +2557,14 @@ public sealed class VideoProcessor : FileProcessor
                 Func<double, ValueTask>? localProgressCallbackInner = progressCallback != null && maxDuration != 0.0 ? async (durationDone) =>
                 {
                     // Avoid going backwards or repeating the same progress:
-                    if (durationDone <= lastDone) return;
+                    // Note: NaN must be rejected before it can poison lastDone (comparisons with NaN are false, so it would pass the checks below otherwise).
+                    if (double.IsNaN(durationDone) || durationDone <= lastDone) return;
                     if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
                     else lastDone = durationDone;
                     if (durationDone < 0.0 || durationDone > maxDuration) return;
 
                     // Clamp to [0.0, 0.98] range of our remaining reserved portion:
                     double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgressInner), 0.0, 1.0 - ReservedProgressInner);
-                    lastDone = durationDone;
                     await progressCallback!(
                         1.0 - (ReservedProgress / 2.0) + (clampedProgress * (ReservedProgress / 2.0)))
                     .ConfigureAwait(false);
@@ -2923,7 +3020,7 @@ public sealed class VideoProcessor : FileProcessor
     private static string? GetNormalizedLanguage(string? language)
         => (language != "und" && IsValidLanguage(language)) ? language : null;
 
-    private static string NullDevicePath => OperatingSystem.IsWindows() ? "NUL" : "/dev/null";
+    internal static string NullDevicePath => OperatingSystem.IsWindows() ? "NUL" : "/dev/null";
 
     // This helper implements the logic for the ForceValidateAllStreams check. We separate it out into a helper so we can call it more cleverly.
     // In particular: since we expect it to be an edge case where it actually fails, we try to avoid doing it as much as possible, and try to do it as late as
@@ -2931,8 +3028,10 @@ public sealed class VideoProcessor : FileProcessor
     // exception also in the case that this would for streams that it re-encodes, and for streams that it copies or skips, we call that just before the main
     // processing loop to give everything else a chance to fail or exit first. For the shortcut exits, we also just manually check remaining streams in those
     // just before exiting also. This way, we can reduce the overhead of this measurably expensive check in the common case where everything is valid.
+    // Note: progress is reported to the callback as a [0.0, 1.0] fraction of just this validation's work - the caller is responsible for scaling and
+    // offsetting it into the overall progress range.
     private const double ValidateProgressFraction = 0.20;
-    private async ValueTask<(bool ExceededMaxLength, double? ActualMaxDuration, IAbsoluteFilePath? ProgressTempFile, double ProgressUsed)>
+    private async ValueTask<(bool ExceededMaxLength, double? ActualMaxDuration, IAbsoluteFilePath? ProgressTempFile)>
         FullyValidateStreamsAsync(
             FileProcessingContext context,
             IAbsoluteFilePath sourceFile,
@@ -2943,26 +3042,19 @@ public sealed class VideoProcessor : FileProcessor
             Func<int, int?> inputToOutputIndexMapper,
             IEnumerable<FFmpegUtils.PerStreamMapOverride> mappedStreams,
             int mappedStreamCount,
-            double progressUsed,
-            int totalStreamCount,
             IAbsoluteFilePath? progressTempFile,
             bool reportDuration,
             Func<bool, ValueTask>? queueingCallback,
             CancellationToken cancellationToken)
     {
         // First check if we're in a no-op case:
-        Debug.Assert(totalStreamCount > 0, "Total stream count must be greater than zero.");
         if (mappedStreamCount == 0)
         {
-            return (
-                false,
-                null,
-                progressTempFile,
-                progressUsed + ((double)mappedStreamCount / totalStreamCount * ValidateProgressFraction));
+            return (false, null, progressTempFile);
         }
 
         // Validate input by doing a decode-only ffmpeg run to ensure no decoding errors.
-        // Note: when active, we set aside the first 20% of progress for this.
+        // Note: progress is reported as a [0.0, 1.0] fraction of this validation's work; the caller applies the scaling.
         // Note: we compare duration to 0.0, as that's the value meaning "unknown".
 
         // Run the validation pass:
@@ -2976,19 +3068,21 @@ public sealed class VideoProcessor : FileProcessor
             ? async (durationDone) =>
             {
                 // Avoid going backwards or repeating the same progress - but ensure we can still hit 100% of this section:
-                if (durationDone <= lastDone) return;
+                // Note: NaN must be rejected before it can poison lastDone (comparisons with NaN are false, so it would pass the checks below otherwise).
+                if (double.IsNaN(durationDone) || durationDone <= lastDone) return;
                 if (durationDone > expectedMaxDuration && lastDone < expectedMaxDuration) (durationDone, lastDone) = (expectedMaxDuration, durationDone);
                 else lastDone = durationDone;
                 if (maxLength.HasValue && lastDone > maxLength.Value) exitEarlyCts.Cancel();
-                if (durationDone < 0.0 || durationDone > expectedMaxDuration || double.IsNaN(durationDone) || totalStreamCount == 0) return;
+                if (durationDone < 0.0 || durationDone > expectedMaxDuration) return;
                 if (maxLength is null) return;
                 if (progressCallback is null) return;
 
-                // Clamp / adjust to [0.0, 0.20 * 0.999] range (the 0.999 is to avoid hitting 100% so we can increase strictly):
-                double durationFraction = durationDone / maxLength.Value;
-                double maxDuration = mappedStreamCount / (double)totalStreamCount * ValidateProgressFraction * 0.999;
-                double clampedProgress = double.Min(durationFraction * maxDuration, maxDuration);
-                await progressCallback(progressUsed + clampedProgress).ConfigureAwait(false);
+                // Clamp / adjust to [0.0, 0.999] range (the 0.999 is to avoid hitting 100% so the final report can increase strictly):
+                // Note: use the expected duration as the denominator when known and smaller than max length, so progress doesn't crawl when the configured
+                // max length far exceeds the actual duration.
+                double durationFraction = durationDone / (expectedMaxDuration > 0.0 ? double.Min(maxLength.Value, expectedMaxDuration) : maxLength.Value);
+                double clampedProgress = double.Min(durationFraction * 0.999, 0.999);
+                await progressCallback(clampedProgress).ConfigureAwait(false);
             }
             : null;
         if (validateProgressCallback is not null && progressTempFile is null) progressTempFile = context.GetNewWorkFile(".txt");
@@ -3097,17 +3191,68 @@ public sealed class VideoProcessor : FileProcessor
             throw new FileProcessingException("An error occurred while validating the source video streams.", ex);
         }
 
-        // Update the progress used:
-        progressUsed += (double)mappedStreamCount / totalStreamCount * ValidateProgressFraction;
-
-        // Notify the progress callback now:
-        // Note: we use double.BitDecrement, as we try to not hit values twice, and the new progressUsed value is reserved for the next informer.
+        // Notify the progress callback that this validation's work is complete:
+        // Note: we use double.BitDecrement, as we try to not hit values twice, and the 100% value is reserved for the caller's next informer.
         if (progressCallback is not null)
         {
-            await progressCallback(double.BitDecrement(progressUsed)).ConfigureAwait(false);
+            await progressCallback(double.BitDecrement(1.0)).ConfigureAwait(false);
         }
 
         // Return the info from the operation:
-        return (maxLength.HasValue && lastDone > maxLength.Value, lastDone != 0.0 && reportDuration ? lastDone : null, progressTempFile, progressUsed);
+        return (maxLength.HasValue && lastDone > maxLength.Value, lastDone != 0.0 && reportDuration ? lastDone : null, progressTempFile);
     }
+
+#if CUSTOM_HWACCEL_MODE
+    private static int _totalHWAccelAttempts = 0;
+    private static int _totalHWAccelFailures = 0;
+    private static readonly List<Exception> _hwAccelFailureExceptions = [];
+    private static readonly Lock _hwAccelLock = new();
+
+    private static void OnHWAccelAttemptFailure(Exception ex)
+    {
+        lock (_hwAccelLock)
+        {
+            _totalHWAccelAttempts++;
+            _totalHWAccelFailures++;
+            _hwAccelFailureExceptions.Add(ex);
+        }
+    }
+
+    private static void OnHWAccelAttemptSuccess()
+    {
+        lock (_hwAccelLock)
+        {
+            _totalHWAccelAttempts++;
+        }
+    }
+
+    /// <summary>
+    /// Returns a short report of the total number of hardware acceleration attempts and failures that have occurred during video processing.
+    /// </summary>
+    public static string GetShortHWAccelFailuresReport()
+    {
+        lock (_hwAccelLock)
+        {
+            return $"HWAccel Attempts: {_totalHWAccelAttempts}, Failures: {_totalHWAccelFailures}";
+        }
+    }
+
+    /// <summary>
+    /// Returns a detailed report of all hardware acceleration failures that have occurred during video processing.
+    /// </summary>
+    public static string GetDetailedHWAccelFailuresReport()
+    {
+        lock (_hwAccelLock)
+        {
+            var report = new StringBuilder();
+            report.AppendLine($"HWAccel Attempts: {_totalHWAccelAttempts}, Failures: {_totalHWAccelFailures}");
+            foreach (var ex in _hwAccelFailureExceptions)
+            {
+                report.AppendLine(ex.ToString());
+                report.AppendLine();
+            }
+            return report.ToString();
+        }
+    }
+#endif
 }

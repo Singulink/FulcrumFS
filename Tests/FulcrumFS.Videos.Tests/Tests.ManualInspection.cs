@@ -574,6 +574,9 @@ partial class Tests
         string expectedFieldOrder = interlaceMode == "tff" ? "\"field_order\": \"tt\"" : "\"field_order\": \"bb\"";
         interlacedProbeOutput.Contains(expectedFieldOrder, StringComparison.Ordinal).ShouldBeTrue();
 
+        // The interlace filter combines two source frames into one interlaced frame, so the 60fps source should become 30fps:
+        interlacedProbeOutput.Contains("\"r_frame_rate\": \"30/1\"", StringComparison.Ordinal).ShouldBeTrue();
+
         // Process the interlaced file through the library with ForceProgressiveFrames = true:
         using var repoCtx = GetRepo(out var repo);
 
@@ -607,6 +610,10 @@ partial class Tests
         // The de-interlaced file should have field_order set to "progressive":
         deinterlacedProbeOutput.Contains(
             "\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue("Expected de-interlaced file to be progressive");
+
+        // De-interlacing outputs one frame per field (bwdif send_field mode and its hardware equivalents), so the 30fps interlaced file should become 60fps:
+        deinterlacedProbeOutput.Contains(
+            "\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue("Expected de-interlaced file to be 60fps (one frame per field)");
     }
 
 #if !CI

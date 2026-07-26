@@ -26,6 +26,9 @@ public sealed record VideoProcessingOptions
     /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
+    /// <remarks>
+    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationMode" /> for options to control this.
+    /// </remarks>
     public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
         ResultVideoCodecs = [VideoCodec.H264],
@@ -55,6 +58,9 @@ public sealed record VideoProcessingOptions
     /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
+    /// <remarks>
+    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationMode" /> for options to control this.
+    /// </remarks>
     public static VideoProcessingOptions StandardizedHEVCAACMP4 { get; } = new VideoProcessingOptions()
     {
         ResultVideoCodecs = [VideoCodec.HEVC],
@@ -617,4 +623,18 @@ public sealed record VideoProcessingOptions
     // Internal property to force usage of libfdk_aac or native aac encoding for testing purposes:
     internal bool? ForceLibFDKAACUsage { get; set; }
 #endif
+
+    /// <summary>
+    /// Gets or initializes the hardware acceleration mode to use for operations (such as decode or scaling).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// By default, allows minor variations in the result to improve hardware acceleration utilisation ability.
+    /// </para>
+    /// <para>
+    /// If you have an AMD or Intel GPU, you may want to explicitly set this to a specific mode that prioritizes your GPU, as it is assumed that AMD and Intel
+    /// acceleration modes represent CPUs instead, which would be undesirable to use over a high-power device like a GPU.
+    /// </para>
+    /// </remarks>
+    public HardwareAccelerationMode HardwareAccelerationMode { get; init; } = HardwareAccelerationMode.Default;
 }

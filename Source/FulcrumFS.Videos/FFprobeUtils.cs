@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -303,19 +304,53 @@ internal static class FFprobeUtils
         public bool SupportsFormatFilter { get; set; }
         public bool SupportsBwdifFilter { get; set; }
         public bool SupportsSetsarFilter { get; set; }
+        public bool SupportsScaleVtFilter { get; set; }
+        public bool SupportsScaleCudaFilter { get; set; }
+        public bool SupportsBwdifCudaFilter { get; set; }
+        public bool SupportsColorspaceCudaFilter { get; set; }
+        public bool SupportsVppQsvFilter { get; set; }
+        public bool SupportsVppAmfFilter { get; set; }
+        public bool SupportsScaleD3D12Filter { get; set; }
+        public bool SupportsDeinterlaceD3D12Filter { get; set; }
+        public bool SupportsScaleD3D11Filter { get; set; }
+        public bool SupportsScaleVulkanFilter { get; set; }
+        public bool SupportsBwdifVulkanFilter { get; set; }
+
+        // Hardware acceleration support
+        public bool SupportsVideoToolboxHWAccel { get; set; }
+        public bool SupportsCudaHWAccel { get; set; }
+        public bool SupportsQsvHWAccel { get; set; }
+        public bool SupportsAmfHWAccel { get; set; }
+        public bool SupportsD3D12VAHWAccel { get; set; }
+        public bool SupportsD3D11VAHWAccel { get; set; }
+        public bool SupportsVulkanHWAccel { get; set; }
+
+        // Pixel format support
+        public bool SupportsVideoToolboxVLDPixelFormat { get; set; }
+        public bool SupportsCudaPixelFormat { get; set; }
+        public bool SupportsQsvPixelFormat { get; set; }
+        public bool SupportsAmfPixelFormat { get; set; }
+        public bool SupportsD3D12PixelFormat { get; set; }
+        public bool SupportsD3D11VAVLDPixelFormat { get; set; }
+        public bool SupportsVulkanPixelFormat { get; set; }
     }
 
     private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(
         string command,
         bool noStartingLine,
-        CancellationToken cancellationToken = default)
+        bool nameOnly = false,
+        bool useFfmpegExe = false)
     {
+        // We only support nameOnly in noStartingLine mode.
+        if (nameOnly && !noStartingLine)
+            throw new ArgumentException("nameOnly can only be used in noStartingLine mode.", nameof(nameOnly));
+
         // Get the raw configuration output from ffprobe.
         string result = ProcessUtils.RunProcessToStringWithErrorHandlingAsync(
-            VideoProcessor.FFprobeExePath,
+            useFfmpegExe ? VideoProcessor.FFmpegExePath : VideoProcessor.FFprobeExePath,
             [command, "-hide_banner", "-v", "error"],
             lifetime: ProcessLifetime.ShortLived,
-            cancellationToken: cancellationToken,
+            cancellationToken: CancellationToken.None,
             runAsynchronously: false).GetAwaiter().GetResult();
 
         // Handle skipping the starting line if needed.
@@ -364,6 +399,16 @@ internal static class FFprobeUtils
                 yield return (info.ToString(), name.ToString());
             }
         }
+        else if (nameOnly)
+        {
+            // Enumerate through each line in the configuration info section and return only the names to the caller.
+            while ((line = lineReader.ReadLine()) != null)
+            {
+                var sp = line.AsSpan().Trim(' ');
+                if (sp.Length == 0) continue;
+                yield return (string.Empty, sp.ToString());
+            }
+        }
         else
         {
             // Enumerate through each line in the configuration info section and return them to the caller.
@@ -381,6 +426,18 @@ internal static class FFprobeUtils
                 yield return (info.ToString(), name.ToString());
             }
         }
+    }
+
+    private static bool CheckHWAccelActuallySupported(string mode)
+    {
+        var (_, _, returnCode) = ProcessUtils.RunProcessToStringAsync(
+            VideoProcessor.FFmpegExePath,
+            ["-hide_banner", "-loglevel", "error", "-init_hw_device", mode, "-f", "lavfi", "-i", "nullsrc", "-frames:v", "1", "-f", "null", "-"],
+            lifetime: ProcessLifetime.ShortLived,
+            cancellationToken: CancellationToken.None,
+            runAsynchronously: false).GetAwaiter().GetResult();
+
+        return returnCode == 0;
     }
 
     private static void EnsureConfigurationInfoInitialized()
@@ -488,8 +545,108 @@ internal static class FFprobeUtils
                     case "format": _configInfo.SupportsFormatFilter = true; break;
                     case "bwdif": _configInfo.SupportsBwdifFilter = true; break;
                     case "setsar": _configInfo.SupportsSetsarFilter = true; break;
+                    case "scale_vt": _configInfo.SupportsScaleVtFilter = true; break;
+                    case "scale_cuda": _configInfo.SupportsScaleCudaFilter = true; break;
+                    case "bwdif_cuda": _configInfo.SupportsBwdifCudaFilter = true; break;
+                    case "colorspace_cuda": _configInfo.SupportsColorspaceCudaFilter = true; break;
+                    case "vpp_qsv": _configInfo.SupportsVppQsvFilter = true; break;
+                    case "vpp_amf": _configInfo.SupportsVppAmfFilter = true; break;
+                    case "scale_d3d12": _configInfo.SupportsScaleD3D12Filter = true; break;
+                    case "deinterlace_d3d12": _configInfo.SupportsDeinterlaceD3D12Filter = true; break;
+                    case "scale_d3d11": _configInfo.SupportsScaleD3D11Filter = true; break;
+                    case "scale_vulkan": _configInfo.SupportsScaleVulkanFilter = true; break;
+                    case "bwdif_vulkan": _configInfo.SupportsBwdifVulkanFilter = true; break;
                 }
             }
+
+            // Initialize pixel format support
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-pix_fmts", noStartingLine: false))
+            {
+                if (info is [_, _, 'H', ..])
+                {
+                    switch (name)
+                    {
+                        case "videotoolbox_vld": _configInfo.SupportsVideoToolboxVLDPixelFormat = true; break;
+                        case "cuda": _configInfo.SupportsCudaPixelFormat = true; break;
+                        case "qsv": _configInfo.SupportsQsvPixelFormat = true; break;
+                        case "amf": _configInfo.SupportsAmfPixelFormat = true; break;
+                        case "d3d12": _configInfo.SupportsD3D12PixelFormat = true; break;
+                        case "d3d11va_vld": _configInfo.SupportsD3D11VAVLDPixelFormat = true; break;
+                        case "vulkan": _configInfo.SupportsVulkanPixelFormat = true; break;
+                    }
+                }
+            }
+
+            // Initialize hardware acceleration support (note: command output also includes a 'Hardware acceleration methods:' line, and empty line after)
+            // Note: it being listed in '-hwaccels' only means that ffmpeg was built with support for it, not that it is actually usable on the current system.
+#if !CUSTOM_HWACCEL_MODE
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-hwaccels", noStartingLine: true, nameOnly: true, useFfmpegExe: true))
+            {
+                switch (name)
+                {
+                    case "videotoolbox": _configInfo.SupportsVideoToolboxHWAccel = _configInfo.SupportsVideoToolboxVLDPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "cuda": _configInfo.SupportsCudaHWAccel = _configInfo.SupportsCudaPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "qsv": _configInfo.SupportsQsvHWAccel = _configInfo.SupportsQsvPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "amf": _configInfo.SupportsAmfHWAccel = _configInfo.SupportsAmfPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "d3d12va": _configInfo.SupportsD3D12VAHWAccel = _configInfo.SupportsD3D12PixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "d3d11va": _configInfo.SupportsD3D11VAHWAccel = _configInfo.SupportsD3D11VAVLDPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "vulkan": _configInfo.SupportsVulkanHWAccel = _configInfo.SupportsVulkanPixelFormat && CheckHWAccelActuallySupported(name); break;
+                }
+            }
+
+            // Special handling for forced hardware acceleration mode (used for testing):
+#elif !CUSTOM_HWACCEL_MODE_NONE
+#if CUSTOM_HWACCEL_MODE_VIDEOTOOLBOX
+            string mode = "videotoolbox";
+            _configInfo.SupportsVideoToolboxHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsVideoToolboxVLDPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleVtFilter;
+#elif CUSTOM_HWACCEL_MODE_CUDA
+            string mode = "cuda";
+            _configInfo.SupportsCudaHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsCudaPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleCudaFilter;
+#elif CUSTOM_HWACCEL_MODE_QSV
+            string mode = "qsv";
+            _configInfo.SupportsQsvHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsQsvPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsVppQsvFilter;
+#elif CUSTOM_HWACCEL_MODE_AMF
+            string mode = "amf";
+            _configInfo.SupportsAmfHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsAmfPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsVppAmfFilter;
+#elif CUSTOM_HWACCEL_MODE_D3D12VA
+            string mode = "d3d12va";
+            _configInfo.SupportsD3D12VAHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsD3D12PixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleD3D12Filter;
+#elif CUSTOM_HWACCEL_MODE_D3D11VA
+            string mode = "d3d11va";
+            _configInfo.SupportsD3D11VAHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsD3D11VAVLDPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleD3D11Filter;
+#elif CUSTOM_HWACCEL_MODE_VULKAN
+            string mode = "vulkan";
+            _configInfo.SupportsVulkanHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsVulkanPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleVulkanFilter;
+#else
+#error Unrecognized CUSTOM_HWACCEL_MODE* value.
+#endif
+
+            if (!RunFFprobeConfigurationExtraction("-hwaccels", noStartingLine: true, nameOnly: true, useFfmpegExe: true).Any((x) => x.Name == mode))
+                throw new InvalidOperationException($"The configured ffmpeg build does not support the forced hardware acceleration mode '{mode}'.");
+
+            if (!CheckHWAccelActuallySupported(mode))
+                throw new InvalidOperationException($"The system does not actually support the forced hardware acceleration mode '{mode}'.");
+
+            if (!pixFmtSupported)
+                throw new InvalidOperationException($"The configured ffmpeg build does not support the pixel format required for the forced hardware acceleration mode '{mode}'.");
+
+            if (!scaleFilterSupported)
+                throw new InvalidOperationException($"The configured ffmpeg build does not support the scale filter required for the forced hardware acceleration mode '{mode}'.");
+#endif
 
             // Ensure we only mark it as initialized after (with a volatile write) we're certain the struct is fully initialized by using a volatile write.
             _configInfoInitialized = true;
