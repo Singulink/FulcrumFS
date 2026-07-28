@@ -585,4 +585,36 @@ partial class Tests
 
     public static IEnumerable<object[]> ValidVideosWithVideoStreamsToCheck => field
         ??= ValidVideosToCheck.Where((x) => !VideoFilesWithoutVideoStreams.Contains((string)x[0]));
+
+#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_NONE
+    [TestInitialize]
+    public void SetCaseNameForHWAccelStats()
+    {
+        // Set the test case name for HWAccel stats reporting:
+        VideoProcessor.SetHWAccelTestCase(TestContext.TestDisplayName ?? TestContext.TestName);
+    }
+
+    [TestCleanup]
+    public void UnsetCaseNameForHWAccelStats()
+    {
+        // Unset the test case name for HWAccel stats reporting:
+        VideoProcessor.SetHWAccelTestCase(null);
+    }
+
+    [AssemblyCleanup]
+    public static void WriteHWAccelStats()
+    {
+        string projectDir = AppContext.BaseDirectory;
+        while (projectDir is not null && !File.Exists(Path.Combine(projectDir, "FulcrumFS.Videos.Tests.csproj")))
+        {
+            projectDir = Path.GetDirectoryName(projectDir);
+        }
+
+        if (projectDir is null)
+            throw new InvalidOperationException("Could not find project directory for FulcrumFS.Videos.Tests.csproj");
+
+        File.WriteAllText(Path.Combine(projectDir, "HWAccelFailuresReport_Short.txt"), VideoProcessor.GetShortHWAccelFailuresReport());
+        File.WriteAllText(Path.Combine(projectDir, "HWAccelFailuresReport_Detailed.txt"), VideoProcessor.GetDetailedHWAccelFailuresReport());
+    }
+#endif
 }

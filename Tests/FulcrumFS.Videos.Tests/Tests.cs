@@ -327,22 +327,4 @@ public sealed partial class Tests
 #pragma warning restore RS0030 // Do not use banned APIs
         }
     }
-
-#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_NONE
-    [AssemblyCleanup]
-    public static void WriteHWAccelStats()
-    {
-        string projectDir = AppContext.BaseDirectory;
-        while (projectDir is not null && !File.Exists(Path.Combine(projectDir, "FulcrumFS.Videos.Tests.csproj")))
-        {
-            projectDir = Path.GetDirectoryName(projectDir);
-        }
-
-        if (projectDir is null)
-            throw new InvalidOperationException("Could not find project directory for FulcrumFS.Videos.Tests.csproj");
-
-        File.WriteAllText(Path.Combine(projectDir, "HWAccelFailuresReport_Short.txt"), VideoProcessor.GetShortHWAccelFailuresReport());
-        File.WriteAllText(Path.Combine(projectDir, "HWAccelFailuresReport_Detailed.txt"), VideoProcessor.GetDetailedHWAccelFailuresReport());
-    }
-#endif
 }

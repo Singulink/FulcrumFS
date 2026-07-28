@@ -3249,8 +3249,17 @@ public sealed class VideoProcessor : FileProcessor
 #if CUSTOM_HWACCEL_MODE
     private static int _totalHWAccelAttempts = 0;
     private static int _totalHWAccelFailures = 0;
-    private static readonly List<(Exception, StackTrace)> _hwAccelFailureExceptions = [];
+    private static readonly List<(Exception Error, string? TestCase)> _hwAccelFailureExceptions = [];
     private static readonly Lock _hwAccelLock = new();
+    private static readonly AsyncLocal<string?> _testCase = new();
+
+    /// <summary>
+    /// Sets the current test case name for hardware acceleration attempts. This is used for logging and reporting purposes.
+    /// </summary>
+    public static void SetHWAccelTestCase(string? testCase)
+    {
+        _testCase.Value = testCase;
+    }
 
     private static void OnHWAccelAttemptFailure(Exception ex)
     {
@@ -3258,7 +3267,7 @@ public sealed class VideoProcessor : FileProcessor
         {
             _totalHWAccelAttempts++;
             _totalHWAccelFailures++;
-            _hwAccelFailureExceptions.Add((ex, new StackTrace(ex, true)));
+            _hwAccelFailureExceptions.Add((ex, _testCase.Value ?? "<unknown>"));
         }
     }
 
@@ -3290,16 +3299,16 @@ public sealed class VideoProcessor : FileProcessor
         {
             var report = new StringBuilder();
             report.AppendLine($"HWAccel Attempts: {_totalHWAccelAttempts}, Failures: {_totalHWAccelFailures}");
-            foreach (var (ex, st) in _hwAccelFailureExceptions)
+            foreach (var (e, c) in _hwAccelFailureExceptions)
             {
-                report.AppendLine(ex.ToString());
+                report.AppendLine(c + ":");
+                report.AppendLine(e.ToString());
                 report.AppendLine();
-                report.AppendLine(st.ToString());
                 report.AppendLine();
                 report.AppendLine();
                 report.AppendLine();
             }
-            return report.ToString();
+            return report.ToString().Trim();
         }
     }
 #endif
