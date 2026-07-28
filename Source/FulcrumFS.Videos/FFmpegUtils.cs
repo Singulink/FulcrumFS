@@ -198,6 +198,7 @@ internal static class FFmpegUtils
         public bool ForceConvertToFullRange { get; set; }
         public bool Is10BitForHW { get; set; }
         public string? PixelFormatAfterHWDownload { get; set; }
+        public string? SarAfterHWResize { get; set; }
 
         protected override string GetCommandArgument(string? hwaccel, bool hwaccelStrictMode)
         {
@@ -213,6 +214,7 @@ internal static class FFmpegUtils
             bool doneRangeConversion = false;
             bool doneFPS = false;
             bool doneMakePixelsSquare = false;
+            bool resizeHW = false;
 
             void EnsureHWDownload()
             {
@@ -251,6 +253,7 @@ internal static class FFmpegUtils
                         // See comments in resize section for why it's set up this way.
                         filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
                         doneResize = true;
+                        resizeHW = true;
                     }
 
                     // If we're also doing tv->pc range conversion (and not HDR->SDR conversion), do that at the same time too.
@@ -287,11 +290,13 @@ internal static class FFmpegUtils
                 {
                     // Note: videotoolbox cannot ensure we match the bicubic scaling that 'scale' uses by default, so we just use the default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_vt=w={w2}:h={h2}"));
+                    resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "cuda" && FFprobeUtils.Configuration.SupportsScaleCudaFilter)
                 {
                     // Note: we set interp_algo to bicubic to match what 'scale' uses by default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_cuda=w={w2}:h={h2}:interp_algo=bicubic"));
+                    resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "qsv" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsVppQsvFilter)
                 {
@@ -306,21 +311,25 @@ internal static class FFmpegUtils
                     }
 
                     steps.Add(filterPart);
+                    resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "amf" && FFprobeUtils.Configuration.SupportsVppAmfFilter)
                 {
                     // Note: we set interp_algo to bicubic to match what 'scale' uses by default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"vpp_amf=w={w2}:h={h2}:scale_mode=bicubic"));
+                    resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "d3d12va" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleD3D12Filter)
                 {
                     // Note: d3d12 cannot ensure we match bicubic scaling that 'scale' uses by default, so we just use the default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_d3d12=w={w2}:h={h2}"));
+                    resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "d3d11va" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleD3D11Filter)
                 {
                     // Note: d3d11 cannot ensure we match bicubic scaling that 'scale' uses by default, so we just use the default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_d3d11=width={w2}:height={h2}"));
+                    resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "vulkan" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)
                 {
@@ -335,6 +344,7 @@ internal static class FFmpegUtils
                     }
 
                     steps.Add(filterPart);
+                    resizeHW = true;
                 }
                 else
                 {
@@ -406,9 +416,12 @@ internal static class FFmpegUtils
                 donePixelFormat = true;
             }
 
-            if (MakePixelsSquareMode != 1 && !doneMakePixelsSquare)
+            if ((MakePixelsSquareMode != 1 || resizeHW) && !doneMakePixelsSquare)
             {
-                steps.Add("setsar=sar=1/1");
+                if (!resizeHW || SarAfterHWResize is null)
+                    steps.Add("setsar=sar=1/1");
+                else
+                    steps.Add($"setsar=sar={SarAfterHWResize}");
 
                 doneMakePixelsSquare = true;
             }

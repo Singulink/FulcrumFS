@@ -1596,6 +1596,56 @@ public sealed class VideoProcessor : FileProcessor
                     // adjust", which we want to do if we're not converting to square pixels.
 
                     filterOverride.MakePixelsSquareMode = Options.ForceSquarePixels ? 0 : 1;
+
+                    // We need to fix-up the sar manually for hwaccel mode always, so calculate now what it should be in '1' mode
+                    if (filterOverride.MakePixelsSquareMode == 1)
+                    {
+                        BigInteger sarNum = videoStream.SarNum, sarDen = videoStream.SarDen;
+
+                        if (videoStream.Rotation is -90 or 90)
+                        {
+                            (sarNum, sarDen) = (sarDen, sarNum);
+                        }
+
+                        // If we have useful info then use it, otherwise just default to preserve
+                        if (sarNum > 0 && sarDen > 0 && videoStream.Width > 0 && videoStream.Height > 0 && filterOverride.ResizeTo is { })
+                        {
+                            int oldWidth = videoStream.Width;
+                            int oldHeight = videoStream.Height;
+
+                            if (!IsProgressive(videoStream.FieldOrder))
+                            {
+                                oldHeight *= 2;
+                            }
+
+                            if (videoStream.Rotation is -90 or 90)
+                            {
+                                (oldWidth, oldHeight) = (oldHeight, oldWidth);
+                            }
+
+                            // Keep display aspect ratio the same (same logic as ffmpeg)
+                            sarNum = sarNum * oldWidth * filterOverride.ResizeTo.Value.Height;
+                            sarDen = sarDen * oldHeight * filterOverride.ResizeTo.Value.Width;
+
+                            var gcd = BigInteger.GreatestCommonDivisor(sarNum, sarDen);
+                            sarNum /= gcd;
+                            sarDen /= gcd;
+
+                            if (sarNum < 1_000_000 && sarDen < 1_000_000)
+                            {
+                                filterOverride.SarAfterHWResize = string.Create(CultureInfo.InvariantCulture, $"{sarNum}/{sarDen}");
+                            }
+                            else
+                            {
+                                // Use double if fraction too large, ffmpeg will convert it to a nearby ratio
+                                filterOverride.SarAfterHWResize = ((double)sarNum / (double)sarDen).ToString(CultureInfo.InvariantCulture);
+                            }
+                        }
+                        else
+                        {
+                            filterOverride.SarAfterHWResize = "0";
+                        }
+                    }
                 }
 
                 // Ensure hardware acceleration info is available on 'filterOverride' for if we need it:
@@ -3205,7 +3255,7 @@ public sealed class VideoProcessor : FileProcessor
 #if CUSTOM_HWACCEL_MODE
     private static int _totalHWAccelAttempts = 0;
     private static int _totalHWAccelFailures = 0;
-    private static readonly List<Exception> _hwAccelFailureExceptions = [];
+    private static readonly List<(Exception, StackTrace)> _hwAccelFailureExceptions = [];
     private static readonly Lock _hwAccelLock = new();
 
     private static void OnHWAccelAttemptFailure(Exception ex)
@@ -3214,7 +3264,7 @@ public sealed class VideoProcessor : FileProcessor
         {
             _totalHWAccelAttempts++;
             _totalHWAccelFailures++;
-            _hwAccelFailureExceptions.Add(ex);
+            _hwAccelFailureExceptions.Add((ex, new StackTrace(ex, true)));
         }
     }
 
@@ -3246,9 +3296,13 @@ public sealed class VideoProcessor : FileProcessor
         {
             var report = new StringBuilder();
             report.AppendLine($"HWAccel Attempts: {_totalHWAccelAttempts}, Failures: {_totalHWAccelFailures}");
-            foreach (var ex in _hwAccelFailureExceptions)
+            foreach (var (ex, st) in _hwAccelFailureExceptions)
             {
                 report.AppendLine(ex.ToString());
+                report.AppendLine();
+                report.AppendLine(st.ToString());
+                report.AppendLine();
+                report.AppendLine();
                 report.AppendLine();
             }
             return report.ToString();
