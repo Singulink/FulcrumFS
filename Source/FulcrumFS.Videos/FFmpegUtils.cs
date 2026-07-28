@@ -39,7 +39,6 @@ internal static class FFmpegUtils
         "qsv" => "qsv",
         "amf" => "amf",
         "d3d12va" => "d3d12",
-        "d3d11va" => "d3d11va_vld",
         "vulkan" => "vulkan",
         _ => throw new ArgumentException($"Unrecognized hardware acceleration mode: {hwaccel}", nameof(hwaccel)),
     };
@@ -323,12 +322,6 @@ internal static class FFmpegUtils
                 {
                     // Note: d3d12 cannot ensure we match bicubic scaling that 'scale' uses by default, so we just use the default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_d3d12=w={w2}:h={h2}"));
-                    resizeHW = true;
-                }
-                else if (!doneHWDownload && hwaccel == "d3d11va" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleD3D11Filter)
-                {
-                    // Note: d3d11 cannot ensure we match bicubic scaling that 'scale' uses by default, so we just use the default.
-                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_d3d11=width={w2}:height={h2}"));
                     resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "vulkan" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)

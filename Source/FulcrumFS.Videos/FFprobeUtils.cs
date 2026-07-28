@@ -312,7 +312,6 @@ internal static class FFprobeUtils
         public bool SupportsVppAmfFilter { get; set; }
         public bool SupportsScaleD3D12Filter { get; set; }
         public bool SupportsDeinterlaceD3D12Filter { get; set; }
-        public bool SupportsScaleD3D11Filter { get; set; }
         public bool SupportsScaleVulkanFilter { get; set; }
         public bool SupportsBwdifVulkanFilter { get; set; }
 
@@ -322,7 +321,6 @@ internal static class FFprobeUtils
         public bool SupportsQsvHWAccel { get; set; }
         public bool SupportsAmfHWAccel { get; set; }
         public bool SupportsD3D12VAHWAccel { get; set; }
-        public bool SupportsD3D11VAHWAccel { get; set; }
         public bool SupportsVulkanHWAccel { get; set; }
 
         // Pixel format support
@@ -331,7 +329,6 @@ internal static class FFprobeUtils
         public bool SupportsQsvPixelFormat { get; set; }
         public bool SupportsAmfPixelFormat { get; set; }
         public bool SupportsD3D12PixelFormat { get; set; }
-        public bool SupportsD3D11VAVLDPixelFormat { get; set; }
         public bool SupportsVulkanPixelFormat { get; set; }
     }
 
@@ -553,7 +550,6 @@ internal static class FFprobeUtils
                     case "vpp_amf": _configInfo.SupportsVppAmfFilter = true; break;
                     case "scale_d3d12": _configInfo.SupportsScaleD3D12Filter = true; break;
                     case "deinterlace_d3d12": _configInfo.SupportsDeinterlaceD3D12Filter = true; break;
-                    case "scale_d3d11": _configInfo.SupportsScaleD3D11Filter = true; break;
                     case "scale_vulkan": _configInfo.SupportsScaleVulkanFilter = true; break;
                     case "bwdif_vulkan": _configInfo.SupportsBwdifVulkanFilter = true; break;
                 }
@@ -571,7 +567,6 @@ internal static class FFprobeUtils
                         case "qsv": _configInfo.SupportsQsvPixelFormat = true; break;
                         case "amf": _configInfo.SupportsAmfPixelFormat = true; break;
                         case "d3d12": _configInfo.SupportsD3D12PixelFormat = true; break;
-                        case "d3d11va_vld": _configInfo.SupportsD3D11VAVLDPixelFormat = true; break;
                         case "vulkan": _configInfo.SupportsVulkanPixelFormat = true; break;
                     }
                 }
@@ -589,7 +584,6 @@ internal static class FFprobeUtils
                     case "qsv": _configInfo.SupportsQsvHWAccel = _configInfo.SupportsQsvPixelFormat && CheckHWAccelActuallySupported(name); break;
                     case "amf": _configInfo.SupportsAmfHWAccel = _configInfo.SupportsAmfPixelFormat && CheckHWAccelActuallySupported(name); break;
                     case "d3d12va": _configInfo.SupportsD3D12VAHWAccel = _configInfo.SupportsD3D12PixelFormat && CheckHWAccelActuallySupported(name); break;
-                    case "d3d11va": _configInfo.SupportsD3D11VAHWAccel = _configInfo.SupportsD3D11VAVLDPixelFormat && CheckHWAccelActuallySupported(name); break;
                     case "vulkan": _configInfo.SupportsVulkanHWAccel = _configInfo.SupportsVulkanPixelFormat && CheckHWAccelActuallySupported(name); break;
                 }
             }
@@ -621,11 +615,6 @@ internal static class FFprobeUtils
             _configInfo.SupportsD3D12VAHWAccel = true;
             bool pixFmtSupported = _configInfo.SupportsD3D12PixelFormat;
             bool scaleFilterSupported = _configInfo.SupportsScaleD3D12Filter;
-#elif CUSTOM_HWACCEL_MODE_D3D11VA
-            string mode = "d3d11va";
-            _configInfo.SupportsD3D11VAHWAccel = true;
-            bool pixFmtSupported = _configInfo.SupportsD3D11VAVLDPixelFormat;
-            bool scaleFilterSupported = _configInfo.SupportsScaleD3D11Filter;
 #elif CUSTOM_HWACCEL_MODE_VULKAN
             string mode = "vulkan";
             _configInfo.SupportsVulkanHWAccel = true;

@@ -53,11 +53,6 @@ public enum HardwareAccelerationKind
     D3D12,
 
     /// <summary>
-    /// Use D3D11 for hardware acceleration (when possible).
-    /// </summary>
-    D3D11,
-
-    /// <summary>
     /// Use Vulkan for hardware acceleration (when possible).
     /// </summary>
     Vulkan,

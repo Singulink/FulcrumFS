@@ -2183,7 +2183,6 @@ public sealed class VideoProcessor : FileProcessor
                     HardwareAccelerationKind.Qsv => FFprobeUtils.Configuration.SupportsQsvHWAccel ? "qsv" : null,
                     HardwareAccelerationKind.Amf => FFprobeUtils.Configuration.SupportsAmfHWAccel ? "amf" : null,
                     HardwareAccelerationKind.D3D12 => FFprobeUtils.Configuration.SupportsD3D12VAHWAccel ? "d3d12va" : null,
-                    HardwareAccelerationKind.D3D11 => FFprobeUtils.Configuration.SupportsD3D11VAHWAccel ? "d3d11va" : null,
                     HardwareAccelerationKind.Vulkan => FFprobeUtils.Configuration.SupportsVulkanHWAccel ? "vulkan" : null,
                     _ => FFprobeUtils.Configuration switch
                     {
@@ -2196,7 +2195,6 @@ public sealed class VideoProcessor : FileProcessor
                         { SupportsAmfHWAccel: true } => "amf",
                         { SupportsQsvHWAccel: true } => "qsv",
                         { SupportsD3D12VAHWAccel: true } => "d3d12va",
-                        { SupportsD3D11VAHWAccel: true } => "d3d11va",
                         { SupportsVulkanHWAccel: true } => "vulkan",
                         _ => null,
                     },
