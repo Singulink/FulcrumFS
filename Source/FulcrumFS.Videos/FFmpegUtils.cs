@@ -268,7 +268,7 @@ internal static class FFmpegUtils
                 else if (!doneHWDownload && hwaccel == "d3d12va" && FFprobeUtils.Configuration.SupportsDeinterlaceD3D12Filter)
                 {
                     // Need to specify both bob mode & mode to match what normal bwdif does by default.
-                    steps.Add("deinterlace_d3d12=method=bob:mode=send_field");
+                    steps.Add("deinterlace_d3d12=method=bob:mode=field");
                 }
                 else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsBwdifVulkanFilter)
                 {
@@ -316,7 +316,7 @@ internal static class FFmpegUtils
                 else if (!doneHWDownload && hwaccel == "amf" && FFprobeUtils.Configuration.SupportsVppAmfFilter)
                 {
                     // Note: we set interp_algo to bicubic to match what 'scale' uses by default.
-                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"vpp_amf=w={w2}:h={h2}:scale_mode=bicubic"));
+                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"vpp_amf=w={w2}:h={h2}:scale_type=bicubic"));
                     resizeHW = true;
                 }
                 else if (!doneHWDownload && hwaccel == "d3d12va" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleD3D12Filter)
@@ -375,11 +375,8 @@ internal static class FFmpegUtils
 
             if (ForceConvertToFullRange && !doneRangeConversion)
             {
-                if (!doneHWDownload && hwaccel == "cuda" && FFprobeUtils.Configuration.SupportsColorspaceCudaFilter)
-                {
-                    steps.Add("colorspace_cuda=range=full");
-                }
-                else if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
+                // Note: colorspace_cuda exists, but it does not seem to actually work properly.
+                if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
                 {
                     steps.Add("vpp_qsv=out_range=full");
                 }

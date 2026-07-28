@@ -1057,11 +1057,12 @@ partial class Tests
     [TestMethod]
     public async Task TestLimitedToFullRangeConversion()
     {
-        // This test creates a solid color (#95eb14) video in full (pc) color range, converts it to limited (tv) range (in both 8-bit and 10-bit versions),
-        // then processes the limited range versions through the library with forced re-encoding to validate that the outputs get converted back to full (pc)
-        // range (and back to 8-bit for the 10-bit version). It also extracts a video frame from the limited range file using VideoFrameExtractionProcessor
-        // to validate that frame extraction handles limited range input correctly. Frames are extracted from each result and compared against a frame from
-        // the original full range video, ensuring all pixel color channels are within 3% of each other.
+        // This test creates a solid color (#95eb14) video in full (pc) color range, converts it to limited (tv) range (in 8-bit, 10-bit, and 8-bit interlaced
+        // versions), then processes the limited range versions through the library with forced re-encoding to validate that the outputs get converted back to
+        // full (pc) range (as well as back to 8-bit for the 10-bit version, de-interlaced for the interlaced version, and at the correct size when resizing).
+        // It also extracts a video frame from the limited range file using VideoFrameExtractionProcessor to validate that frame extraction handles limited
+        // range input correctly. Frames are extracted from each result and compared against a frame from the original full range video, ensuring all pixel
+        // color channels are within 3% of each other.
         // All files are kept in the results folder for manual inspection.
 
         var resultsDir = _appDir.CombineDirectory("TestLimitedToFullRangeConversionResults");
@@ -1070,20 +1071,32 @@ partial class Tests
         var fullRangeFile = resultsDir.CombineFile("input_full_range.mp4");
         var limitedRangeFile = resultsDir.CombineFile("input_limited_range.mp4");
         var limitedRange10BitFile = resultsDir.CombineFile("input_limited_range_10bit.mp4");
+        var limitedRangeInterlacedFile = resultsDir.CombineFile("input_limited_range_interlaced.mp4");
+        var limitedRangeOversizedFile = resultsDir.CombineFile("input_limited_range_oversized.mp4");
         var processedFile = resultsDir.CombineFile("output_processed_full_range.mp4");
         var processed8BitFile = resultsDir.CombineFile("output_processed_full_range_8bit.mp4");
+        var processedDeinterlacedFile = resultsDir.CombineFile("output_processed_full_range_deinterlaced.mp4");
+        var processedScaledFile = resultsDir.CombineFile("output_processed_full_range_scaled.mp4");
         var fullRangeFrameFile = resultsDir.CombineFile("frame_full_range.png");
         var processedFrameFile = resultsDir.CombineFile("frame_processed.png");
         var processed8BitFrameFile = resultsDir.CombineFile("frame_processed_8bit.png");
+        var processedDeinterlacedFrameFile = resultsDir.CombineFile("frame_processed_deinterlaced.png");
+        var processedScaledFrameFile = resultsDir.CombineFile("frame_processed_scaled.png");
         var extractedFrameFile = resultsDir.CombineFile("frame_extracted_limited_range.png");
         fullRangeFile.Delete();
         limitedRangeFile.Delete();
         limitedRange10BitFile.Delete();
+        limitedRangeInterlacedFile.Delete();
+        limitedRangeOversizedFile.Delete();
         processedFile.Delete();
         processed8BitFile.Delete();
+        processedDeinterlacedFile.Delete();
+        processedScaledFile.Delete();
         fullRangeFrameFile.Delete();
         processedFrameFile.Delete();
         processed8BitFrameFile.Delete();
+        processedDeinterlacedFrameFile.Delete();
+        processedScaledFrameFile.Delete();
         extractedFrameFile.Delete();
 
         // Local helper to get the ffprobe stream info for a file:
@@ -1167,6 +1180,35 @@ partial class Tests
             ],
             TestContext.CancellationToken);
 
+        // Create with limited (tv) range, 8-bit interlaced (tff) version:
+        // Note: the interlace filter halves the frame rate (60fps to 30fps), and its vertical lowpass has no effect on a solid color, so the frame comparison
+        // below remains valid.
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-f", "lavfi",
+                "-i", "color=c=0x95eb14:size=320x240:rate=60:duration=2",
+                "-vf", "format=pix_fmts=yuv420p:color_ranges=tv,interlace=scan=tff:lowpass=complex",
+                "-c:v", "libx264",
+                "-x264-params", "tff=1",
+                "-color_range", "tv",
+                "-y", limitedRangeInterlacedFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
+        // Create with limited (tv) range, 8-bit oversized (640x480) version, so that scaling back down to the reference size can be tested:
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-f", "lavfi",
+                "-i", "color=c=0x95eb14:size=640x480:rate=30:duration=2",
+                "-vf", "format=pix_fmts=yuv420p:color_ranges=tv",
+                "-c:v", "libx264",
+                "-color_range", "tv",
+                "-y", limitedRangeOversizedFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
         // Sanity check the color ranges (and pixel formats) of the input files:
         string fullRangeProbeOutput = await ProbeStreams(fullRangeFile);
         fullRangeProbeOutput.Contains("\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeTrue("Expected full range input file to be pc range");
@@ -1183,6 +1225,22 @@ partial class Tests
             "\"color_range\": \"tv\"", StringComparison.Ordinal).ShouldBeTrue("Expected 10-bit limited range input file to be tv range");
         limitedRange10BitProbeOutput.Contains(
             "\"pix_fmt\": \"yuv420p10le\"", StringComparison.Ordinal).ShouldBeTrue("Expected 10-bit limited range input file to be 10-bit");
+
+        string limitedRangeInterlacedProbeOutput = await ProbeStreams(limitedRangeInterlacedFile);
+        limitedRangeInterlacedProbeOutput.Contains(
+            "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeFalse("Expected interlaced limited range input file to be tv range");
+        limitedRangeInterlacedProbeOutput.Contains(
+            "\"pix_fmt\": \"yuv420p\"", StringComparison.Ordinal).ShouldBeTrue("Expected interlaced limited range input file to be yuv420p");
+        limitedRangeInterlacedProbeOutput.Contains(
+            "\"field_order\": \"tt\"", StringComparison.Ordinal).ShouldBeTrue("Expected interlaced limited range input file to be interlaced (tff)");
+
+        string limitedRangeOversizedProbeOutput = await ProbeStreams(limitedRangeOversizedFile);
+        limitedRangeOversizedProbeOutput.Contains(
+            "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeFalse("Expected oversized limited range input file to be tv range");
+        limitedRangeOversizedProbeOutput.Contains(
+            "\"pix_fmt\": \"yuv420p\"", StringComparison.Ordinal).ShouldBeTrue("Expected oversized limited range input file to be yuv420p");
+        limitedRangeOversizedProbeOutput.Contains(
+            "\"width\": 640", StringComparison.Ordinal).ShouldBeTrue("Expected oversized limited range input file to be 640 wide");
 
         // Extract the reference frame from the middle of the original full range video (also kept for manual inspection):
         // Note: ffmpeg converts to RGB for the PNG using each file's tagged color range, so the comparisons below validate the actual resulting colors.
@@ -1259,7 +1317,79 @@ partial class Tests
 
         CompareFrameToReference(processed8BitFrameFile, "frame_processed_8bit.png");
 
-        // Case 3: extract a video frame from the limited range file using VideoFrameExtractionProcessor, and verify its colors are correct too:
+        // Case 3: process the interlaced limited range file with forced progressive frames, and verify it gets converted to a de-interlaced full (pc) range
+        // result:
+
+        var pipelineDeinterlaced = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ForceProgressiveFrames = true,
+        }).ToPipeline();
+
+        await using var streamInterlaced = limitedRangeInterlacedFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txnInterlaced = await repo.BeginTransactionAsync();
+        var fileIdInterlaced = (await txnInterlaced.AddAsync(streamInterlaced, true, pipelineDeinterlaced, TestContext.CancellationToken)).FileId;
+        await txnInterlaced.CommitAsync(TestContext.CancellationToken);
+
+        var videoPathInterlaced = (await repo.GetAsync(fileIdInterlaced)).Path;
+        videoPathInterlaced.Exists.ShouldBeTrue();
+
+        File.Copy(videoPathInterlaced.PathExport, processedDeinterlacedFile.PathExport);
+
+        string processedDeinterlacedProbeOutput = await ProbeStreams(processedDeinterlacedFile);
+        processedDeinterlacedProbeOutput.Contains(
+            "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeTrue("Expected de-interlaced processed file to be converted to pc range");
+        processedDeinterlacedProbeOutput.Contains(
+            "\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue("Expected de-interlaced processed file to be progressive");
+
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            ["-ss", "1", "-i", processedDeinterlacedFile.PathExport, "-frames:v", "1", "-y", processedDeinterlacedFrameFile.PathExport],
+            TestContext.CancellationToken);
+
+        CompareFrameToReference(processedDeinterlacedFrameFile, "frame_processed_deinterlaced.png");
+
+        // Case 4: process the oversized limited range file with resizing, and verify it gets converted to a full (pc) range result scaled down to the
+        // reference size:
+
+        var pipelineScaled = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, 320, 240),
+        }).ToPipeline();
+
+        await using var streamScaled = limitedRangeOversizedFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txnScaled = await repo.BeginTransactionAsync();
+        var fileIdScaled = (await txnScaled.AddAsync(streamScaled, true, pipelineScaled, TestContext.CancellationToken)).FileId;
+        await txnScaled.CommitAsync(TestContext.CancellationToken);
+
+        var videoPathScaled = (await repo.GetAsync(fileIdScaled)).Path;
+        videoPathScaled.Exists.ShouldBeTrue();
+
+        File.Copy(videoPathScaled.PathExport, processedScaledFile.PathExport);
+
+        string processedScaledProbeOutput = await ProbeStreams(processedScaledFile);
+        processedScaledProbeOutput.Contains(
+            "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeTrue("Expected scaled processed file to be converted to pc range");
+        processedScaledProbeOutput.Contains(
+            "\"width\": 320", StringComparison.Ordinal).ShouldBeTrue("Expected scaled processed file to be 320 wide");
+        processedScaledProbeOutput.Contains(
+            "\"height\": 240", StringComparison.Ordinal).ShouldBeTrue("Expected scaled processed file to be 240 tall");
+
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            ["-ss", "1", "-i", processedScaledFile.PathExport, "-frames:v", "1", "-y", processedScaledFrameFile.PathExport],
+            TestContext.CancellationToken);
+
+        CompareFrameToReference(processedScaledFrameFile, "frame_processed_scaled.png");
+
+        // Case 5: extract a video frame from the limited range file using VideoFrameExtractionProcessor, and verify its colors are correct too:
 
         var framePipeline = new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard with
         {
