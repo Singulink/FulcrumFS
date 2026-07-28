@@ -45,9 +45,3 @@ fi
 
 # Copy ffmpeg and ffprobe into the output directory.
 cp "$ffmpeg_package_dir/ffmpeg" "$ffmpeg_package_dir/ffprobe" "$FFMPEG_OUTPUT_DIR/"
-
-# Ad-hoc sign the copied binaries on macOS so Gatekeeper/syspolicyd doesn't re-assess them on
-# every launch, which adds significant per-invocation overhead when tests spawn them repeatedly.
-if [[ "$(uname)" == "Darwin" ]]; then
-  codesign --force --sign - "$FFMPEG_OUTPUT_DIR/ffmpeg" "$FFMPEG_OUTPUT_DIR/ffprobe"
-fi

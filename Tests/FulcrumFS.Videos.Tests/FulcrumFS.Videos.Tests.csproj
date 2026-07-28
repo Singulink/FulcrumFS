@@ -9,12 +9,6 @@
     <!-- Handling for special custom hwaccel config mode -->
     <DefineConstants Condition=" '$(HWACCEL_MODE)' != '' ">$(DefineConstants);CUSTOM_HWACCEL_MODE</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'none' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_NONE</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'videotoolbox' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_VIDEOTOOLBOX</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'cuda' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_CUDA</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'qsv' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_QSV</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'amf' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_AMF</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'd3d12va' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_D3D12VA</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'vulkan' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_VULKAN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
