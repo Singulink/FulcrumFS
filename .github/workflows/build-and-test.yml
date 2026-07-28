@@ -125,6 +125,10 @@ jobs:
           export HWACCEL_MODE="$mode"
           dotnet build FulcrumFS.slnx --configuration Release --no-restore
           dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+          if [[ "$mode" == "none" ]]; then
+            echo "::endgroup::"
+            continue
+          fi
           cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Short.txt
           echo "::endgroup::"
           echo "::group::HWACCEL_MODE=$mode (Detailed Report of Hardware Acceleration Failures)"

@@ -328,7 +328,7 @@ public sealed partial class Tests
         }
     }
 
-#if CUSTOM_HWACCEL_MODE
+#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_NONE
     [AssemblyCleanup]
     public static void WriteHWAccelStats()
     {

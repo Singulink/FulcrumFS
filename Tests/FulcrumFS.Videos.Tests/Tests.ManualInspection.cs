@@ -1,6 +1,8 @@
 using System.Globalization;
 using Shouldly;
 using Singulink.IO;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 #pragma warning disable SA1118 // Parameter should not span multiple lines
 
@@ -1050,5 +1052,231 @@ partial class Tests
         videoPath4.Exists.ShouldBeTrue();
         File.Copy(videoPath4.PathExport, outputStripUnrecognizedStreams.PathExport);
         await ValidateMetadata(outputStripUnrecognizedStreams, shouldHaveStartTime: true);
+    }
+
+    [TestMethod]
+    public async Task TestLimitedToFullRangeConversion()
+    {
+        // This test creates a solid color (#95eb14) video in full (pc) color range, converts it to limited (tv) range (in both 8-bit and 10-bit versions),
+        // then processes the limited range versions through the library with forced re-encoding to validate that the outputs get converted back to full (pc)
+        // range (and back to 8-bit for the 10-bit version). It also extracts a video frame from the limited range file using VideoFrameExtractionProcessor
+        // to validate that frame extraction handles limited range input correctly. Frames are extracted from each result and compared against a frame from
+        // the original full range video, ensuring all pixel color channels are within 3% of each other.
+        // All files are kept in the results folder for manual inspection.
+
+        var resultsDir = _appDir.CombineDirectory("TestLimitedToFullRangeConversionResults");
+        resultsDir.Create();
+
+        var fullRangeFile = resultsDir.CombineFile("input_full_range.mp4");
+        var limitedRangeFile = resultsDir.CombineFile("input_limited_range.mp4");
+        var limitedRange10BitFile = resultsDir.CombineFile("input_limited_range_10bit.mp4");
+        var processedFile = resultsDir.CombineFile("output_processed_full_range.mp4");
+        var processed8BitFile = resultsDir.CombineFile("output_processed_full_range_8bit.mp4");
+        var fullRangeFrameFile = resultsDir.CombineFile("frame_full_range.png");
+        var processedFrameFile = resultsDir.CombineFile("frame_processed.png");
+        var processed8BitFrameFile = resultsDir.CombineFile("frame_processed_8bit.png");
+        var extractedFrameFile = resultsDir.CombineFile("frame_extracted_limited_range.png");
+        fullRangeFile.Delete();
+        limitedRangeFile.Delete();
+        limitedRange10BitFile.Delete();
+        processedFile.Delete();
+        processed8BitFile.Delete();
+        fullRangeFrameFile.Delete();
+        processedFrameFile.Delete();
+        processed8BitFrameFile.Delete();
+        extractedFrameFile.Delete();
+
+        // Local helper to get the ffprobe stream info for a file:
+        async Task<string> ProbeStreams(IAbsoluteFilePath file)
+        {
+            var (output, _, returnCode) = await RunFFtoolProcess(
+                "ffprobe",
+                ["-i", file.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+                TestContext.CancellationToken);
+            returnCode.ShouldBe(0);
+            return output;
+        }
+
+        // Local helper to compare a frame against the full range reference frame - all pixel color channels should be within 3% of each other:
+        void CompareFrameToReference(IAbsoluteFilePath frameFile, string frameDescription)
+        {
+            using var referenceFrame = Image.Load<Rgba32>(fullRangeFrameFile.PathExport);
+            using var frame = Image.Load<Rgba32>(frameFile.PathExport);
+
+            frame.Width.ShouldBe(referenceFrame.Width);
+            frame.Height.ShouldBe(referenceFrame.Height);
+
+            int maxDiff = 0;
+            referenceFrame.ProcessPixelRows(frame, (accessor1, accessor2) =>
+            {
+                for (int y = 0; y < accessor1.Height; y++)
+                {
+                    var row1 = accessor1.GetRowSpan(y);
+                    var row2 = accessor2.GetRowSpan(y);
+
+                    for (int x = 0; x < row1.Length; x++)
+                    {
+                        maxDiff = int.Max(maxDiff, int.Abs(row1[x].R - row2[x].R));
+                        maxDiff = int.Max(maxDiff, int.Abs(row1[x].G - row2[x].G));
+                        maxDiff = int.Max(maxDiff, int.Abs(row1[x].B - row2[x].B));
+                    }
+                }
+            });
+
+            (maxDiff / 255.0).ShouldBeLessThanOrEqualTo(
+                0.03, $"Expected all pixel color channels of '{frameDescription}' to be within 3% of the original (max difference was {maxDiff}/255)");
+        }
+
+        // Create a 2 second solid #95eb14 video in full (pc) range:
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-f", "lavfi",
+                "-i", "color=c=0x95eb14:size=320x240:rate=30:duration=2",
+                "-vf", "format=pix_fmts=yuvj420p:color_ranges=pc",
+                "-c:v", "libx264",
+                "-color_range", "pc",
+                "-y", fullRangeFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
+        // Create with limited (tv) range, 8-bit version:
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-f", "lavfi",
+                "-i", "color=c=0x95eb14:size=320x240:rate=30:duration=2",
+                "-vf", "format=pix_fmts=yuv420p:color_ranges=tv",
+                "-c:v", "libx264",
+                "-color_range", "tv",
+                "-y", limitedRangeFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
+        // Create with limited (tv) range, 10-bit version:
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-f", "lavfi",
+                "-i", "color=c=0x95eb14:size=320x240:rate=30:duration=2",
+                "-vf", "format=pix_fmts=yuv420p10le:color_ranges=tv",
+                "-c:v", "libx265",
+                "-tag:v", "hvc1",
+                "-color_range", "tv",
+                "-y", limitedRange10BitFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
+        // Sanity check the color ranges (and pixel formats) of the input files:
+        string fullRangeProbeOutput = await ProbeStreams(fullRangeFile);
+        fullRangeProbeOutput.Contains("\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeTrue("Expected full range input file to be pc range");
+        fullRangeProbeOutput.Contains("\"pix_fmt\": \"yuvj420p\"", StringComparison.Ordinal).ShouldBeTrue("Expected full range input file to be yuvj420p");
+
+        string limitedRangeProbeOutput = await ProbeStreams(limitedRangeFile);
+        limitedRangeProbeOutput.Contains(
+            "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeFalse("Expected limited range input file to be tv range");
+        limitedRangeProbeOutput.Contains(
+            "\"pix_fmt\": \"yuv420p\"", StringComparison.Ordinal).ShouldBeTrue("Expected limited range input file to be yuv420p");
+
+        string limitedRange10BitProbeOutput = await ProbeStreams(limitedRange10BitFile);
+        limitedRange10BitProbeOutput.Contains(
+            "\"color_range\": \"tv\"", StringComparison.Ordinal).ShouldBeTrue("Expected 10-bit limited range input file to be tv range");
+        limitedRange10BitProbeOutput.Contains(
+            "\"pix_fmt\": \"yuv420p10le\"", StringComparison.Ordinal).ShouldBeTrue("Expected 10-bit limited range input file to be 10-bit");
+
+        // Extract the reference frame from the middle of the original full range video (also kept for manual inspection):
+        // Note: ffmpeg converts to RGB for the PNG using each file's tagged color range, so the comparisons below validate the actual resulting colors.
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            ["-ss", "1", "-i", fullRangeFile.PathExport, "-frames:v", "1", "-y", fullRangeFrameFile.PathExport],
+            TestContext.CancellationToken);
+
+        using var repoCtx = GetRepo(out var repo);
+
+        // Case 1: process the limited range file through the library with forced re-encoding, and verify it gets converted back to full (pc) range:
+
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+        }).ToPipeline();
+
+        await using var stream = limitedRangeFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn = await repo.BeginTransactionAsync();
+        var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath = (await repo.GetAsync(fileId)).Path;
+        videoPath.Exists.ShouldBeTrue();
+
+        File.Copy(videoPath.PathExport, processedFile.PathExport);
+
+        string processedProbeOutput = await ProbeStreams(processedFile);
+        processedProbeOutput.Contains(
+            "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeTrue("Expected processed file to be converted to pc range");
+
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            ["-ss", "1", "-i", processedFile.PathExport, "-frames:v", "1", "-y", processedFrameFile.PathExport],
+            TestContext.CancellationToken);
+
+        CompareFrameToReference(processedFrameFile, "frame_processed.png");
+
+        // Case 2: process the 10-bit limited range file with a maximum of 8 bits per channel, and verify it gets converted to an 8-bit full (pc) range
+        // result:
+
+        var pipeline8Bit = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            MaximumBitsPerChannel = BitsPerChannel.Bits8,
+        }).ToPipeline();
+
+        await using var stream8Bit = limitedRange10BitFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn8Bit = await repo.BeginTransactionAsync();
+        var fileId8Bit = (await txn8Bit.AddAsync(stream8Bit, true, pipeline8Bit, TestContext.CancellationToken)).FileId;
+        await txn8Bit.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath8Bit = (await repo.GetAsync(fileId8Bit)).Path;
+        videoPath8Bit.Exists.ShouldBeTrue();
+
+        File.Copy(videoPath8Bit.PathExport, processed8BitFile.PathExport);
+
+        string processed8BitProbeOutput = await ProbeStreams(processed8BitFile);
+        processed8BitProbeOutput.Contains(
+            "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeTrue("Expected 8-bit processed file to be converted to pc range");
+        processed8BitProbeOutput.Contains(
+            "\"pix_fmt\": \"yuvj420p\"", StringComparison.Ordinal).ShouldBeTrue("Expected 8-bit processed file to be converted to 8-bit");
+
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            ["-ss", "1", "-i", processed8BitFile.PathExport, "-frames:v", "1", "-y", processed8BitFrameFile.PathExport],
+            TestContext.CancellationToken);
+
+        CompareFrameToReference(processed8BitFrameFile, "frame_processed_8bit.png");
+
+        // Case 3: extract a video frame from the limited range file using VideoFrameExtractionProcessor, and verify its colors are correct too:
+
+        var framePipeline = new VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions.Standard with
+        {
+            ImageTimestampFraction = 0.5,
+        }).ToPipeline();
+
+        await using var frameStream = limitedRangeFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var frameTxn = await repo.BeginTransactionAsync();
+        var frameFileId = (await frameTxn.AddAsync(frameStream, true, framePipeline, TestContext.CancellationToken)).FileId;
+        await frameTxn.CommitAsync(TestContext.CancellationToken);
+
+        var extractedImagePath = (await repo.GetAsync(frameFileId)).Path;
+        extractedImagePath.Exists.ShouldBeTrue();
+
+        File.Copy(extractedImagePath.PathExport, extractedFrameFile.PathExport);
+
+        CompareFrameToReference(extractedFrameFile, "frame_extracted_limited_range.png");
     }
 }
