@@ -1613,11 +1613,6 @@ public sealed class VideoProcessor : FileProcessor
                             int oldWidth = videoStream.Width;
                             int oldHeight = videoStream.Height;
 
-                            if (!IsProgressive(videoStream.FieldOrder))
-                            {
-                                oldHeight *= 2;
-                            }
-
                             if (videoStream.Rotation is -90 or 90)
                             {
                                 (oldWidth, oldHeight) = (oldHeight, oldWidth);
