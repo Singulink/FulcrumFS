@@ -418,10 +418,11 @@ internal static class FFmpegUtils
 
             if ((MakePixelsSquareMode != 1 || resizeHW) && !doneMakePixelsSquare)
             {
+                // Note: we use max int for the max, to match what scale does.
                 if (!resizeHW || SarAfterHWResize is null)
                     steps.Add("setsar=sar=1/1");
                 else
-                    steps.Add($"setsar=sar={SarAfterHWResize}");
+                    steps.Add($"setsar=sar={SarAfterHWResize}:max={int.MaxValue}");
 
                 doneMakePixelsSquare = true;
             }

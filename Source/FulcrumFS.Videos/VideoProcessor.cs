@@ -691,10 +691,13 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 int width = videoStream.Width, height = videoStream.Height;
+                int sarNum = videoStream.SarNum, sarDen = videoStream.SarDen;
 
                 if (videoStream.Rotation is -90 or 90)
                 {
+                    // Note: the sample aspect ratio is also inverted when ffmpeg bakes in the rotation during decoding (via the auto-inserted transpose).
                     (width, height) = (height, width);
+                    (sarNum, sarDen) = (sarDen, sarNum);
                 }
 
                 VideoCodec? codec = MatchVideoCodecByName(Options.ResultVideoCodecs, videoStream.CodecName, videoStream.CodecTagString);
@@ -814,7 +817,7 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Check for non-square pixels:
-                if (Options.ForceSquarePixels && HasNonSquarePixels(videoStream.SarNum, videoStream.SarDen))
+                if (Options.ForceSquarePixels && HasNonSquarePixels(sarNum, sarDen))
                 {
                     reencodingStream = true;
                     mustReencodeStream = true;
@@ -835,8 +838,8 @@ public sealed class VideoProcessor : FileProcessor
                     var (mode, _, _) = CalculateVideoResize(
                         width,
                         height,
-                        Options.ForceSquarePixels ? videoStream.SarNum : -1,
-                        Options.ForceSquarePixels ? videoStream.SarDen : -1,
+                        Options.ForceSquarePixels ? sarNum : -1,
+                        Options.ForceSquarePixels ? sarDen : -1,
                         GetResizeMaxDimensions(Options.ResizeOptions, width, height),
                         !changingFps && videoStream.FpsNum > 0 && videoStream.FpsDen > 0 ? (checked(videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2)), videoStream.FpsDen) : null,
                         roundW,
@@ -1278,10 +1281,13 @@ public sealed class VideoProcessor : FileProcessor
                 // Check for resizing:
 
                 int width = videoStream.Width, height = videoStream.Height;
+                int sarNum = videoStream.SarNum, sarDen = videoStream.SarDen;
 
                 if (videoStream.Rotation is -90 or 90)
                 {
+                    // Note: the sample aspect ratio is also inverted when ffmpeg bakes in the rotation during decoding (via the auto-inserted transpose).
                     (width, height) = (height, width);
+                    (sarNum, sarDen) = (sarDen, sarNum);
                 }
 
                 if (Options.ResizeOptions is { } resizeOptions &&
@@ -1304,12 +1310,12 @@ public sealed class VideoProcessor : FileProcessor
 
                 // Check for square pixels:
 
-                if (Options.ForceSquarePixels && HasNonSquarePixels(videoStream.SarNum, videoStream.SarDen))
+                if (Options.ForceSquarePixels && HasNonSquarePixels(sarNum, sarDen))
                 {
                     reencode = true;
                     isRequiredReencode = true;
                     filterOverride.Critical = true;
-                    filterOverride.MakePixelsSquareMode = videoStream.SarNum > videoStream.SarDen ? 2 : 3;
+                    filterOverride.MakePixelsSquareMode = sarNum > sarDen ? 2 : 3;
                 }
 
                 // Check for interlacing:
@@ -1506,8 +1512,8 @@ public sealed class VideoProcessor : FileProcessor
                     var (mode, resultWidth, resultHeight) = CalculateVideoResize(
                         width,
                         height,
-                        Options.ForceSquarePixels ? videoStream.SarNum : -1,
-                        Options.ForceSquarePixels ? videoStream.SarDen : -1,
+                        Options.ForceSquarePixels ? sarNum : -1,
+                        Options.ForceSquarePixels ? sarDen : -1,
                         GetResizeMaxDimensions(Options.ResizeOptions, width, height),
                         fpsValue,
                         roundW,
@@ -1600,13 +1606,7 @@ public sealed class VideoProcessor : FileProcessor
                     // We need to fix-up the sar manually for hwaccel mode always, so calculate now what it should be in '1' mode
                     if (filterOverride.MakePixelsSquareMode == 1)
                     {
-                        BigInteger sarNum = videoStream.SarNum, sarDen = videoStream.SarDen;
-
-                        if (videoStream.Rotation is -90 or 90)
-                        {
-                            (sarNum, sarDen) = (sarDen, sarNum);
-                        }
-
+                        // Note: sarNum/sarDen already have the rotation inversion applied to match the decoded (auto-rotated) frames.
                         // If we have useful info then use it, otherwise just default to preserve
                         if (sarNum > 0 && sarDen > 0 && videoStream.Width > 0 && videoStream.Height > 0 && filterOverride.ResizeTo is { })
                         {
@@ -1624,26 +1624,27 @@ public sealed class VideoProcessor : FileProcessor
                             }
 
                             // Keep display aspect ratio the same (same logic as ffmpeg)
-                            sarNum = sarNum * oldWidth * filterOverride.ResizeTo.Value.Height;
-                            sarDen = sarDen * oldHeight * filterOverride.ResizeTo.Value.Width;
+                            BigInteger newSarNum = (BigInteger)sarNum * oldWidth * filterOverride.ResizeTo.Value.Height;
+                            BigInteger newSarDen = (BigInteger)sarDen * oldHeight * filterOverride.ResizeTo.Value.Width;
 
-                            var gcd = BigInteger.GreatestCommonDivisor(sarNum, sarDen);
-                            sarNum /= gcd;
-                            sarDen /= gcd;
+                            var gcd = BigInteger.GreatestCommonDivisor(newSarNum, newSarDen);
+                            newSarNum /= gcd;
+                            newSarDen /= gcd;
 
-                            if (sarNum < 1_000_000 && sarDen < 1_000_000)
+                            if (newSarNum < int.MaxValue && newSarDen < int.MaxValue)
                             {
-                                filterOverride.SarAfterHWResize = string.Create(CultureInfo.InvariantCulture, $"{sarNum}/{sarDen}");
+                                filterOverride.SarAfterHWResize = string.Create(CultureInfo.InvariantCulture, $"{newSarNum}/{newSarDen}");
                             }
                             else
                             {
-                                // Use double if fraction too large, ffmpeg will convert it to a nearby ratio
-                                filterOverride.SarAfterHWResize = ((double)sarNum / (double)sarDen).ToString(CultureInfo.InvariantCulture);
+                                // Use double if fraction too large, ffmpeg will convert it to a nearby ratio - this is good enough for here
+                                double ratio = (double)newSarNum / (double)newSarDen;
+                                filterOverride.SarAfterHWResize = string.Create(CultureInfo.InvariantCulture, $"{ratio}");
                             }
                         }
                         else
                         {
-                            filterOverride.SarAfterHWResize = "0";
+                            filterOverride.SarAfterHWResize = string.Create(CultureInfo.InvariantCulture, $"0");
                         }
                     }
                 }
