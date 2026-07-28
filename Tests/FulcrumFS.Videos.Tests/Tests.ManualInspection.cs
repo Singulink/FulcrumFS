@@ -1279,4 +1279,128 @@ partial class Tests
 
         CompareFrameToReference(extractedFrameFile, "frame_extracted_limited_range.png");
     }
+
+    [TestMethod]
+    public async Task TestSarInterlacedResizingHandling()
+    {
+        // This test creates an interlaced (tff) 64x60 video with a non-square 3:4 SAR (i.e., a 48x60 display size), then processes it through the library
+        // with ForceProgressiveFrames = true and resizing with both square pixel modes, verifying that de-interlacing, SAR, and resizing are handled correctly
+        // together:
+        // - With ForceSquarePixels = true, the pixels should be made square while resizing, so fitting the 48x60 display size within 20x20 should produce a
+        //   16x20 result with a 1:1 SAR.
+        // - With ForceSquarePixels = false, the 64x60 coded frame should just be scaled directly to fit within 16x16 (15x16, which becomes 16x16 after
+        //   rounding to even dimensions), with no extra SAR-based scaling - the SAR instead ends up adjusted to preserve the display aspect ratio
+        //   (3:4 * (64/16)/(60/16) = 4:5).
+        // Both outputs should also be de-interlaced (progressive, at double the interlaced frame rate) and are kept for manual inspection.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        var resultsDir = _appDir.CombineDirectory("TestSarInterlacedResizingResults");
+        resultsDir.Create();
+
+        var interlacedInputFile = resultsDir.CombineFile("input_interlaced_with_sar.mp4");
+        var outputSquarePixels = resultsDir.CombineFile("output_square_pixels.mp4");
+        var outputNonSquarePixels = resultsDir.CombineFile("output_non_square_pixels.mp4");
+        interlacedInputFile.Delete();
+        outputSquarePixels.Delete();
+        outputNonSquarePixels.Delete();
+
+        var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
+
+        // Create an interlaced version of the original file at 64x60 with a 3:4 SAR:
+        // The interlace filter converts progressive video to interlaced (halving the frame rate from 60fps to 30fps).
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", "scale=w=64:h=60:force_original_aspect_ratio=disable,interlace=scan=tff:lowpass=complex,setsar=3/4",
+                "-c:v", "libx264",
+                "-x264-params", "tff=1",
+                "-c:a", "copy",
+                "-y", interlacedInputFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
+        // Process with square pixels forced:
+        var pipeline1 = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ForceProgressiveFrames = true,
+            ForceSquarePixels = true,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, 20, 20),
+        }).ToPipeline();
+
+        await using var stream1 = interlacedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn1 = await repo.BeginTransactionAsync();
+        var fileId1 = (await txn1.AddAsync(stream1, true, pipeline1, TestContext.CancellationToken)).FileId;
+        await txn1.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath1 = (await repo.GetAsync(fileId1)).Path;
+        videoPath1.Exists.ShouldBeTrue();
+        File.Copy(videoPath1.PathExport, outputSquarePixels.PathExport);
+
+        // Process without square pixels forced:
+        var pipeline2 = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ForceProgressiveFrames = true,
+            ForceSquarePixels = false,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, 16, 16),
+        }).ToPipeline();
+
+        await using var stream2 = interlacedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn2 = await repo.BeginTransactionAsync();
+        var fileId2 = (await txn2.AddAsync(stream2, true, pipeline2, TestContext.CancellationToken)).FileId;
+        await txn2.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath2 = (await repo.GetAsync(fileId2)).Path;
+        videoPath2.Exists.ShouldBeTrue();
+        File.Copy(videoPath2.PathExport, outputNonSquarePixels.PathExport);
+
+        // Validate the input file has the expected dimensions, SAR, and interlacing:
+        var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", interlacedInputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode0.ShouldBe(0);
+
+        var (probeOutput1, _, probeReturnCode1) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputSquarePixels.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode1.ShouldBe(0);
+
+        var (probeOutput2, _, probeReturnCode2) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputNonSquarePixels.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode2.ShouldBe(0);
+
+        probeOutput0.Contains("\"width\": 64", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"height\": 60", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"sample_aspect_ratio\": \"3:4\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"field_order\": \"tt\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"r_frame_rate\": \"30/1\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        // With square pixels forced, the video should be de-interlaced and have its pixels made square while resizing:
+        probeOutput1.Contains("\"width\": 16", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"height\": 20", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"sample_aspect_ratio\": \"1:1\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        // Without square pixels forced, the video should be de-interlaced and the coded frame scaled directly, with the SAR adjusted to preserve the display
+        // aspect ratio:
+        probeOutput2.Contains("\"width\": 16", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"height\": 16", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"sample_aspect_ratio\": \"4:5\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
+    }
 }
