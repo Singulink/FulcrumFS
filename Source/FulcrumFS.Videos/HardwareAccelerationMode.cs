@@ -7,16 +7,17 @@ namespace FulcrumFS.Videos;
 /// </summary>
 public sealed record HardwareAccelerationMode
 {
-    private HardwareAccelerationMode(HardwareAccelerationKind kind, bool isStrict)
+    private HardwareAccelerationMode(HardwareAccelerationKind preferred, bool isStrict)
     {
-        Kind = kind;
+        PreferredKind = preferred;
         IsStrict = isStrict;
     }
 
     /// <summary>
-    /// Gets a value indicating the hardware acceleration kind to use for operations where possible (such as decode or scaling).
+    /// Gets a value indicating the hardware acceleration kind to use for operations where possible (such as decode or scaling), with a fallback to
+    /// <see cref="HardwareAccelerationKind.Auto" />.
     /// </summary>
-    public HardwareAccelerationKind Kind
+    public HardwareAccelerationKind PreferredKind
     {
         get;
         init
@@ -29,24 +30,34 @@ public sealed record HardwareAccelerationMode
     /// <summary>
     /// Gets a value indicating whether to only allow hardware acceleration that guarantees the result is theoretically identical to the software result.
     /// </summary>
+    /// <remarks>
+    /// Note: we do not guarantee that it is actually byte-for-byte identical, but it should not be slightly different due to things like using bilinear scaling
+    /// rather than bicubic scaling. To get it byte-for-byte identical, use <see cref="HardwareAccelerationKind.None" /> or
+    /// <see cref="None" /> to disable hardware acceleration entirely.
+    /// </remarks>
     public bool IsStrict { get; init; }
 
     /// <summary>
-    /// Creates a new <see cref="HardwareAccelerationMode"/> instance with the specified kind that does not require strictly identical results to the software
-    /// result.
+    /// Creates a new <see cref="HardwareAccelerationMode"/> instance with the specified preferred kind that does not require strictly identical results to the
+    /// software result.
     /// </summary>
-    public static HardwareAccelerationMode Create(HardwareAccelerationKind kind)
+    public static HardwareAccelerationMode Create(HardwareAccelerationKind preferredKind)
     {
-        return new HardwareAccelerationMode(kind, false);
+        return new HardwareAccelerationMode(preferredKind, false);
     }
 
     /// <summary>
-    /// Creates a new <see cref="HardwareAccelerationMode"/> instance with the specified kind that requires results to be theoretically identical to the
-    /// software result.
+    /// Creates a new <see cref="HardwareAccelerationMode"/> instance with the specified preferred kind that requires results to be theoretically identical to
+    /// the software result.
     /// </summary>
-    public static HardwareAccelerationMode CreateStrict(HardwareAccelerationKind kind)
+    /// <remarks>
+    /// Note: we do not guarantee that it is actually byte-for-byte identical, but it should not be slightly different due to things like using bilinear scaling
+    /// rather than bicubic scaling. To get it byte-for-byte identical, use <see cref="HardwareAccelerationKind.None" /> or
+    /// <see cref="None" /> to disable hardware acceleration entirely.
+    /// </remarks>
+    public static HardwareAccelerationMode CreateStrict(HardwareAccelerationKind preferredKind)
     {
-        return new HardwareAccelerationMode(kind, true);
+        return new HardwareAccelerationMode(preferredKind, true);
     }
 
     /// <summary>

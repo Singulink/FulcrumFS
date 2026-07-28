@@ -2175,20 +2175,20 @@ public sealed class VideoProcessor : FileProcessor
         if (canUseHardwareAcceleration)
         {
             command.HWAccel = null;
-            if (Options.HardwareAccelerationMode.Kind == HardwareAccelerationKind.None)
+            if (Options.HardwareAccelerationMode.PreferredKind == HardwareAccelerationKind.None)
             {
                 command.HWAccel = "none";
             }
-            else if (Options.HardwareAccelerationMode.Kind != HardwareAccelerationKind.DecodeOnly)
+            else if (Options.HardwareAccelerationMode.PreferredKind != HardwareAccelerationKind.DecodeOnly)
             {
-                command.HWAccel = Options.HardwareAccelerationMode.Kind switch
+                command.HWAccel = Options.HardwareAccelerationMode.PreferredKind switch
                 {
-                    HardwareAccelerationKind.VideoToolbox => FFprobeUtils.Configuration.SupportsVideoToolboxHWAccel ? "videotoolbox" : null,
-                    HardwareAccelerationKind.Cuda => FFprobeUtils.Configuration.SupportsCudaHWAccel ? "cuda" : null,
-                    HardwareAccelerationKind.Qsv => FFprobeUtils.Configuration.SupportsQsvHWAccel ? "qsv" : null,
-                    HardwareAccelerationKind.Amf => FFprobeUtils.Configuration.SupportsAmfHWAccel ? "amf" : null,
-                    HardwareAccelerationKind.D3D12 => FFprobeUtils.Configuration.SupportsD3D12VAHWAccel ? "d3d12va" : null,
-                    HardwareAccelerationKind.Vulkan => FFprobeUtils.Configuration.SupportsVulkanHWAccel ? "vulkan" : null,
+                    HardwareAccelerationKind.VideoToolbox when FFprobeUtils.Configuration.SupportsVideoToolboxHWAccel => "videotoolbox",
+                    HardwareAccelerationKind.Cuda when FFprobeUtils.Configuration.SupportsCudaHWAccel => "cuda",
+                    HardwareAccelerationKind.Qsv when FFprobeUtils.Configuration.SupportsQsvHWAccel => "qsv",
+                    HardwareAccelerationKind.Amf when FFprobeUtils.Configuration.SupportsAmfHWAccel => "amf",
+                    HardwareAccelerationKind.D3D12 when FFprobeUtils.Configuration.SupportsD3D12VAHWAccel => "d3d12va",
+                    HardwareAccelerationKind.Vulkan when FFprobeUtils.Configuration.SupportsVulkanHWAccel => "vulkan",
                     _ => FFprobeUtils.Configuration switch
                     {
                         { SupportsVideoToolboxHWAccel: true } => "videotoolbox",
