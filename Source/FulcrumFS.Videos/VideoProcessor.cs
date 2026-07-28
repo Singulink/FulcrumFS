@@ -1560,10 +1560,15 @@ public sealed class VideoProcessor : FileProcessor
                             canUseHardwareAcceleration = false;
                         }
 
-                        // If the size is over 8192x4608, don't try to use hardware acceleration. It is extremely unlikely to work, and if it does, is
-                        // likely to be very slow and/or crash, especially if we end up running this on some kind of integrated GPU or similar.
-                        // Inputs that match this are also not common (it is just above 8K), so we don't expect this to slow down most real cases unnecessarily.
-                        if (width > 8192 || height > 8192 || width * height > 8192 * 4608)
+                        // If the size is over 8192x4608, don't try to use hardware acceleration. It is unlikely to work, and if it does, is likely to be very
+                        // slow and/or crash, especially if we end up running this on some kind of integrated GPU or similar. Inputs that match this are also
+                        // not common (it is just above 8K), so we don't expect this to slow down most real cases unnecessarily.
+                        if (width > 8192 ||
+                            height > 8192 ||
+                            width * height > 8192 * 4608 ||
+                            resultWidth > 8192 ||
+                            resultHeight > 8192 ||
+                            resultWidth * resultHeight > 8192 * 4608)
                         {
                             canUseHardwareAcceleration = false;
                         }
