@@ -1197,6 +1197,7 @@ public sealed class VideoProcessor : FileProcessor
         // Note: if we loosen the check here, we need to ensure we have correct handling for all new edge cases on all supported hardware acceleration types,
         // and that all the unit tests pass for that hardware acceleration type when running in its special mode (CI does not cover all of this).
         bool canUseHardwareAcceleration = true;
+        bool worthUsingHardwareAcceleratedFilters = false;
 
         foreach (var stream in sourceInfo.Streams)
         {
@@ -1661,6 +1662,10 @@ public sealed class VideoProcessor : FileProcessor
                     // Check if we were unable to determine Is10BitForHW accurately
                     if (bitsPerSample <= 0)
                         canUseHardwareAcceleration = false;
+
+                    // If we're actually re-encoding with a critical filter, then mark our hwacceleration as potentially beneficial
+                    if (filterOverride.Critical)
+                        worthUsingHardwareAcceleratedFilters = true;
                 }
 
                 // Set up codec to use:
@@ -2205,6 +2210,7 @@ public sealed class VideoProcessor : FileProcessor
                     },
                 };
                 command.HWAccelStrictMode = Options.HardwareAccelerationMode.IsStrict;
+                command.UseHWAccelFiltersWhenPossible = worthUsingHardwareAcceleratedFilters;
             }
         }
 
@@ -2260,11 +2266,11 @@ public sealed class VideoProcessor : FileProcessor
 
                     // If we are in a forced hardware acceleration mode, we want to keep track of all that succeeded with hardware acceleration.
 #if CUSTOM_HWACCEL_MODE
-                    if (command.HWAccel is not ("none" or null))
+                    if (command.HWAccel is not ("none" or null) && command.UseHWAccelFiltersWhenPossible)
                         OnHWAccelAttemptSuccess();
 #endif
                 }
-                catch (Exception ex) when (command.HWAccel is not ("none" or null))
+                catch (Exception ex) when (command.HWAccel is not ("none" or null) && command.UseHWAccelFiltersWhenPossible)
                 {
                     progressUsed = mostRecentClampedProgress;
 
