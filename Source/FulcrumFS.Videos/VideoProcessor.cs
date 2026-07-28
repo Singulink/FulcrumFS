@@ -1415,12 +1415,12 @@ public sealed class VideoProcessor : FileProcessor
 
                 // If we're re-encoding, we want to specify the pixel format always:
                 // Note: we also check for what HDR remapping causing re-encoding would give here, since it also requires us to always specify something.
+                int videoSubsampling = NormalizeChromaSubsampling(pixFormatInfo?.ChromaSubsampling);
+                int videoBitsPerSample = NormalizeBitsPerSample(bitsPerSample);
 
                 if (reencode || (isHdr && Options.RemapHDRToSDR))
                 {
-                    int videoSubsampling = NormalizeChromaSubsampling(pixFormatInfo?.ChromaSubsampling);
                     int maxSubsampling = GetChromaSubsampling(Options.MaximumChromaSubsampling) ?? 444;
-                    int videoBitsPerSample = NormalizeBitsPerSample(bitsPerSample);
                     int maxBitsPerSample = GetBitsPerChannel(Options.MaximumBitsPerChannel) ?? 12;
 
                     if (Options.ResultVideoCodecs[0] == VideoCodec.H264)
@@ -1438,13 +1438,6 @@ public sealed class VideoProcessor : FileProcessor
                     filterOverride.Critical = true;
                     filterOverride.ForceConvertToFullRange = videoStream.ColorRange != "pc";
                     filterOverride.PixelFormat = pixFormat;
-
-                    // If we have more than 4:2:0 chroma subsampling or more than 10bpc, then we do not try to use hardware acceleration, as it is likely to
-                    // fail on most hardware and we have not implemented appropriate handling for it yet. These are also very uncommon inputs.
-                    if (finalChromaSubsampling != 420 || finalBitsPerChannel > 10)
-                    {
-                        canUseHardwareAcceleration = false;
-                    }
                 }
 
                 // Deal with HDR:
@@ -1560,10 +1553,17 @@ public sealed class VideoProcessor : FileProcessor
                             filterOverride.ResizeTo = (resultWidth, resultHeight);
                         }
 
+                        // If we have more than 4:2:0 chroma subsampling or more than 10bpc, then we do not try to use hardware acceleration, as it is likely to
+                        // fail on most hardware and we have not implemented appropriate handling for it yet. These are also very uncommon inputs.
+                        if (videoSubsampling != 420 || videoBitsPerSample is > 10 or <= 0)
+                        {
+                            canUseHardwareAcceleration = false;
+                        }
+
                         // If the size is over 8192x4608, don't try to use hardware acceleration. It is extremely unlikely to work, and if it does, is
                         // likely to be very slow and/or crash, especially if we end up running this on some kind of integrated GPU or similar.
                         // Inputs that match this are also not common (it is just above 8K), so we don't expect this to slow down most real cases unnecessarily.
-                        if (resultWidth > 8192 || resultHeight > 8192 || resultWidth * resultHeight > 8192 * 4608)
+                        if (width > 8192 || height > 8192 || width * height > 8192 * 4608)
                         {
                             canUseHardwareAcceleration = false;
                         }
