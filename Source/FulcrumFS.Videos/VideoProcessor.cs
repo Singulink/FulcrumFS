@@ -2286,11 +2286,11 @@ public sealed class VideoProcessor : FileProcessor
 
                     // If we are in a forced hardware acceleration mode, we want to keep track of all that succeeded with hardware acceleration.
 #if CUSTOM_HWACCEL_MODE
-                    if (command.HWAccel is not ("none" or null) && command.UseHWAccelFiltersWhenPossible)
+                    if (command.HWAccel is not ("none" or null))
                         OnHWAccelAttemptSuccess();
 #endif
                 }
-                catch (Exception ex) when (command.HWAccel is not ("none" or null) && command.UseHWAccelFiltersWhenPossible)
+                catch (Exception ex) when (command.HWAccel is not ("none" or null))
                 {
                     progressUsed = mostRecentClampedProgress;
 
