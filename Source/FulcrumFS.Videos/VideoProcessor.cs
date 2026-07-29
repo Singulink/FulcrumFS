@@ -130,6 +130,16 @@ public sealed class VideoProcessor : FileProcessor
         {
             throw new NotSupportedException("The required 'transpose' video filter is not supported by the configured ffmpeg installation.");
         }
+
+        if (!FFprobeUtils.Configuration.SupportsHFlipFilter)
+        {
+            throw new NotSupportedException("The required 'hflip' video filter is not supported by the configured ffmpeg installation.");
+        }
+
+        if (!FFprobeUtils.Configuration.SupportsVFlipFilter)
+        {
+            throw new NotSupportedException("The required 'vflip' video filter is not supported by the configured ffmpeg installation.");
+        }
     }
 
     /// <summary>

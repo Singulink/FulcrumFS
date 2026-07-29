@@ -89,6 +89,8 @@ internal static class FFprobeUtils
         Require(c.SupportsBwdifFilter);
         Require(c.SupportsSetsarFilter);
         Require(c.SupportsTransposeFilter);
+        Require(c.SupportsHFlipFilter);
+        Require(c.SupportsVFlipFilter);
     }
 
     public sealed class VideoFileInfo(string formatName, double? duration, ImmutableArray<StreamInfo> streams)
@@ -359,6 +361,8 @@ internal static class FFprobeUtils
         public bool SupportsBwdifFilter { get; set; }
         public bool SupportsSetsarFilter { get; set; }
         public bool SupportsTransposeFilter { get; set; }
+        public bool SupportsHFlipFilter { get; set; }
+        public bool SupportsVFlipFilter { get; set; }
         public bool SupportsScaleVtFilter { get; set; }
         public bool SupportsScaleCudaFilter { get; set; }
         public bool SupportsBwdifCudaFilter { get; set; }
@@ -372,6 +376,8 @@ internal static class FFprobeUtils
         public bool SupportsTransposeVtFilter { get; set; }
         public bool SupportsTransposeCudaFilter { get; set; }
         public bool SupportsTransposeVulkanFilter { get; set; }
+        public bool SupportsHFlipVulkanFilter { get; set; }
+        public bool SupportsVFlipVulkanFilter { get; set; }
 
         // Hardware acceleration support
         public bool SupportsVideoToolboxHWAccel { get; set; }
@@ -601,6 +607,8 @@ internal static class FFprobeUtils
                     case "bwdif": _configInfo.SupportsBwdifFilter = true; break;
                     case "setsar": _configInfo.SupportsSetsarFilter = true; break;
                     case "transpose": _configInfo.SupportsTransposeFilter = true; break;
+                    case "hflip": _configInfo.SupportsHFlipFilter = true; break;
+                    case "vflip": _configInfo.SupportsVFlipFilter = true; break;
                     case "scale_vt": _configInfo.SupportsScaleVtFilter = true; break;
                     case "scale_cuda": _configInfo.SupportsScaleCudaFilter = true; break;
                     case "bwdif_cuda": _configInfo.SupportsBwdifCudaFilter = true; break;
@@ -614,6 +622,8 @@ internal static class FFprobeUtils
                     case "transpose_vt": _configInfo.SupportsTransposeVtFilter = true; break;
                     case "transpose_cuda": _configInfo.SupportsTransposeCudaFilter = true; break;
                     case "transpose_vulkan": _configInfo.SupportsTransposeVulkanFilter = true; break;
+                    case "hflip_vulkan": _configInfo.SupportsHFlipVulkanFilter = true; break;
+                    case "vflip_vulkan": _configInfo.SupportsVFlipVulkanFilter = true; break;
                 }
             }
 

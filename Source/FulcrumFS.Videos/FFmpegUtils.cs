@@ -343,9 +343,20 @@ internal static class FFmpegUtils
 
                     steps.Add(filterPart);
                 }
-                else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsTransposeVulkanFilter)
+                else if (!doneHWDownload && hwaccel == "vulkan" &&
+                    FFprobeUtils.Configuration.SupportsTransposeVulkanFilter &&
+                    FFprobeUtils.Configuration.SupportsHFlipVulkanFilter &&
+                    FFprobeUtils.Configuration.SupportsVFlipVulkanFilter)
                 {
-                    steps.Add($"transpose_vulkan=dir={rotateDir}");
+                    if (RotateForHWAccel == 180)
+                    {
+                        steps.Add("vflip_vulkan");
+                        steps.Add("hflip_vulkan");
+                    }
+                    else
+                    {
+                        steps.Add($"transpose_vulkan=dir={rotateDir}");
+                    }
                 }
                 else
                 {
