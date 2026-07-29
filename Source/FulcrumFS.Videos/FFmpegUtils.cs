@@ -407,7 +407,7 @@ internal static class FFmpegUtils
                     // If we're also doing tv->pc range conversion (and not HDR->SDR conversion), do that at the same time.
                     if (ForceConvertToFullRange && !HDRToSDR && !doneRangeConversion)
                     {
-                        filterPart += ":out_range=full";
+                        filterPart += $":out_range=full:format={(Is10BitForHW ? "p010le" : "nv12")}";
                         doneRangeConversion = true;
                     }
 
@@ -450,7 +450,8 @@ internal static class FFmpegUtils
                 }
                 else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)
                 {
-                    steps.Add("scale_vulkan=out_range=full");
+                    // Note: vulkan can only do out_range if we also set the pixel format
+                    steps.Add($"scale_vulkan=out_range=full:format={(Is10BitForHW ? "p010le" : "nv12")}");
                 }
                 else
                 {
