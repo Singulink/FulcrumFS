@@ -29,7 +29,6 @@ internal static class FFmpegUtils
         public bool IsToMov { get; } = isToMov;
         public string? HWAccel { get; set; } // Special values: 'null' means auto & not used for filters - 'none' means none & not used for filters
         public bool UseHWAccelFiltersWhenPossible { get; set; } = true;
-        public bool HWAccelStrictMode { get; set; }
     }
 
     public static string MapHWAccelNameToFormatName(string hwaccel) => hwaccel switch
@@ -64,9 +63,9 @@ internal static class FFmpegUtils
 
         protected abstract string CommandName { get; }
         protected abstract string CommandArgument { get; }
-        protected virtual string GetCommandArgument(string? hwaccel, bool hwaccelStrictMode) => CommandArgument;
+        protected virtual string GetCommandArgument(string? hwaccel) => CommandArgument;
 
-        public virtual void PrepareArguments(List<string> args, string? hwaccel, bool hwaccelStrictMode)
+        public virtual void PrepareArguments(List<string> args, string? hwaccel)
         {
             Validate();
 
@@ -92,7 +91,7 @@ internal static class FFmpegUtils
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamKind}"));
             }
 
-            args.Add(GetCommandArgument(hwaccel, hwaccelStrictMode));
+            args.Add(GetCommandArgument(hwaccel));
         }
     }
 
@@ -199,7 +198,7 @@ internal static class FFmpegUtils
         public string? PixelFormatAfterHWDownload { get; set; }
         public string? SarAfterHWResize { get; set; }
 
-        protected override string GetCommandArgument(string? hwaccel, bool hwaccelStrictMode)
+        protected override string GetCommandArgument(string? hwaccel)
         {
             // Suppress this warning - it is about our bool flags, but it is better for maintainability so they are actually accurate for future changes.
 #pragma warning disable IDE0059 // Unnecessary assignment of a value
@@ -247,7 +246,7 @@ internal static class FFmpegUtils
                     string filterPart = "vpp_qsv=deinterlace=bob:rate=field";
 
                     // If we're also scaling, do that at the same time.
-                    if (ResizeTo is var (w1, h1) && !hwaccelStrictMode && !doneResize)
+                    if (ResizeTo is var (w1, h1) && !doneResize)
                     {
                         // See comments in resize section for why it's set up this way.
                         filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
@@ -285,7 +284,7 @@ internal static class FFmpegUtils
 
             if (ResizeTo is var (w2, h2) && !doneResize)
             {
-                if (!doneHWDownload && hwaccel == "videotoolbox" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleVtFilter)
+                if (!doneHWDownload && hwaccel == "videotoolbox" && FFprobeUtils.Configuration.SupportsScaleVtFilter)
                 {
                     // Note: videotoolbox cannot ensure we match the bicubic scaling that 'scale' uses by default, so we just use the default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_vt=w={w2}:h={h2}"));
@@ -297,7 +296,7 @@ internal static class FFmpegUtils
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_cuda=w={w2}:h={h2}:interp_algo=bicubic"));
                     resizeHW = true;
                 }
-                else if (!doneHWDownload && hwaccel == "qsv" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsVppQsvFilter)
+                else if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
                 {
                     // Note: qsv cannot ensure we match bicubic scaling that 'scale' uses by default, however 'hq' is most likely to either be it or be closest.
                     string filterPart = string.Create(CultureInfo.InvariantCulture, $"vpp_qsv=w={w2}:h={h2}:scale_mode=hq");
@@ -318,13 +317,13 @@ internal static class FFmpegUtils
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"vpp_amf=w={w2}:h={h2}:scale_type=bicubic"));
                     resizeHW = true;
                 }
-                else if (!doneHWDownload && hwaccel == "d3d12va" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleD3D12Filter)
+                else if (!doneHWDownload && hwaccel == "d3d12va" && FFprobeUtils.Configuration.SupportsScaleD3D12Filter)
                 {
                     // Note: d3d12 cannot ensure we match bicubic scaling that 'scale' uses by default, so we just use the default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_d3d12=w={w2}:h={h2}"));
                     resizeHW = true;
                 }
-                else if (!doneHWDownload && hwaccel == "vulkan" && !hwaccelStrictMode && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)
+                else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)
                 {
                     // Note: vulkan does not allow us to specify using bicubic, so we use high quality bilinear instead.
                     string filterPart = string.Create(CultureInfo.InvariantCulture, $"scale_vulkan=w={w2}:h={h2}:scaler=bilinear:debayer=bilinear_hq");
@@ -487,7 +486,7 @@ internal static class FFmpegUtils
         protected override string CommandName => string.Empty;
         protected override string CommandArgument => string.Empty;
 
-        public override void PrepareArguments(List<string> args, string? hwaccel, bool hwaccelStrictMode)
+        public override void PrepareArguments(List<string> args, string? hwaccel)
         {
             if (StreamKind != '\0' || StreamIndexWithinKind < 0)
             {
@@ -693,7 +692,7 @@ internal static class FFmpegUtils
                 var x => x,
             };
 
-            perOutputOverride.PrepareArguments(args, hwAccelMode, command.HWAccelStrictMode);
+            perOutputOverride.PrepareArguments(args, hwAccelMode);
         }
 
         // Set mov/mp4 specific options if outputting to .mov/.mp4:

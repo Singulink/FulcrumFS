@@ -27,7 +27,7 @@ public sealed record VideoProcessingOptions
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
     /// <remarks>
-    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationMode" /> for options to control this.
+    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationKind" /> for options to control this.
     /// </remarks>
     public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
@@ -59,7 +59,7 @@ public sealed record VideoProcessingOptions
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
     /// <remarks>
-    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationMode" /> for options to control this.
+    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationKind" /> for options to control this.
     /// </remarks>
     public static VideoProcessingOptions StandardizedHEVCAACMP4 { get; } = new VideoProcessingOptions()
     {
@@ -636,5 +636,13 @@ public sealed record VideoProcessingOptions
     /// acceleration modes represent CPUs instead, which would be undesirable to use over a high-power device like a GPU.
     /// </para>
     /// </remarks>
-    public HardwareAccelerationMode HardwareAccelerationMode { get; init; } = HardwareAccelerationMode.Default;
+    public HardwareAccelerationKind HardwareAccelerationKind
+    {
+        get;
+        init
+        {
+            value.ThrowIfNotDefined();
+            field = value;
+        }
+    } = HardwareAccelerationKind.Auto;
 }

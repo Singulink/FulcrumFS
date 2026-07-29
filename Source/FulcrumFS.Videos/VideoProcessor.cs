@@ -2180,13 +2180,13 @@ public sealed class VideoProcessor : FileProcessor
         if (canUseHardwareAcceleration)
         {
             command.HWAccel = null;
-            if (Options.HardwareAccelerationMode.PreferredKind == HardwareAccelerationKind.None)
+            if (Options.HardwareAccelerationKind == HardwareAccelerationKind.None)
             {
                 command.HWAccel = "none";
             }
-            else if (Options.HardwareAccelerationMode.PreferredKind != HardwareAccelerationKind.DecodeOnly)
+            else if (Options.HardwareAccelerationKind != HardwareAccelerationKind.DecodeOnly)
             {
-                command.HWAccel = Options.HardwareAccelerationMode.PreferredKind switch
+                command.HWAccel = Options.HardwareAccelerationKind switch
                 {
                     HardwareAccelerationKind.VideoToolbox when FFprobeUtils.Configuration.SupportsVideoToolboxHWAccel => "videotoolbox",
                     HardwareAccelerationKind.Cuda when FFprobeUtils.Configuration.SupportsCudaHWAccel => "cuda",
@@ -2209,7 +2209,6 @@ public sealed class VideoProcessor : FileProcessor
                         _ => null,
                     },
                 };
-                command.HWAccelStrictMode = Options.HardwareAccelerationMode.IsStrict;
                 command.UseHWAccelFiltersWhenPossible = worthUsingHardwareAcceleratedFilters;
             }
         }
