@@ -125,6 +125,11 @@ public sealed class VideoProcessor : FileProcessor
         {
             throw new NotSupportedException("The required 'setsar' video filter is not supported by the configured ffmpeg installation.");
         }
+
+        if (!FFprobeUtils.Configuration.SupportsTransposeFilter)
+        {
+            throw new NotSupportedException("The required 'transpose' video filter is not supported by the configured ffmpeg installation.");
+        }
     }
 
     /// <summary>
@@ -1290,6 +1295,15 @@ public sealed class VideoProcessor : FileProcessor
                     (width, height) = (height, width);
                     (sarNum, sarDen) = (sarDen, sarNum);
                 }
+
+                // Provide the desired rotation to the filter (only applied when hardware accelerated decoding is used - see PerStreamFilterOverride):
+                filterOverride.Rotate = videoStream.Rotation switch
+                {
+                    -90 => 90,
+                    90 => 270,
+                    180 or -180 => 180,
+                    _ => 0,
+                };
 
                 if (Options.ResizeOptions is { } resizeOptions &&
                     ((width > resizeOptions.Width) || (height > resizeOptions.Height)))

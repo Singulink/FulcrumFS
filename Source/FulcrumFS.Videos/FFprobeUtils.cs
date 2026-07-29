@@ -88,6 +88,7 @@ internal static class FFprobeUtils
         Require(c.SupportsFormatFilter);
         Require(c.SupportsBwdifFilter);
         Require(c.SupportsSetsarFilter);
+        Require(c.SupportsTransposeFilter);
     }
 
     public sealed class VideoFileInfo(string formatName, double? duration, ImmutableArray<StreamInfo> streams)
@@ -304,6 +305,7 @@ internal static class FFprobeUtils
         public bool SupportsFormatFilter { get; set; }
         public bool SupportsBwdifFilter { get; set; }
         public bool SupportsSetsarFilter { get; set; }
+        public bool SupportsTransposeFilter { get; set; }
         public bool SupportsScaleVtFilter { get; set; }
         public bool SupportsScaleCudaFilter { get; set; }
         public bool SupportsBwdifCudaFilter { get; set; }
@@ -314,6 +316,9 @@ internal static class FFprobeUtils
         public bool SupportsDeinterlaceD3D12Filter { get; set; }
         public bool SupportsScaleVulkanFilter { get; set; }
         public bool SupportsBwdifVulkanFilter { get; set; }
+        public bool SupportsTransposeVtFilter { get; set; }
+        public bool SupportsTransposeCudaFilter { get; set; }
+        public bool SupportsTransposeVulkanFilter { get; set; }
 
         // Hardware acceleration support
         public bool SupportsVideoToolboxHWAccel { get; set; }
@@ -542,6 +547,7 @@ internal static class FFprobeUtils
                     case "format": _configInfo.SupportsFormatFilter = true; break;
                     case "bwdif": _configInfo.SupportsBwdifFilter = true; break;
                     case "setsar": _configInfo.SupportsSetsarFilter = true; break;
+                    case "transpose": _configInfo.SupportsTransposeFilter = true; break;
                     case "scale_vt": _configInfo.SupportsScaleVtFilter = true; break;
                     case "scale_cuda": _configInfo.SupportsScaleCudaFilter = true; break;
                     case "bwdif_cuda": _configInfo.SupportsBwdifCudaFilter = true; break;
@@ -552,6 +558,9 @@ internal static class FFprobeUtils
                     case "deinterlace_d3d12": _configInfo.SupportsDeinterlaceD3D12Filter = true; break;
                     case "scale_vulkan": _configInfo.SupportsScaleVulkanFilter = true; break;
                     case "bwdif_vulkan": _configInfo.SupportsBwdifVulkanFilter = true; break;
+                    case "transpose_vt": _configInfo.SupportsTransposeVtFilter = true; break;
+                    case "transpose_cuda": _configInfo.SupportsTransposeCudaFilter = true; break;
+                    case "transpose_vulkan": _configInfo.SupportsTransposeVulkanFilter = true; break;
                 }
             }
 

@@ -190,6 +190,7 @@ internal static class FFmpegUtils
         public bool HDRToSDR { get; set; }
         public string? PixelFormat { get; set; }
         public bool Deinterlace { get; set; }
+        public int Rotate { get; set; } // 0 - none, 90 - clockwise, 180 - reversal, 270 - counter-clockwise
         public int MakePixelsSquareMode { get; set; } // 0 - keep 1:1, 1 - ignore, 2 - currently wider, 3 - currently taller
         protected override string CommandName => "filter";
         public bool AssumePotentialAlphaChannelForHDRToSDR { get; set; }
@@ -213,6 +214,18 @@ internal static class FFmpegUtils
             bool doneFPS = false;
             bool doneMakePixelsSquare = false;
             bool resizeHW = false;
+
+            // Note: rotation only needs to be applied manually when hardware accelerated decoding is used, since ffmpeg skips its automatic rotation for
+            // hardware frames (or fails outright on some platforms) - software decoding applies it automatically.
+            bool doneRotate = hwaccel is null || Rotate == 0;
+            string rotateDir = Rotate switch
+            {
+                0 => "<error>",
+                90 => "clock",
+                180 => "reversal",
+                270 => "cclock",
+                _ => throw new InvalidOperationException("Rotate must be 0, 90, 180, or 270."),
+            };
 
             void EnsureHWDownload()
             {
@@ -244,6 +257,13 @@ internal static class FFmpegUtils
                     // Use bob mode to make more similar to what bwdif does, rather than advanced mode.
                     // Note: we also need to set to field to match what bwdif does by default.
                     string filterPart = "vpp_qsv=deinterlace=bob:rate=field";
+
+                    // If we're also rotating, do that at the same time.
+                    if (!doneRotate)
+                    {
+                        filterPart += $":transpose={rotateDir}";
+                        doneRotate = true;
+                    }
 
                     // If we're also scaling, do that at the same time.
                     if (ResizeTo is var (w1, h1) && !doneResize)
@@ -280,6 +300,62 @@ internal static class FFmpegUtils
                 }
 
                 doneDeinterlace = true;
+            }
+
+            if (!doneRotate)
+            {
+                if (!doneHWDownload && hwaccel == "videotoolbox" && FFprobeUtils.Configuration.SupportsTransposeVtFilter)
+                {
+                    steps.Add($"transpose_vt=dir={rotateDir}");
+                }
+                else if (!doneHWDownload && hwaccel == "cuda" && FFprobeUtils.Configuration.SupportsTransposeCudaFilter)
+                {
+                    steps.Add($"transpose_cuda=dir={rotateDir}");
+                }
+                else if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
+                {
+                    string filterPart = $"vpp_qsv=transpose={rotateDir}";
+
+                    // If we're also scaling, do that at the same time.
+                    if (ResizeTo is var (w1, h1) && !doneResize)
+                    {
+                        // See comments in resize section for why it's set up this way.
+                        filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
+                        doneResize = true;
+                        resizeHW = true;
+                    }
+
+                    // If we're also doing tv->pc range conversion (and not HDR->SDR conversion), do that at the same time too.
+                    if (ForceConvertToFullRange && !HDRToSDR && !doneRangeConversion)
+                    {
+                        filterPart += ":out_range=full";
+                        doneRangeConversion = true;
+                    }
+
+                    steps.Add(filterPart);
+                }
+                else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsTransposeVulkanFilter)
+                {
+                    steps.Add($"transpose_vulkan=dir={rotateDir}");
+                }
+                else
+                {
+                    // Note: there is no hardware transpose filter for some modes (e.g. amf), so we download and use the software filters.
+                    // Note: the software transpose filter does not support the reversal direction, so half-turns are done with flips instead.
+                    EnsureHWDownload();
+
+                    if (Rotate == 180)
+                    {
+                        steps.Add("vflip");
+                        steps.Add("hflip");
+                    }
+                    else
+                    {
+                        steps.Add($"transpose=dir={rotateDir}");
+                    }
+                }
+
+                doneRotate = true;
             }
 
             if (ResizeTo is var (w2, h2) && !doneResize)

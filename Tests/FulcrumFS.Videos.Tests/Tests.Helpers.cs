@@ -587,6 +587,90 @@ partial class Tests
     public static IEnumerable<object[]> ValidVideosWithVideoStreamsToCheck => field
         ??= ValidVideosToCheck.Where((x) => !VideoFilesWithoutVideoStreams.Contains((string)x[0]));
 
+    // Helper to extract a frame from a video as a player would display it (auto-rotated & de-interlaced), with deterministic (bit-exact) conversion.
+    private async Task ExtractVideoFrame(IAbsoluteFilePath videoFile, IAbsoluteFilePath frameFile, double timestamp)
+    {
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-sws_flags", "accurate_rnd+bitexact",
+                "-ss", timestamp.ToString(CultureInfo.InvariantCulture),
+                "-i", videoFile.PathExport,
+                "-vf", "bwdif=deint=interlaced",
+                "-frames:v", "1",
+                "-y", frameFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+    }
+
+    // Helper to compare two extracted frames, ensuring all pixel color channels are within the given tolerance of each other. Only appropriate for
+    // comparing synthetic content (i.e. solid colors) where codec noise does not throw off exact pixel comparisons.
+    private static void CompareFrameToReference(
+        IAbsoluteFilePath referenceFrameFile, IAbsoluteFilePath actualFrameFile, string frameDescription, double tolerance)
+    {
+        using var referenceFrame = Image.Load<Rgba32>(referenceFrameFile.PathExport);
+        using var actualFrame = Image.Load<Rgba32>(actualFrameFile.PathExport);
+
+        actualFrame.Width.ShouldBe(referenceFrame.Width);
+        actualFrame.Height.ShouldBe(referenceFrame.Height);
+
+        int maxDiff = 0;
+        referenceFrame.ProcessPixelRows(actualFrame, (accessor1, accessor2) =>
+        {
+            for (int y = 0; y < accessor1.Height; y++)
+            {
+                var row1 = accessor1.GetRowSpan(y);
+                var row2 = accessor2.GetRowSpan(y);
+
+                for (int x = 0; x < row1.Length; x++)
+                {
+                    maxDiff = int.Max(maxDiff, int.Abs(row1[x].R - row2[x].R));
+                    maxDiff = int.Max(maxDiff, int.Abs(row1[x].G - row2[x].G));
+                    maxDiff = int.Max(maxDiff, int.Abs(row1[x].B - row2[x].B));
+                }
+            }
+        });
+
+        (maxDiff / 255.0).ShouldBeLessThanOrEqualTo(
+            tolerance,
+            string.Create(CultureInfo.InvariantCulture,
+                $"Expected all pixel color channels of '{frameDescription}' to be within {tolerance:P0} of the reference frame (max difference was {maxDiff}/255)"));
+    }
+
+    // Helper to compare the visual similarity of two extracted frames using SSIM, which is robust against codec noise (unlike exact pixel
+    // comparisons), making it appropriate for comparing real video content. The larger frame is downscaled to the size of the smaller frame if the sizes
+    // differ.
+    private async Task CompareFrameToReferenceSSIM(
+        IAbsoluteFilePath referenceFrameFile, IAbsoluteFilePath actualFrameFile, string frameDescription, double minSimilarity = 0.85)
+    {
+        var referenceFrameInfo = Image.Identify(referenceFrameFile.PathExport);
+        var actualFrameInfo = Image.Identify(actualFrameFile.PathExport);
+
+        int width = int.Min(referenceFrameInfo.Width, actualFrameInfo.Width);
+        int height = int.Min(referenceFrameInfo.Height, actualFrameInfo.Height);
+
+        string scaleFilter = string.Create(
+            CultureInfo.InvariantCulture, $"scale=w={width}:h={height}:force_original_aspect_ratio=disable:flags=accurate_rnd+bitexact+bicubic");
+        string filterGraph = $"[0:v]{scaleFilter}[expected];[1:v]{scaleFilter}[actual];[expected][actual]ssim";
+
+        var (_, error, returnCode) = await RunFFtoolProcess(
+            "ffmpeg",
+            ["-i", referenceFrameFile.PathExport, "-i", actualFrameFile.PathExport, "-filter_complex", filterGraph, "-f", "null", "-"],
+            TestContext.CancellationToken);
+        returnCode.ShouldBe(0);
+
+        int allIndex = error.LastIndexOf("All:", StringComparison.Ordinal);
+        allIndex.ShouldBeGreaterThanOrEqualTo(0, "Expected ffmpeg to report an SSIM score. Output: " + error);
+        var similarityStr = error.AsSpan(allIndex + "All:".Length).TrimStart();
+        similarityStr = similarityStr[..similarityStr.IndexOf(' ')];
+        double similarity = double.Parse(similarityStr, CultureInfo.InvariantCulture);
+
+        similarity.ShouldBeGreaterThanOrEqualTo(
+            minSimilarity,
+            string.Create(CultureInfo.InvariantCulture,
+                $"Expected '{frameDescription}' to have an SSIM similarity of at least {minSimilarity} to the reference frame (actual was {similarity})"));
+    }
+
 #if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_NONE && !CUSTOM_HWACCEL_MODE_DECODEONLY
     [TestInitialize]
     public void SetCaseNameForHWAccelStats()

@@ -662,7 +662,9 @@ partial class Tests
     {
         // This test creates a video that is physically rotated 90 degrees clockwise, but has rotation metadata set to -90 (to display correctly). It then
         // processes it with both preserve (both re-encoding & remuxing) and strip metadata modes to verify that rotation handling works correctly in all
-        // cases.
+        // cases. Re-encoding should bake the rotation into the video frames, while remuxing (including with metadata stripping, since the rotation is
+        // functional metadata) should preserve the original frames and rotation metadata. Comparison frames are extracted from the input & outputs (as a
+        // player would display them) to verify all outputs display the same as the input.
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -674,11 +676,19 @@ partial class Tests
         var outputPreserveMetadataRemuxed = resultsDir.CombineFile("output_preserve_metadata_remuxed.mp4");
         var outputPreserveMetadataReencoded = resultsDir.CombineFile("output_preserve_metadata_reencoded.mp4");
         var outputStripMetadata = resultsDir.CombineFile("output_strip_metadata.mp4");
+        var inputFrameFile = resultsDir.CombineFile("frame_input.png");
+        var reencodedFrameFile = resultsDir.CombineFile("frame_preserve_metadata_reencoded.png");
+        var remuxedFrameFile = resultsDir.CombineFile("frame_preserve_metadata_remuxed.png");
+        var stripMetadataFrameFile = resultsDir.CombineFile("frame_strip_metadata.png");
         tempRotatedInputFile.Delete();
         rotatedInputFile.Delete();
         outputPreserveMetadataRemuxed.Delete();
         outputPreserveMetadataReencoded.Delete();
         outputStripMetadata.Delete();
+        inputFrameFile.Delete();
+        reencodedFrameFile.Delete();
+        remuxedFrameFile.Delete();
+        stripMetadataFrameFile.Delete();
 
         var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
 
@@ -756,6 +766,56 @@ partial class Tests
         var videoPath3 = (await repo.GetAsync(fileId3)).Path;
         videoPath3.Exists.ShouldBeTrue();
         File.Copy(videoPath3.PathExport, outputStripMetadata.PathExport);
+
+        // Validate the dimensions and rotation metadata of the input & outputs:
+        var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", rotatedInputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode0.ShouldBe(0);
+
+        var (probeOutput1, _, probeReturnCode1) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputPreserveMetadataReencoded.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode1.ShouldBe(0);
+
+        var (probeOutput2, _, probeReturnCode2) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputPreserveMetadataRemuxed.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode2.ShouldBe(0);
+
+        var (probeOutput3, _, probeReturnCode3) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputStripMetadata.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode3.ShouldBe(0);
+
+        probeOutput0.Contains("\"width\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"height\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        probeOutput1.Contains("\"width\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"height\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+
+        probeOutput2.Contains("\"width\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"height\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput2.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        probeOutput3.Contains("\"width\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput3.Contains("\"height\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput3.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        // Extract comparison frames & ensure all outputs display the same as the input:
+        await ExtractVideoFrame(rotatedInputFile, inputFrameFile, 0.5);
+        await ExtractVideoFrame(outputPreserveMetadataReencoded, reencodedFrameFile, 0.5);
+        await ExtractVideoFrame(outputPreserveMetadataRemuxed, remuxedFrameFile, 0.5);
+        await ExtractVideoFrame(outputStripMetadata, stripMetadataFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(inputFrameFile, reencodedFrameFile, "frame_preserve_metadata_reencoded.png");
+        await CompareFrameToReferenceSSIM(inputFrameFile, remuxedFrameFile, "frame_preserve_metadata_remuxed.png");
+        await CompareFrameToReferenceSSIM(inputFrameFile, stripMetadataFrameFile, "frame_strip_metadata.png");
     }
 
     [TestMethod]
@@ -773,10 +833,16 @@ partial class Tests
         var rotatedInputFile = resultsDir.CombineFile("input_rotated_with_metadata.mp4");
         var outputPreserveMetadataReencoded = resultsDir.CombineFile("output_preserve_metadata_reencoded.mp4");
         var outputStripMetadata = resultsDir.CombineFile("output_strip_metadata.mp4");
+        var inputFrameFile = resultsDir.CombineFile("frame_input.png");
+        var reencodedFrameFile = resultsDir.CombineFile("frame_preserve_metadata_reencoded.png");
+        var stripMetadataFrameFile = resultsDir.CombineFile("frame_strip_metadata.png");
         tempRotatedInputFile.Delete();
         rotatedInputFile.Delete();
         outputPreserveMetadataReencoded.Delete();
         outputStripMetadata.Delete();
+        inputFrameFile.Delete();
+        reencodedFrameFile.Delete();
+        stripMetadataFrameFile.Delete();
 
         var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
 
@@ -869,6 +935,13 @@ partial class Tests
         probeOutput2.Contains("\"width\": 1280", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput2.Contains("\"height\": 720", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput2.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+
+        // Extract comparison frames & ensure both outputs display the same as the input:
+        await ExtractVideoFrame(rotatedInputFile, inputFrameFile, 0.5);
+        await ExtractVideoFrame(outputPreserveMetadataReencoded, reencodedFrameFile, 0.5);
+        await ExtractVideoFrame(outputStripMetadata, stripMetadataFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(inputFrameFile, reencodedFrameFile, "frame_preserve_metadata_reencoded.png");
+        await CompareFrameToReferenceSSIM(inputFrameFile, stripMetadataFrameFile, "frame_strip_metadata.png");
     }
 
 #if !CI
@@ -1115,36 +1188,6 @@ partial class Tests
             return output;
         }
 
-        // Local helper to compare a frame against the full range reference frame - all pixel color channels should be within 3% of each other:
-        void CompareFrameToReference(IAbsoluteFilePath frameFile, string frameDescription)
-        {
-            using var referenceFrame = Image.Load<Rgba32>(fullRangeFrameFile.PathExport);
-            using var frame = Image.Load<Rgba32>(frameFile.PathExport);
-
-            frame.Width.ShouldBe(referenceFrame.Width);
-            frame.Height.ShouldBe(referenceFrame.Height);
-
-            int maxDiff = 0;
-            referenceFrame.ProcessPixelRows(frame, (accessor1, accessor2) =>
-            {
-                for (int y = 0; y < accessor1.Height; y++)
-                {
-                    var row1 = accessor1.GetRowSpan(y);
-                    var row2 = accessor2.GetRowSpan(y);
-
-                    for (int x = 0; x < row1.Length; x++)
-                    {
-                        maxDiff = int.Max(maxDiff, int.Abs(row1[x].R - row2[x].R));
-                        maxDiff = int.Max(maxDiff, int.Abs(row1[x].G - row2[x].G));
-                        maxDiff = int.Max(maxDiff, int.Abs(row1[x].B - row2[x].B));
-                    }
-                }
-            });
-
-            (maxDiff / 255.0).ShouldBeLessThanOrEqualTo(
-                0.03, $"Expected all pixel color channels of '{frameDescription}' to be within 3% of the original (max difference was {maxDiff}/255)");
-        }
-
         // Create a 2 second solid #95eb14 video in full (pc) range:
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
@@ -1248,12 +1291,7 @@ partial class Tests
             "\"width\": 640", StringComparison.Ordinal).ShouldBeTrue("Expected oversized limited range input file to be 640 wide");
 
         // Extract the reference frame from the middle of the original full range video (also kept for manual inspection):
-        // Note: ffmpeg converts to RGB for the PNG using each file's tagged color range, so the comparisons below validate the actual resulting colors.
-        // Note: bit-exact scaling/conversion is used for all the frame extractions so the comparison frames are deterministic.
-        await RunFFtoolProcessWithErrorHandling(
-            "ffmpeg",
-            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", fullRangeFile.PathExport, "-frames:v", "1", "-y", fullRangeFrameFile.PathExport],
-            TestContext.CancellationToken);
+        await ExtractVideoFrame(fullRangeFile, fullRangeFrameFile, 1.0);
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -1281,12 +1319,9 @@ partial class Tests
         processedProbeOutput.Contains(
             "\"color_range\": \"pc\"", StringComparison.Ordinal).ShouldBeTrue("Expected processed file to be converted to pc range");
 
-        await RunFFtoolProcessWithErrorHandling(
-            "ffmpeg",
-            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", processedFile.PathExport, "-frames:v", "1", "-y", processedFrameFile.PathExport],
-            TestContext.CancellationToken);
+        await ExtractVideoFrame(processedFile, processedFrameFile, 1.0);
 
-        CompareFrameToReference(processedFrameFile, "frame_processed.png");
+        CompareFrameToReference(fullRangeFrameFile, processedFrameFile, "frame_processed.png", tolerance: 0.03);
 
         // Case 2: process the 10-bit limited range file with a maximum of 8 bits per channel, and verify it gets converted to an 8-bit full (pc) range
         // result:
@@ -1316,12 +1351,9 @@ partial class Tests
         processed8BitProbeOutput.Contains(
             "\"pix_fmt\": \"yuvj420p\"", StringComparison.Ordinal).ShouldBeTrue("Expected 8-bit processed file to be converted to 8-bit");
 
-        await RunFFtoolProcessWithErrorHandling(
-            "ffmpeg",
-            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", processed8BitFile.PathExport, "-frames:v", "1", "-y", processed8BitFrameFile.PathExport],
-            TestContext.CancellationToken);
+        await ExtractVideoFrame(processed8BitFile, processed8BitFrameFile, 1.0);
 
-        CompareFrameToReference(processed8BitFrameFile, "frame_processed_8bit.png");
+        CompareFrameToReference(fullRangeFrameFile, processed8BitFrameFile, "frame_processed_8bit.png", tolerance: 0.03);
 
         // Case 3: process the interlaced limited range file with forced progressive frames, and verify it gets converted to a de-interlaced full (pc) range
         // result:
@@ -1351,18 +1383,9 @@ partial class Tests
         processedDeinterlacedProbeOutput.Contains(
             "\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue("Expected de-interlaced processed file to be progressive");
 
-        await RunFFtoolProcessWithErrorHandling(
-            "ffmpeg",
-            [
-                "-sws_flags", "accurate_rnd+bitexact",
-                "-ss", "1",
-                "-i", processedDeinterlacedFile.PathExport,
-                "-frames:v", "1",
-                "-y", processedDeinterlacedFrameFile.PathExport,
-            ],
-            TestContext.CancellationToken);
+        await ExtractVideoFrame(processedDeinterlacedFile, processedDeinterlacedFrameFile, 1.0);
 
-        CompareFrameToReference(processedDeinterlacedFrameFile, "frame_processed_deinterlaced.png");
+        CompareFrameToReference(fullRangeFrameFile, processedDeinterlacedFrameFile, "frame_processed_deinterlaced.png", tolerance: 0.03);
 
         // Case 4: process the oversized limited range file with resizing, and verify it gets converted to a full (pc) range result scaled down to the
         // reference size:
@@ -1394,12 +1417,9 @@ partial class Tests
         processedScaledProbeOutput.Contains(
             "\"height\": 240", StringComparison.Ordinal).ShouldBeTrue("Expected scaled processed file to be 240 tall");
 
-        await RunFFtoolProcessWithErrorHandling(
-            "ffmpeg",
-            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", processedScaledFile.PathExport, "-frames:v", "1", "-y", processedScaledFrameFile.PathExport],
-            TestContext.CancellationToken);
+        await ExtractVideoFrame(processedScaledFile, processedScaledFrameFile, 1.0);
 
-        CompareFrameToReference(processedScaledFrameFile, "frame_processed_scaled.png");
+        CompareFrameToReference(fullRangeFrameFile, processedScaledFrameFile, "frame_processed_scaled.png", tolerance: 0.03);
 
         // Case 5: extract a video frame from the limited range file using VideoFrameExtractionProcessor, and verify its colors are correct too:
 
@@ -1419,7 +1439,7 @@ partial class Tests
 
         File.Copy(extractedImagePath.PathExport, extractedFrameFile.PathExport);
 
-        CompareFrameToReference(extractedFrameFile, "frame_extracted_limited_range.png");
+        CompareFrameToReference(fullRangeFrameFile, extractedFrameFile, "frame_extracted_limited_range.png", tolerance: 0.03);
     }
 
     [TestMethod]
@@ -1544,5 +1564,292 @@ partial class Tests
         probeOutput2.Contains("\"sample_aspect_ratio\": \"4:5\"", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput2.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput2.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
+    }
+
+    [TestMethod]
+    [DataRow(90)]
+    [DataRow(180)]
+    [DataRow(-90)]
+    public async Task TestRotationDegreesHandling(int displayRotation)
+    {
+        // This test creates a video that is physically rotated by the opposite of the given display rotation, with rotation metadata set to the given display
+        // rotation so that it displays correctly when played. It then re-encodes it through the library to verify that the rotation gets baked into the video
+        // frames correctly for every rotation amount, comparing an extracted frame against one from the input (as a player would display them).
+
+        using var repoCtx = GetRepo(out var repo);
+
+        var resultsDir = _appDir.CombineDirectory("TestRotationDegreesResults");
+        resultsDir.Create();
+
+        var tempRotatedInputFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"temp_input_rotated_{displayRotation}.mp4"));
+        var rotatedInputFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"input_rotated_{displayRotation}.mp4"));
+        var outputFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"output_{displayRotation}.mp4"));
+        var inputFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_input_{displayRotation}.png"));
+        var outputFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_output_{displayRotation}.png"));
+        tempRotatedInputFile.Delete();
+        rotatedInputFile.Delete();
+        outputFile.Delete();
+        inputFrameFile.Delete();
+        outputFrameFile.Delete();
+
+        var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
+
+        // Create a video that is physically rotated by the opposite of the display rotation, with rotation metadata set to the display rotation so that it
+        // displays correctly when played.
+        string physicalRotationFilter = displayRotation switch
+        {
+            90 => "transpose=1",
+            -90 => "transpose=2",
+            _ => "vflip,hflip",
+        };
+        (int inputWidth, int inputHeight) = displayRotation is 90 or -90 ? (1080, 1920) : (1920, 1080);
+
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", physicalRotationFilter,
+                "-c:v", "libx264",
+                "-c:a", "copy",
+                "-y", tempRotatedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-display_rotation", displayRotation.ToString(CultureInfo.InvariantCulture),
+                "-i", tempRotatedInputFile.PathExport,
+                "-c", "copy",
+                "-y", rotatedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        tempRotatedInputFile.Delete();
+
+        // Process with forced re-encoding:
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            VideoReencodeMode = StreamReencodeMode.Always,
+        }).ToPipeline();
+
+        await using var stream = rotatedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn = await repo.BeginTransactionAsync();
+        var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath = (await repo.GetAsync(fileId)).Path;
+        videoPath.Exists.ShouldBeTrue();
+        File.Copy(videoPath.PathExport, outputFile.PathExport);
+
+        // Validate the dimensions and rotation metadata of the input & output:
+        var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", rotatedInputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode0.ShouldBe(0);
+
+        var (probeOutput1, _, probeReturnCode1) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode1.ShouldBe(0);
+
+        probeOutput0.Contains(string.Create(CultureInfo.InvariantCulture, $"\"width\": {inputWidth}"), StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains(string.Create(CultureInfo.InvariantCulture, $"\"height\": {inputHeight}"), StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        probeOutput1.Contains("\"width\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"height\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+
+        // Extract comparison frames & ensure the output displays the same as the input:
+        await ExtractVideoFrame(rotatedInputFile, inputFrameFile, 0.5);
+        await ExtractVideoFrame(outputFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(
+            inputFrameFile, outputFrameFile, string.Create(CultureInfo.InvariantCulture, $"frame_output_{displayRotation}.png"));
+    }
+
+    [TestMethod]
+    public async Task TestRotationDeinterlacingHandling()
+    {
+        // This test creates an interlaced (tff) video that is physically rotated 90 degrees clockwise, but has rotation metadata set to -90 (to display
+        // correctly). It then processes it through the library with ForceProgressiveFrames = true and forced re-encoding to verify that de-interlacing and
+        // rotation are handled correctly together, comparing an extracted frame against one from the original progressive un-rotated video (as a player would
+        // display them).
+
+        using var repoCtx = GetRepo(out var repo);
+
+        var resultsDir = _appDir.CombineDirectory("TestRotationDeinterlacingResults");
+        resultsDir.Create();
+
+        var tempRotatedInputFile = resultsDir.CombineFile("temp_input_rotated_interlaced.mp4");
+        var rotatedInputFile = resultsDir.CombineFile("input_rotated_interlaced.mp4");
+        var outputFile = resultsDir.CombineFile("output_deinterlaced.mp4");
+        var originalFrameFile = resultsDir.CombineFile("frame_original.png");
+        var outputFrameFile = resultsDir.CombineFile("frame_output.png");
+        tempRotatedInputFile.Delete();
+        rotatedInputFile.Delete();
+        outputFile.Delete();
+        originalFrameFile.Delete();
+        outputFrameFile.Delete();
+
+        var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
+
+        // Create an interlaced video that is physically rotated 90 degrees clockwise, with rotation metadata set to -90 so that it displays correctly when
+        // played. The interlace filter converts progressive video to interlaced (halving the frame rate from 60fps to 30fps).
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", "transpose=1,interlace=scan=tff:lowpass=complex",
+                "-c:v", "libx264",
+                "-x264-params", "tff=1",
+                "-c:a", "copy",
+                "-y", tempRotatedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-display_rotation", "90",
+                "-i", tempRotatedInputFile.PathExport,
+                "-c", "copy",
+                "-y", rotatedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        tempRotatedInputFile.Delete();
+
+        // Process with forced progressive frames and re-encoding:
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ForceProgressiveFrames = true,
+        }).ToPipeline();
+
+        await using var stream = rotatedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn = await repo.BeginTransactionAsync();
+        var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath = (await repo.GetAsync(fileId)).Path;
+        videoPath.Exists.ShouldBeTrue();
+        File.Copy(videoPath.PathExport, outputFile.PathExport);
+
+        // Validate the dimensions, rotation metadata, interlacing, and frame rate of the input & output:
+        var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", rotatedInputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode0.ShouldBe(0);
+
+        var (probeOutput1, _, probeReturnCode1) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode1.ShouldBe(0);
+
+        probeOutput0.Contains("\"width\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"height\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"field_order\": \"tt\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"r_frame_rate\": \"30/1\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        probeOutput1.Contains("\"width\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"height\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+
+        // Extract comparison frames & ensure the output displays the same as the original:
+        // Note: the original file is used as the reference (rather than the interlaced input) since de-interlacing an extracted frame of the rotated input
+        // would operate on the wrong field orientation after the extraction auto-rotates it.
+        // Note: a lower similarity threshold is used since the interlacing lowpass and de-interlacing lose some detail at sharp edges (a wrong orientation
+        // produces similarity far below it).
+        await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
+        await ExtractVideoFrame(outputFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, "frame_output.png", minSimilarity: 0.75);
+    }
+
+    [TestMethod]
+    public async Task TestHEVCMinimumSizeUpscalingHandling()
+    {
+        // This test creates a tiny 14x8 video (below the 16 pixel minimum dimension that HEVC encoding requires), then re-encodes it to HEVC through the
+        // library to verify that it gets upscaled to meet the minimum dimension requirement (28x16, preserving the aspect ratio) and still looks correct,
+        // comparing an extracted frame against one from the input (as a player would display them).
+
+        using var repoCtx = GetRepo(out var repo);
+
+        var resultsDir = _appDir.CombineDirectory("TestHEVCMinimumSizeUpscalingResults");
+        resultsDir.Create();
+
+        var smallInputFile = resultsDir.CombineFile("input_small.mp4");
+        var outputFile = resultsDir.CombineFile("output_upscaled.mp4");
+        var inputFrameFile = resultsDir.CombineFile("frame_input.png");
+        var outputFrameFile = resultsDir.CombineFile("frame_output.png");
+        smallInputFile.Delete();
+        outputFile.Delete();
+        inputFrameFile.Delete();
+        outputFrameFile.Delete();
+
+        var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
+
+        // Create a tiny version of the original file that is below the HEVC minimum dimension:
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", "scale=w=14:h=8:force_original_aspect_ratio=disable,setsar=1",
+                "-c:v", "libx264",
+                "-c:a", "copy",
+                "-y", smallInputFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
+        // Process with forced re-encoding to HEVC:
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.HEVC],
+            VideoReencodeMode = StreamReencodeMode.Always,
+        }).ToPipeline();
+
+        await using var stream = smallInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn = await repo.BeginTransactionAsync();
+        var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath = (await repo.GetAsync(fileId)).Path;
+        videoPath.Exists.ShouldBeTrue();
+        File.Copy(videoPath.PathExport, outputFile.PathExport);
+
+        // Validate the dimensions of the input & output:
+        var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", smallInputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode0.ShouldBe(0);
+
+        var (probeOutput1, _, probeReturnCode1) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode1.ShouldBe(0);
+
+        probeOutput0.Contains("\"width\": 14", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"height\": 8", StringComparison.Ordinal).ShouldBeTrue();
+
+        probeOutput1.Contains("\"width\": 28", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"height\": 16", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"codec_name\": \"hevc\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        // Extract comparison frames & ensure the output displays the same as the input:
+        await ExtractVideoFrame(smallInputFile, inputFrameFile, 0.5);
+        await ExtractVideoFrame(outputFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(inputFrameFile, outputFrameFile, "frame_output.png");
     }
 }
