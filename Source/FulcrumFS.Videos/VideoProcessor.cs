@@ -1678,7 +1678,8 @@ public sealed class VideoProcessor : FileProcessor
                         canUseHardwareAcceleration = false;
 
                     // If we're actually re-encoding with a critical filter, then mark our hwacceleration as potentially beneficial
-                    if (filterOverride.Critical)
+                    // Only include if input resolution is at least 64px - many hw accelerators are unlikely to even support below this kind of size.
+                    if (filterOverride.Critical && (width >= 64 || height >= 64))
                         worthUsingHardwareAcceleratedFilters = true;
 
                     // If the display matrix is anything other than a standard quarter-turn rotation matrix (e.g. it includes a flip / mirror), don't use
