@@ -125,7 +125,8 @@ internal static class FFprobeUtils
         string? FieldOrder,
         int BitsPerSample,
         bool AlphaMode,
-        int Rotation)
+        int Rotation,
+        bool HasNonStandardDisplayMatrix)
     : StreamInfo;
 
     public sealed record AudioStreamInfo(
@@ -192,6 +193,14 @@ internal static class FFprobeUtils
                 (int fpsNum, int fpsDen) = ParseFraction(s.RFrameRate, '/', defaultIfMissing: (0, 0));
                 (int sarNum, int sarDen) = ParseFraction(s.SampleAspectRatio, ':', defaultIfMissing: (1, 1));
 
+                var displayMatrix = s.SideDataList?.FirstOrDefault((sd) => sd?.SideDataType == "Display Matrix");
+                int rotation = (displayMatrix?.Rotation ?? 0) % 360;
+
+                if (rotation <= -180)
+                    rotation += 360;
+                else if (rotation > 180)
+                    rotation -= 360;
+
                 return new VideoStreamInfo(
                     s.CodecName!,
                     s.CodecTagString!,
@@ -217,7 +226,8 @@ internal static class FFprobeUtils
                     s.FieldOrder,
                     s.BitsPerRawSample ?? -1,
                     t?.IsAlphaMode ?? false,
-                    s.SideDataList?.FirstOrDefault((sd) => sd?.SideDataType == "Display Matrix")?.Rotation ?? 0);
+                    rotation,
+                    HasNonStandardDisplayMatrix(displayMatrix, rotation));
 
             case "audio":
                 return new AudioStreamInfo(s.CodecName!, s.Profile, language, s.Duration, s.Channels ?? -1, s.SampleRate, s.ChannelLayout);
@@ -252,6 +262,49 @@ internal static class FFprobeUtils
         }
 
         return (-1, -1);
+    }
+
+    private static bool HasNonStandardDisplayMatrix(FFprobeSideData? displayMatrix, int rotation)
+    {
+        if (displayMatrix is null)
+            return false;
+
+        // The display matrix string is formatted as rows of '0000000N:' labels (which fail to parse and are skipped) followed by three values each, giving
+        // [a, b, u, c, d, v, x, y, w]. The rotation/scale values are 16.16 fixed point (65536 = 1) and w is 2.30 fixed point (1073741824 = 1).
+
+        Span<long> values = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+        int idx = 0;
+
+        foreach (string token in (displayMatrix.DisplayMatrix ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (long.TryParse(token, CultureInfo.InvariantCulture, out long value))
+            {
+                if (idx >= 9)
+                    return true;
+
+                values[idx++] = value;
+            }
+        }
+
+        if (idx != 9)
+            return true;
+
+        // Zero out the translation entries ([x, y]) since they are legitimately used in combination with standard rotations:
+        values[6] = 0;
+        values[7] = 0;
+
+        // Compare against the standard matrix that ffmpeg writes for the reported rotation - anything else (e.g. flips / mirroring, scaling, or
+        // non-quarter-turn rotations) is non-standard.
+        ReadOnlySpan<long> expected = rotation switch
+        {
+            0 => [65536, 0, 0, 0, 65536, 0, 0, 0, 1073741824],
+            90 => [0, -65536, 0, 65536, 0, 0, 0, 0, 1073741824],
+            180 => [-65536, 0, 0, 0, -65536, 0, 0, 0, 1073741824],
+            -90 => [0, 65536, 0, -65536, 0, 0, 0, 0, 1073741824],
+            _ => default,
+        };
+
+        return !values.SequenceEqual(expected);
     }
 
     public struct ConfigurationInfo
@@ -714,7 +767,7 @@ internal sealed record FFprobeTagsData(string? Language, string? Title, string? 
     public bool IsAlphaMode => AlphaMode == "1";
 }
 
-internal sealed record FFprobeSideData(string? SideDataType, int? Rotation);
+internal sealed record FFprobeSideData(string? SideDataType, int? Rotation, [property: JsonPropertyName("displaymatrix")] string? DisplayMatrix);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,

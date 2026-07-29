@@ -1852,4 +1852,101 @@ partial class Tests
         await ExtractVideoFrame(outputFile, outputFrameFile, 0.5);
         await CompareFrameToReferenceSSIM(inputFrameFile, outputFrameFile, "frame_output.png");
     }
+
+    [TestMethod]
+    [DataRow("hflip")]
+    [DataRow("vflip")]
+    public async Task TestFlipMetadataHandling(string flipMode)
+    {
+        // This test creates a video that is physically flipped, with flip metadata set in the display matrix (via -display_hflip / -display_vflip) so that it
+        // displays correctly when played. It then re-encodes it through the library to verify that the flip gets baked into the video frames correctly (which
+        // also exercises the flip detection that disables hardware acceleration, since ffmpeg only auto-applies flips when decoding in software), comparing an
+        // extracted frame against one from the input (as a player would display them).
+        // Note: flips cannot be detected from the rotation that ffprobe reports (hflip reports -180 and vflip reports 0), only from the display matrix itself.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        var resultsDir = _appDir.CombineDirectory("TestFlipMetadataResults");
+        resultsDir.Create();
+
+        var tempFlippedInputFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"temp_input_flipped_{flipMode}.mp4"));
+        var flippedInputFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"input_flipped_{flipMode}.mp4"));
+        var outputFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"output_{flipMode}.mp4"));
+        var inputFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_input_{flipMode}.png"));
+        var outputFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_output_{flipMode}.png"));
+        tempFlippedInputFile.Delete();
+        flippedInputFile.Delete();
+        outputFile.Delete();
+        inputFrameFile.Delete();
+        outputFrameFile.Delete();
+
+        var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
+
+        // Create a video that is physically flipped, with flip metadata set in the display matrix so that it displays correctly when played (flips are
+        // self-inverse).
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", flipMode,
+                "-c:v", "libx264",
+                "-c:a", "copy",
+                "-y", tempFlippedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                $"-display_{flipMode}",
+                "-i", tempFlippedInputFile.PathExport,
+                "-c", "copy",
+                "-y", flippedInputFile.PathExport
+            ],
+            TestContext.CancellationToken);
+        tempFlippedInputFile.Delete();
+
+        // Process with forced re-encoding:
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            VideoReencodeMode = StreamReencodeMode.Always,
+        }).ToPipeline();
+
+        await using var stream = flippedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn = await repo.BeginTransactionAsync();
+        var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath = (await repo.GetAsync(fileId)).Path;
+        videoPath.Exists.ShouldBeTrue();
+        File.Copy(videoPath.PathExport, outputFile.PathExport);
+
+        // Validate the dimensions and flip metadata of the input & output:
+        var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", flippedInputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode0.ShouldBe(0);
+
+        var (probeOutput1, _, probeReturnCode1) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputFile.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode1.ShouldBe(0);
+
+        probeOutput0.Contains("\"width\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"height\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput0.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        probeOutput1.Contains("\"width\": 1920", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"height\": 1080", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput1.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+
+        // Extract comparison frames & ensure the output displays the same as the input:
+        await ExtractVideoFrame(flippedInputFile, inputFrameFile, 0.5);
+        await ExtractVideoFrame(outputFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(
+            inputFrameFile, outputFrameFile, string.Create(CultureInfo.InvariantCulture, $"frame_output_{flipMode}.png"));
+    }
 }

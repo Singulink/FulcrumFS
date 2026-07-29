@@ -32,6 +32,7 @@ Currently the following sets of cases test the following functionality of our ff
 - Invalid (only when validating) file: 175
 - Misc. sizes for unit testing: 176-187, 197-203
 - Misc. files for SelectSmallest unit testing: 188-195
+- Flipped videos: 204-205
 
 The following files are also explicitly used for tests in `Tests.cs`: 1-21, 30-54, 57, 60, 67-82, 95, 100-103, 111, 114, 133-136, 143, 158-164, 166-200
 
@@ -239,3 +240,5 @@ Commands to generate the synthetic videos:
 201. `ffmpeg -i video1.mp4 -filter:v "fps=fps=3,scale=w=16384:h=8704:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video201.mp4`
 202. `ffmpeg -i video1.mp4 -filter:v "fps=fps=3,scale=w=16382:h=8706:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video202.mp4`
 203. `ffmpeg -i video1.mp4 -filter:v "fps=fps=3,scale=w=16384:h=8706:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video203.mp4`
+204. `ffmpeg -display_vflip -i video1.mp4 -c copy -y video204.mp4`
+205. `ffmpeg -display_hflip -i video1.mp4 -c copy -y video205.mp4`

@@ -1680,6 +1680,12 @@ public sealed class VideoProcessor : FileProcessor
                     // If we're actually re-encoding with a critical filter, then mark our hwacceleration as potentially beneficial
                     if (filterOverride.Critical)
                         worthUsingHardwareAcceleratedFilters = true;
+
+                    // If the display matrix is anything other than a standard quarter-turn rotation matrix (e.g. it includes a flip / mirror), don't use
+                    // hardware acceleration - ffmpeg only auto-applies these transformations when decoding in software, and the manual rotation handling for
+                    // the hardware accelerated filter paths only covers standard rotations. These inputs are also very uncommon.
+                    if (videoStream.HasNonStandardDisplayMatrix)
+                        canUseHardwareAcceleration = false;
                 }
 
                 // Set up codec to use:
