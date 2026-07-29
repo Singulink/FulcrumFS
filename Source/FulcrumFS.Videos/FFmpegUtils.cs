@@ -190,7 +190,6 @@ internal static class FFmpegUtils
         public bool HDRToSDR { get; set; }
         public string? PixelFormat { get; set; }
         public bool Deinterlace { get; set; }
-        public int Rotate { get; set; } // 0 - none, 90 - clockwise, 180 - reversal, 270 - counter-clockwise
         public int MakePixelsSquareMode { get; set; } // 0 - keep 1:1, 1 - ignore, 2 - currently wider, 3 - currently taller
         protected override string CommandName => "filter";
         public bool AssumePotentialAlphaChannelForHDRToSDR { get; set; }
@@ -198,6 +197,7 @@ internal static class FFmpegUtils
         public bool Is10BitForHW { get; set; }
         public string? PixelFormatAfterHWDownload { get; set; }
         public string? SarAfterHWResize { get; set; }
+        public int RotateForHWAccel { get; set; } // 0 - none, 90 - clockwise, 180 - reversal, 270 - counter-clockwise
 
         protected override string GetCommandArgument(string? hwaccel)
         {
@@ -217,8 +217,8 @@ internal static class FFmpegUtils
 
             // Note: rotation only needs to be applied manually when hardware accelerated decoding is used, since ffmpeg skips its automatic rotation for
             // hardware frames (or fails outright on some platforms) - software decoding applies it automatically.
-            bool doneRotate = hwaccel is null || Rotate == 0;
-            string rotateDir = Rotate switch
+            bool doneRotate = hwaccel is null || RotateForHWAccel == 0;
+            string rotateDir = RotateForHWAccel switch
             {
                 0 => "<error>",
                 90 => "clock",
@@ -268,7 +268,11 @@ internal static class FFmpegUtils
                     // If we're also scaling, do that at the same time.
                     if (ResizeTo is var (w1, h1) && !doneResize)
                     {
-                        // See comments in resize section for why it's set up this way.
+                        // See comments in resize/rotate section for why it's set up this way.
+
+                        if (RotateForHWAccel is 90 or 270)
+                            (w1, h1) = (h1, w1);
+
                         filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
                         doneResize = true;
                         resizeHW = true;
@@ -320,6 +324,11 @@ internal static class FFmpegUtils
                     if (ResizeTo is var (w1, h1) && !doneResize)
                     {
                         // See comments in resize section for why it's set up this way.
+
+                        // vpp_qsv does scaling and then rotating, so if we're rotating & scaling, we want to swap our dimensions for scaling
+                        if (RotateForHWAccel is 90 or 270)
+                            (w1, h1) = (h1, w1);
+
                         filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
                         doneResize = true;
                         resizeHW = true;
@@ -344,7 +353,7 @@ internal static class FFmpegUtils
                     // Note: the software transpose filter does not support the reversal direction, so half-turns are done with flips instead.
                     EnsureHWDownload();
 
-                    if (Rotate == 180)
+                    if (RotateForHWAccel == 180)
                     {
                         steps.Add("vflip");
                         steps.Add("hflip");

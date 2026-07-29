@@ -1297,11 +1297,11 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Provide the desired rotation to the filter (only applied when hardware accelerated decoding is used - see PerStreamFilterOverride):
-                filterOverride.Rotate = videoStream.Rotation switch
+                filterOverride.RotateForHWAccel = videoStream.Rotation switch
                 {
                     -90 => 90,
                     90 => 270,
-                    180 or -180 => 180,
+                    180 => 180,
                     _ => 0,
                 };
 
