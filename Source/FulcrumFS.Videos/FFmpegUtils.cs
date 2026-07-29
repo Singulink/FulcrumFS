@@ -402,16 +402,7 @@ internal static class FFmpegUtils
                 else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)
                 {
                     // Note: vulkan does not allow us to specify using bicubic, so we use high quality bilinear instead.
-                    string filterPart = string.Create(CultureInfo.InvariantCulture, $"scale_vulkan=w={w2}:h={h2}:scaler=bilinear:debayer=bilinear_hq");
-
-                    // If we're also doing tv->pc range conversion (and not HDR->SDR conversion), do that at the same time.
-                    if (ForceConvertToFullRange && !HDRToSDR && !doneRangeConversion)
-                    {
-                        filterPart += $":out_range=full:format={(Is10BitForHW ? "p010le" : "nv12")}";
-                        doneRangeConversion = true;
-                    }
-
-                    steps.Add(filterPart);
+                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_vulkan=w={w2}:h={h2}:scaler=bilinear:debayer=bilinear_hq"));
                     resizeHW = true;
                 }
                 else
@@ -447,11 +438,6 @@ internal static class FFmpegUtils
                 if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
                 {
                     steps.Add("vpp_qsv=out_range=full");
-                }
-                else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)
-                {
-                    // Note: vulkan can only do out_range if we also set the pixel format
-                    steps.Add($"scale_vulkan=out_range=full:format={(Is10BitForHW ? "p010le" : "nv12")}");
                 }
                 else
                 {
