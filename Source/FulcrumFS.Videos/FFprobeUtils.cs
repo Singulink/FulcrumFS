@@ -589,7 +589,7 @@ internal static class FFprobeUtils
             }
 
             // Special handling for forced hardware acceleration mode (used for testing):
-#elif !CUSTOM_HWACCEL_MODE_NONE
+#elif !CUSTOM_HWACCEL_MODE_NONE && !CUSTOM_HWACCEL_MODE_DECODEONLY
 #if CUSTOM_HWACCEL_MODE_VIDEOTOOLBOX
             string mode = "videotoolbox";
             _configInfo.SupportsVideoToolboxHWAccel = true;

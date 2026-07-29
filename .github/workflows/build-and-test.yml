@@ -53,7 +53,7 @@ jobs:
     - name: Set hwaccel modes
       if: ${{ matrix.run-mode == 'hwaccel' }}
       shell: bash
-      run: echo "HWACCEL_MODES=${{ matrix.os == 'windows-latest' && 'none qsv amf d3d12va vulkan' || matrix.os == 'ubuntu-latest' && 'none qsv amf vulkan' || 'none videotoolbox vulkan' }}" >> "$GITHUB_ENV"
+      run: echo "HWACCEL_MODES=${{ matrix.os == 'windows-latest' && 'none decodeonly qsv amf d3d12va vulkan' || matrix.os == 'ubuntu-latest' && 'none decodeonly qsv amf vulkan' || 'none decodeonly videotoolbox vulkan' }}" >> "$GITHUB_ENV"
     - name: Checkout
       uses: actions/checkout@v6
     - name: Setup .NET
@@ -125,7 +125,7 @@ jobs:
           export HWACCEL_MODE="$mode"
           dotnet build FulcrumFS.slnx --configuration Release --no-restore
           dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
-          if [[ "$mode" == "none" ]]; then
+          if [[ "$mode" == "none" || "$mode" == "decodeonly" ]]; then
             echo "::endgroup::"
             continue
           fi

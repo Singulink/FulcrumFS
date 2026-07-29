@@ -9,6 +9,7 @@
     <!-- Handling for special custom hwaccel config mode -->
     <DefineConstants Condition=" '$(HWACCEL_MODE)' != '' ">$(DefineConstants);CUSTOM_HWACCEL_MODE</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'none' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_NONE</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'decodeonly' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_DECODEONLY</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

@@ -27,8 +27,9 @@ partial class Tests
 
     // Note: we use 'ForceValidateAllStreams = false' for most tests in this file to reduce test time.
     // Note: this is only done in Release mode, so that Debug tests still run validation logic on all streams for better coverage.
-    // Note: we also use true in none hwaccel mode, so we can compare that behavior in CI to the default mode (opportunistic).
-#if DEBUG || CUSTOM_HWACCEL_MODE_NONE
+    // Note: we also use true in none & decodeonly hwaccel modes, so we can compare that behavior in CI to the default mode (opportunistic), and so the two
+    // modes can be compared to each other.
+#if DEBUG || CUSTOM_HWACCEL_MODE_NONE || CUSTOM_HWACCEL_MODE_DECODEONLY
     public const bool DefaultForceValidateAllStreams = true;
 #else
     public const bool DefaultForceValidateAllStreams = false;
@@ -586,7 +587,7 @@ partial class Tests
     public static IEnumerable<object[]> ValidVideosWithVideoStreamsToCheck => field
         ??= ValidVideosToCheck.Where((x) => !VideoFilesWithoutVideoStreams.Contains((string)x[0]));
 
-#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_NONE
+#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_NONE && !CUSTOM_HWACCEL_MODE_DECODEONLY
     [TestInitialize]
     public void SetCaseNameForHWAccelStats()
     {
