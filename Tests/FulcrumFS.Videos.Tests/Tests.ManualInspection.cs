@@ -29,6 +29,7 @@ partial class Tests
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
             [
+                "-sws_flags", "accurate_rnd+bitexact",
                 "-ss", timeOffset > 0 ? timeOffset.ToString(CultureInfo.InvariantCulture) : "0",
                 "-i", originalFile.PathExport,
                 "-ss", timeOffset < 0 ? (-timeOffset).ToString(CultureInfo.InvariantCulture) : "0",
@@ -242,6 +243,7 @@ partial class Tests
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
             [
+                "-sws_flags", "accurate_rnd+bitexact",
                 "-t", duration.ToString(CultureInfo.InvariantCulture),
                 "-i", processedFile.PathExport,
                 "-filter_complex", "[0:a]showspectrumpic=s=3840x2160",
@@ -253,6 +255,7 @@ partial class Tests
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
             [
+                "-sws_flags", "accurate_rnd+bitexact",
                 "-i", spectrogramFile.PathExport,
                 "-t", duration.ToString(CultureInfo.InvariantCulture),
                 "-i", originalFile.PathExport,
@@ -517,6 +520,8 @@ partial class Tests
         File.Copy(videoPath.PathExport, resultFile.PathExport);
 
         // If extension was .mkv, also make a copy remuxed back to mkv to validate in case of weird mp4 dvd_subtitle playback issues:
+        // Note: '-map 0' ensures all streams are kept (default stream selection only picks one stream per type, losing extra subtitle streams), and
+        // '-bitexact' keeps the remux deterministic (Matroska otherwise writes a random SegmentUID and the writing date).
         if (makeMkvCopy)
         {
             var resultFileMkv = _appDir.CombineDirectory("TestSubtitleReencodeResults").CombineFile(
@@ -524,7 +529,7 @@ partial class Tests
             resultFileMkv.Delete();
             await RunFFtoolProcessWithErrorHandling(
                 "ffmpeg",
-                ["-i", videoPath.PathExport, "-c", "copy", "-y", resultFileMkv.PathExport],
+                ["-i", videoPath.PathExport, "-map", "0", "-c", "copy", "-bitexact", "-y", resultFileMkv.PathExport],
                 TestContext.CancellationToken);
         }
 
@@ -1244,9 +1249,10 @@ partial class Tests
 
         // Extract the reference frame from the middle of the original full range video (also kept for manual inspection):
         // Note: ffmpeg converts to RGB for the PNG using each file's tagged color range, so the comparisons below validate the actual resulting colors.
+        // Note: bit-exact scaling/conversion is used for all the frame extractions so the comparison frames are deterministic.
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
-            ["-ss", "1", "-i", fullRangeFile.PathExport, "-frames:v", "1", "-y", fullRangeFrameFile.PathExport],
+            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", fullRangeFile.PathExport, "-frames:v", "1", "-y", fullRangeFrameFile.PathExport],
             TestContext.CancellationToken);
 
         using var repoCtx = GetRepo(out var repo);
@@ -1277,7 +1283,7 @@ partial class Tests
 
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
-            ["-ss", "1", "-i", processedFile.PathExport, "-frames:v", "1", "-y", processedFrameFile.PathExport],
+            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", processedFile.PathExport, "-frames:v", "1", "-y", processedFrameFile.PathExport],
             TestContext.CancellationToken);
 
         CompareFrameToReference(processedFrameFile, "frame_processed.png");
@@ -1312,7 +1318,7 @@ partial class Tests
 
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
-            ["-ss", "1", "-i", processed8BitFile.PathExport, "-frames:v", "1", "-y", processed8BitFrameFile.PathExport],
+            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", processed8BitFile.PathExport, "-frames:v", "1", "-y", processed8BitFrameFile.PathExport],
             TestContext.CancellationToken);
 
         CompareFrameToReference(processed8BitFrameFile, "frame_processed_8bit.png");
@@ -1347,7 +1353,13 @@ partial class Tests
 
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
-            ["-ss", "1", "-i", processedDeinterlacedFile.PathExport, "-frames:v", "1", "-y", processedDeinterlacedFrameFile.PathExport],
+            [
+                "-sws_flags", "accurate_rnd+bitexact",
+                "-ss", "1",
+                "-i", processedDeinterlacedFile.PathExport,
+                "-frames:v", "1",
+                "-y", processedDeinterlacedFrameFile.PathExport,
+            ],
             TestContext.CancellationToken);
 
         CompareFrameToReference(processedDeinterlacedFrameFile, "frame_processed_deinterlaced.png");
@@ -1384,7 +1396,7 @@ partial class Tests
 
         await RunFFtoolProcessWithErrorHandling(
             "ffmpeg",
-            ["-ss", "1", "-i", processedScaledFile.PathExport, "-frames:v", "1", "-y", processedScaledFrameFile.PathExport],
+            ["-sws_flags", "accurate_rnd+bitexact", "-ss", "1", "-i", processedScaledFile.PathExport, "-frames:v", "1", "-y", processedScaledFrameFile.PathExport],
             TestContext.CancellationToken);
 
         CompareFrameToReference(processedScaledFrameFile, "frame_processed_scaled.png");
