@@ -17,9 +17,10 @@ partial class Tests
     // Difference is converted to a heatmap for easy viewing, scale is ~5.3x (that is, a difference in brightness of ~19% = full white), and goes from black
     // (no difference) to white (maximum difference) through green and cyan.
     // File is outputted at 10fps for most videos (except for the ones for TestVideoCompressionLevel, which are 30fps) to save time.
-    // Note also, we offset by ~1 frame for the TestVideoCompressionLevel tests, as they seem to be slightly out of sync otherwise for some reason.
+    // Note: both inputs have their timestamps zero-based (setpts=PTS-STARTPTS) so that the fps filter samples both on the same content-relative grid,
+    // regardless of any differing start offsets between the original & processed files (e.g. a start_time that was rounded differently by the container).
     private async Task GenerateVideoDiffFile(
-        IAbsoluteFilePath processedFile, IAbsoluteFilePath originalFile, int fps = 10, double duration = 10.0, double timeOffset = 0.0)
+        IAbsoluteFilePath processedFile, IAbsoluteFilePath originalFile, int fps = 10, double duration = 10.0)
     {
         // Note: this method is disabled on CI as it can be quite slow and is for visual inspection only anyway.
 #if !CI
@@ -30,16 +31,16 @@ partial class Tests
             "ffmpeg",
             [
                 "-sws_flags", "accurate_rnd+bitexact",
-                "-ss", timeOffset > 0 ? timeOffset.ToString(CultureInfo.InvariantCulture) : "0",
                 "-i", originalFile.PathExport,
-                "-ss", timeOffset < 0 ? (-timeOffset).ToString(CultureInfo.InvariantCulture) : "0",
                 "-i", processedFile.PathExport,
                 "-filter_complex", string.Create(CultureInfo.InvariantCulture,
                     $"[0:v]" +
+                    $"setpts=PTS-STARTPTS," +
                     $"fps=fps={fps}," +
                     $"format=pix_fmts=yuv444p:color_ranges=pc" +
                     $"[o0];" +
                     $"[1:v]" +
+                    $"setpts=PTS-STARTPTS," +
                     $"fps=fps={fps}," +
                     $"format=pix_fmts=yuv444p:color_ranges=pc" +
                     $"[o1];" +
@@ -103,7 +104,7 @@ partial class Tests
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
 
-        await GenerateVideoDiffFile(resultFile, origFile, fps: 30, duration: 1.0, timeOffset: 0.017);
+        await GenerateVideoDiffFile(resultFile, origFile, fps: 30, duration: 1.0);
 
         // Extract comparison frames & ensure the output displays similar to the original at every compression level:
         await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
@@ -158,7 +159,7 @@ partial class Tests
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
 
-        await GenerateVideoDiffFile(resultFile, origFile, fps: 30, duration: 1.0, timeOffset: 0.017);
+        await GenerateVideoDiffFile(resultFile, origFile, fps: 30, duration: 1.0);
 
         // Extract comparison frames & ensure the output displays similar to the original at every compression level:
         await ExtractVideoFrame(origFile, originalFrameFile, 0.5);

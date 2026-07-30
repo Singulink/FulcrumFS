@@ -588,6 +588,9 @@ partial class Tests
         ??= ValidVideosToCheck.Where((x) => !VideoFilesWithoutVideoStreams.Contains((string)x[0]));
 
     // Helper to extract a frame from a video as a player would display it (auto-rotated & de-interlaced), with deterministic (bit-exact) conversion.
+    // The timestamp is measured from the first frame (timestamps are zero-based via setpts before selecting), rather than seeking on the file's own timestamp
+    // grid - this ensures the same content frame is picked from an original & processed copy of a video even when their start offsets / frame rates differ
+    // (e.g. a start_time that was rounded differently by the container, or a de-interlaced output at double the frame rate).
     // Note: this does not work properly for videos that are both interlaced and rotated via metadata, since the de-interlacing runs after ffmpeg auto-rotates
     // the frame, operating on the wrong field orientation - use a non-rotated (e.g. the original) file as the comparison reference in that case.
     private async Task ExtractVideoFrame(IAbsoluteFilePath videoFile, IAbsoluteFilePath frameFile, double timestamp)
@@ -596,9 +599,8 @@ partial class Tests
             "ffmpeg",
             [
                 "-sws_flags", "accurate_rnd+bitexact",
-                "-ss", timestamp.ToString(CultureInfo.InvariantCulture),
                 "-i", videoFile.PathExport,
-                "-vf", "bwdif=deint=interlaced",
+                "-vf", string.Create(CultureInfo.InvariantCulture, $"setpts=PTS-STARTPTS,bwdif=deint=interlaced,select=gte(t\\,{timestamp})"),
                 "-frames:v", "1",
                 "-y", frameFile.PathExport,
             ],
