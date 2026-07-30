@@ -1688,19 +1688,29 @@ public sealed class VideoProcessor : FileProcessor
 
                     // Check if we were unable to determine Is10BitForHW accurately
                     if (bitsPerSample <= 0)
+                    {
                         canUseHardwareAcceleration = false;
+                    }
 
                     // If we're actually re-encoding with a critical filter, then mark our hwacceleration as potentially beneficial.
                     // Only include if input resolution is at least 64px - many hw accelerators are unlikely to even support below this kind of size.
                     // Cases that don't match this are unlikely to be common anyway.
-                    if (filterOverride.Critical && (width >= 64 || height >= 64))
+                    // Also, do not count as worth trying if we have h263, vp8, mpeg1video or mpeg2video - these are unlikely to be accelerated on modern
+                    // hardware, and they are not likely to ever become more likely to be accelerated (as opposed to something like VVC).
+                    if (filterOverride.Critical &&
+                        (width >= 64 || height >= 64) &&
+                        videoStream.CodecName is not ("h263" or "vp8" or "mpeg1video" or "mpeg2video"))
+                    {
                         worthUsingHardwareAcceleratedFilters = true;
+                    }
 
                     // If the display matrix is anything other than a standard quarter-turn rotation matrix (e.g. it includes a flip / mirror), don't use
                     // hardware acceleration - ffmpeg only auto-applies these transformations when decoding in software, and the manual rotation handling for
                     // the hardware accelerated filter paths only covers standard rotations. These inputs are also very uncommon.
                     if (videoStream.HasNonStandardDisplayMatrix)
+                    {
                         canUseHardwareAcceleration = false;
+                    }
                 }
 
                 // Set up codec to use:
