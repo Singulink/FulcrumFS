@@ -27,7 +27,7 @@ internal static class FFmpegUtils
         public int MapChaptersFrom { get; } = mapChaptersFrom;
         public bool ForceProgressiveDownloadSupport { get; } = forceProgressiveDownloadSupport;
         public bool IsToMov { get; } = isToMov;
-        public string? HWAccel { get; set; } // Special values: 'null' means auto & not used for filters - 'none' means none & not used for filters
+        public string? HWAccel { get; set; } = "none"; // Special values: 'null' means auto & not used for filters - 'none' means none & not used for filters
         public bool UseHWAccelFiltersWhenPossible { get; set; } = true;
     }
 
@@ -255,6 +255,7 @@ internal static class FFmpegUtils
                 {
                     // Use bob mode to make more similar to what bwdif does, rather than advanced mode.
                     // Note: we also need to set to field to match what bwdif does by default.
+                    // Note: QSV chops off a frame compared to the other deinterlacers - for now, we accept this.
                     string filterPart = "vpp_qsv=deinterlace=bob:rate=field";
 
                     // If we're also rotating, do that at the same time.

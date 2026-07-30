@@ -1711,6 +1711,12 @@ public sealed class VideoProcessor : FileProcessor
                     {
                         canUseHardwareAcceleration = false;
                     }
+
+                    // Some hardware decoders will handle bff incorrectly (such as amf), so we fully disable hardware acceleration & decoding if it isn't tff.
+                    if (!IsProgressive(videoStream.FieldOrder) && videoStream.FieldOrder != "tff")
+                    {
+                        canUseHardwareAcceleration = false;
+                    }
                 }
 
                 // Set up codec to use:
@@ -2222,14 +2228,10 @@ public sealed class VideoProcessor : FileProcessor
             isToMov: true);
 
         // Set up the hardware acceleration if we can use it:
-        if (canUseHardwareAcceleration)
+        if (canUseHardwareAcceleration && Options.HardwareAccelerationKind != HardwareAccelerationKind.None)
         {
             command.HWAccel = null;
-            if (Options.HardwareAccelerationKind == HardwareAccelerationKind.None)
-            {
-                command.HWAccel = "none";
-            }
-            else if (Options.HardwareAccelerationKind != HardwareAccelerationKind.DecodeOnly)
+            if (Options.HardwareAccelerationKind != HardwareAccelerationKind.DecodeOnly)
             {
                 command.HWAccel = Options.HardwareAccelerationKind switch
                 {
