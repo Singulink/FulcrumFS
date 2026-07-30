@@ -1454,6 +1454,11 @@ partial class Tests
         //   rounding to even dimensions), with no extra SAR-based scaling - the SAR instead ends up adjusted to preserve the display aspect ratio
         //   (3:4 * (64/16)/(60/16) = 4:5).
         // Both outputs should also be de-interlaced (progressive, at double the interlaced frame rate) and are kept for manual inspection.
+        // Two more outputs are also produced from a full-resolution (1920x1080) version of the same interlaced 3:4 SAR input, resized to roughly half size,
+        // so that the results are large enough to be usefully inspected:
+        // - With ForceSquarePixels = true, fitting the 1440x1080 display size within 720x540 produces exactly 720x540 with a 1:1 SAR.
+        // - With ForceSquarePixels = false, the 1920x1080 coded frame is scaled directly to 960x540, with the SAR unchanged at 3:4 since an exact half-size
+        //   scale preserves the display aspect ratio without any SAR adjustment.
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -1461,11 +1466,17 @@ partial class Tests
         resultsDir.Create();
 
         var interlacedInputFile = resultsDir.CombineFile("input_interlaced_with_sar.mp4");
+        var largeInterlacedInputFile = resultsDir.CombineFile("input_interlaced_with_sar_large.mp4");
         var outputSquarePixels = resultsDir.CombineFile("output_square_pixels.mp4");
         var outputNonSquarePixels = resultsDir.CombineFile("output_non_square_pixels.mp4");
+        var outputSquarePixelsLarge = resultsDir.CombineFile("output_square_pixels_large.mp4");
+        var outputNonSquarePixelsLarge = resultsDir.CombineFile("output_non_square_pixels_large.mp4");
         interlacedInputFile.Delete();
+        largeInterlacedInputFile.Delete();
         outputSquarePixels.Delete();
         outputNonSquarePixels.Delete();
+        outputSquarePixelsLarge.Delete();
+        outputNonSquarePixelsLarge.Delete();
 
         var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
 
@@ -1480,6 +1491,19 @@ partial class Tests
                 "-x264-params", "tff=1",
                 "-c:a", "copy",
                 "-y", interlacedInputFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+
+        // Create an interlaced version of the original file at its full 1920x1080 resolution with a 3:4 SAR:
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", "interlace=scan=tff:lowpass=complex,setsar=3/4",
+                "-c:v", "libx264",
+                "-x264-params", "tff=1",
+                "-c:a", "copy",
+                "-y", largeInterlacedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
 
@@ -1525,6 +1549,48 @@ partial class Tests
         videoPath2.Exists.ShouldBeTrue();
         File.Copy(videoPath2.PathExport, outputNonSquarePixels.PathExport);
 
+        // Process the large input with square pixels forced, resizing to half the display size:
+        var pipeline3 = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ForceProgressiveFrames = true,
+            ForceSquarePixels = true,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, 720, 540),
+        }).ToPipeline();
+
+        await using var stream3 = largeInterlacedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn3 = await repo.BeginTransactionAsync();
+        var fileId3 = (await txn3.AddAsync(stream3, true, pipeline3, TestContext.CancellationToken)).FileId;
+        await txn3.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath3 = (await repo.GetAsync(fileId3)).Path;
+        videoPath3.Exists.ShouldBeTrue();
+        File.Copy(videoPath3.PathExport, outputSquarePixelsLarge.PathExport);
+
+        // Process the large input without square pixels forced, resizing to half the coded size:
+        var pipeline4 = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ForceProgressiveFrames = true,
+            ForceSquarePixels = false,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, 960, 540),
+        }).ToPipeline();
+
+        await using var stream4 = largeInterlacedInputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn4 = await repo.BeginTransactionAsync();
+        var fileId4 = (await txn4.AddAsync(stream4, true, pipeline4, TestContext.CancellationToken)).FileId;
+        await txn4.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath4 = (await repo.GetAsync(fileId4)).Path;
+        videoPath4.Exists.ShouldBeTrue();
+        File.Copy(videoPath4.PathExport, outputNonSquarePixelsLarge.PathExport);
+
         // Validate the input file has the expected dimensions, SAR, and interlacing:
         var (probeOutput0, _, probeReturnCode0) = await RunFFtoolProcess(
             "ffprobe",
@@ -1543,6 +1609,18 @@ partial class Tests
             ["-i", outputNonSquarePixels.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
             TestContext.CancellationToken);
         probeReturnCode2.ShouldBe(0);
+
+        var (probeOutput3, _, probeReturnCode3) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputSquarePixelsLarge.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode3.ShouldBe(0);
+
+        var (probeOutput4, _, probeReturnCode4) = await RunFFtoolProcess(
+            "ffprobe",
+            ["-i", outputNonSquarePixelsLarge.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+        probeReturnCode4.ShouldBe(0);
 
         probeOutput0.Contains("\"width\": 64", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput0.Contains("\"height\": 60", StringComparison.Ordinal).ShouldBeTrue();
@@ -1564,6 +1642,21 @@ partial class Tests
         probeOutput2.Contains("\"sample_aspect_ratio\": \"4:5\"", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput2.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput2.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        // The large output with square pixels forced should be de-interlaced with its pixels made square while resizing to half the 1440x1080 display size:
+        probeOutput3.Contains("\"width\": 720", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput3.Contains("\"height\": 540", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput3.Contains("\"sample_aspect_ratio\": \"1:1\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput3.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput3.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        // The large output without square pixels forced should be de-interlaced and the coded frame scaled directly to half size, with the SAR unchanged
+        // since an exact half-size scale preserves the display aspect ratio:
+        probeOutput4.Contains("\"width\": 960", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput4.Contains("\"height\": 540", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput4.Contains("\"sample_aspect_ratio\": \"3:4\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput4.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
+        probeOutput4.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
     }
 
     [TestMethod]
