@@ -69,9 +69,15 @@ partial class Tests
         // Files should be sized approximately smaller at higher compression levels, but not guaranteed; however, they should certainly be more consistently
         // sized.
 
-        var resultFile = _appDir.CombineDirectory("TestVideoCompressionLevelH264Results").CombineFile($"{level}.mp4");
-        resultFile.ParentDirectory?.Create();
+        var resultsDir = _appDir.CombineDirectory("TestVideoCompressionLevelH264Results");
+        resultsDir.Create();
+
+        var resultFile = resultsDir.CombineFile($"{level}.mp4");
+        var originalFrameFile = resultsDir.CombineFile($"frame_original_{level}.png");
+        var outputFrameFile = resultsDir.CombineFile($"frame_{level}.png");
         resultFile.Delete();
+        originalFrameFile.Delete();
+        outputFrameFile.Delete();
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -98,6 +104,11 @@ partial class Tests
         File.Copy(videoPath.PathExport, resultFile.PathExport);
 
         await GenerateVideoDiffFile(resultFile, origFile, fps: 30, duration: 1.0, timeOffset: 0.017);
+
+        // Extract comparison frames & ensure the output displays similar to the original at every compression level:
+        await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
+        await ExtractVideoFrame(resultFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name);
     }
 
     [TestMethod]
@@ -113,9 +124,15 @@ partial class Tests
         // Files should be sized approximately smaller at higher compression levels, but not guaranteed; however, they should certainly be more consistently
         // sized.
 
-        var resultFile = _appDir.CombineDirectory("TestVideoCompressionLevelHEVCResults").CombineFile($"{level}.mp4");
-        resultFile.ParentDirectory?.Create();
+        var resultsDir = _appDir.CombineDirectory("TestVideoCompressionLevelHEVCResults");
+        resultsDir.Create();
+
+        var resultFile = resultsDir.CombineFile($"{level}.mp4");
+        var originalFrameFile = resultsDir.CombineFile($"frame_original_{level}.png");
+        var outputFrameFile = resultsDir.CombineFile($"frame_{level}.png");
         resultFile.Delete();
+        originalFrameFile.Delete();
+        outputFrameFile.Delete();
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -142,6 +159,11 @@ partial class Tests
         File.Copy(videoPath.PathExport, resultFile.PathExport);
 
         await GenerateVideoDiffFile(resultFile, origFile, fps: 30, duration: 1.0, timeOffset: 0.017);
+
+        // Extract comparison frames & ensure the output displays similar to the original at every compression level:
+        await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
+        await ExtractVideoFrame(resultFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name);
     }
 #endif
 
@@ -194,9 +216,15 @@ partial class Tests
     private async Task<long> TestVideoQualityImpl(string resultFolderName, VideoCodec codec, VideoQuality quality, CancellationToken cancellationToken)
     {
         // Helper to encode a clip at a given quality/codec, emit diff output, and return size.
-        var resultFile = _appDir.CombineDirectory($"TestVideoQuality{resultFolderName}Results").CombineFile($"{quality}.mp4");
-        resultFile.ParentDirectory?.Create();
+        var resultsDir = _appDir.CombineDirectory($"TestVideoQuality{resultFolderName}Results");
+        resultsDir.Create();
+
+        var resultFile = resultsDir.CombineFile($"{quality}.mp4");
+        var originalFrameFile = resultsDir.CombineFile($"frame_original_{quality}.png");
+        var outputFrameFile = resultsDir.CombineFile($"frame_{quality}.png");
         resultFile.Delete();
+        originalFrameFile.Delete();
+        outputFrameFile.Delete();
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -221,6 +249,12 @@ partial class Tests
         File.Copy(videoPath.PathExport, resultFile.PathExport);
 
         await GenerateVideoDiffFile(resultFile, origFile);
+
+        // Extract comparison frames & ensure the output displays similar to the original at every quality level (frame file names include the quality since
+        // the quality levels run in parallel):
+        await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
+        await ExtractVideoFrame(resultFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name);
 
         return resultFile.Length;
     }
@@ -411,10 +445,15 @@ partial class Tests
         // Note: this test is disabled on CI as it's for visual inspection primarily (video resizing is also tested elsewhere).
         // Tests H.264 video resizing at various target dimensions. Outputs resized result files.
 
-        var resultFile = _appDir.CombineDirectory("TestVideoResizeH264Results").CombineFile(
-            string.Create(CultureInfo.InvariantCulture, $"{width}x{height}.mp4"));
-        resultFile.ParentDirectory?.Create();
+        var resultsDir = _appDir.CombineDirectory("TestVideoResizeH264Results");
+        resultsDir.Create();
+
+        var resultFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"{width}x{height}.mp4"));
+        var originalFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_original_{width}x{height}.png"));
+        var outputFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_{width}x{height}.png"));
         resultFile.Delete();
+        originalFrameFile.Delete();
+        outputFrameFile.Delete();
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -437,6 +476,12 @@ partial class Tests
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
+
+        // Extract comparison frames & ensure the resized output displays the same as the original (the SSIM comparison scales the original frame down to
+        // the output size):
+        await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
+        await ExtractVideoFrame(resultFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name);
     }
 
     [TestMethod]
@@ -451,10 +496,15 @@ partial class Tests
         // Note: this test is disabled on CI as it's for visual inspection primarily (video resizing is also tested elsewhere).
         // Tests HEVC video resizing at various target dimensions. Outputs resized result files.
 
-        var resultFile = _appDir.CombineDirectory("TestVideoResizeHEVCResults").CombineFile(
-            string.Create(CultureInfo.InvariantCulture, $"{width}x{height}.mp4"));
-        resultFile.ParentDirectory?.Create();
+        var resultsDir = _appDir.CombineDirectory("TestVideoResizeHEVCResults");
+        resultsDir.Create();
+
+        var resultFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"{width}x{height}.mp4"));
+        var originalFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_original_{width}x{height}.png"));
+        var outputFrameFile = resultsDir.CombineFile(string.Create(CultureInfo.InvariantCulture, $"frame_{width}x{height}.png"));
         resultFile.Delete();
+        originalFrameFile.Delete();
+        outputFrameFile.Delete();
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -477,6 +527,12 @@ partial class Tests
         videoPath.Exists.ShouldBeTrue();
 
         File.Copy(videoPath.PathExport, resultFile.PathExport);
+
+        // Extract comparison frames & ensure the resized output displays the same as the original (the SSIM comparison scales the original frame down to
+        // the output size):
+        await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
+        await ExtractVideoFrame(resultFile, outputFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name);
     }
 #endif
 
@@ -551,8 +607,12 @@ partial class Tests
 
         var interlacedFile = resultsDir.CombineFile($"interlaced_{interlaceMode}.mp4");
         var deinterlacedFile = resultsDir.CombineFile($"deinterlaced_{interlaceMode}.mp4");
+        var originalFrameFile = resultsDir.CombineFile($"frame_original_{interlaceMode}.png");
+        var deinterlacedFrameFile = resultsDir.CombineFile($"frame_deinterlaced_{interlaceMode}.png");
         interlacedFile.Delete();
         deinterlacedFile.Delete();
+        originalFrameFile.Delete();
+        deinterlacedFrameFile.Delete();
 
         var origFile = _videoFilesDir.CombineFile(BigBuckBunnyFullVideoFileName);
 
@@ -621,6 +681,12 @@ partial class Tests
         // De-interlacing outputs one frame per field (bwdif send_field mode and its hardware equivalents), so the 30fps interlaced file should become 60fps:
         deinterlacedProbeOutput.Contains(
             "\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue("Expected de-interlaced file to be 60fps (one frame per field)");
+
+        // Extract comparison frames & ensure the de-interlaced output displays the same as the original progressive file (which also catches field order
+        // mishandling, e.g. bff content de-interlaced as tff):
+        await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
+        await ExtractVideoFrame(deinterlacedFile, deinterlacedFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(originalFrameFile, deinterlacedFrameFile, deinterlacedFrameFile.Name);
     }
 
 #if !CI
@@ -1471,12 +1537,18 @@ partial class Tests
         var outputNonSquarePixels = resultsDir.CombineFile("output_non_square_pixels.mp4");
         var outputSquarePixelsLarge = resultsDir.CombineFile("output_square_pixels_large.mp4");
         var outputNonSquarePixelsLarge = resultsDir.CombineFile("output_non_square_pixels_large.mp4");
+        var largeInputFrameFile = resultsDir.CombineFile("frame_original_large.png");
+        var squarePixelsLargeFrameFile = resultsDir.CombineFile("frame_square_pixels_large.png");
+        var nonSquarePixelsLargeFrameFile = resultsDir.CombineFile("frame_non_square_pixels_large.png");
         interlacedInputFile.Delete();
         largeInterlacedInputFile.Delete();
         outputSquarePixels.Delete();
         outputNonSquarePixels.Delete();
         outputSquarePixelsLarge.Delete();
         outputNonSquarePixelsLarge.Delete();
+        largeInputFrameFile.Delete();
+        squarePixelsLargeFrameFile.Delete();
+        nonSquarePixelsLargeFrameFile.Delete();
 
         var origFile = _videoFilesDir.CombineFile("bbb_sunflower_1080p_60fps_normal-1s.mp4");
 
@@ -1657,6 +1729,20 @@ partial class Tests
         probeOutput4.Contains("\"sample_aspect_ratio\": \"3:4\"", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput4.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
         probeOutput4.Contains("\"r_frame_rate\": \"60/1\"", StringComparison.Ordinal).ShouldBeTrue();
+
+        // Extract comparison frames & ensure the large outputs display the same as the original. The original file is used as the reference (rather than
+        // the interlaced input, whose lowpass-filtered content would make for a poorer reference) - it has the same 1920x1080 coded frame but square pixels,
+        // which still compares correctly since frame extraction does not apply the SAR (the PNGs keep the coded dimensions), while the SSIM comparison scales
+        // the larger frame down to the smaller frame's exact dimensions, applying the appropriate SAR correction for each pair:
+        // - Original (1920x1080, square pixels) vs square pixels output (720x540, 1:1 SAR): the non-uniform 1920x1080 -> 720x540 scale applies the same 3:4
+        //   SAR squeeze that the library applied while resizing.
+        // - Original (1920x1080, square pixels) vs non-square pixels output (960x540, 3:4 SAR): a uniform half-size scale, since the output's coded frame was
+        //   scaled directly without any SAR-based scaling.
+        await ExtractVideoFrame(origFile, largeInputFrameFile, 0.5);
+        await ExtractVideoFrame(outputSquarePixelsLarge, squarePixelsLargeFrameFile, 0.5);
+        await ExtractVideoFrame(outputNonSquarePixelsLarge, nonSquarePixelsLargeFrameFile, 0.5);
+        await CompareFrameToReferenceSSIM(largeInputFrameFile, squarePixelsLargeFrameFile, squarePixelsLargeFrameFile.Name);
+        await CompareFrameToReferenceSSIM(largeInputFrameFile, nonSquarePixelsLargeFrameFile, nonSquarePixelsLargeFrameFile.Name);
     }
 
     [TestMethod]

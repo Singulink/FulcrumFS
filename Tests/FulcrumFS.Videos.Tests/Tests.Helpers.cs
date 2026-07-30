@@ -588,6 +588,8 @@ partial class Tests
         ??= ValidVideosToCheck.Where((x) => !VideoFilesWithoutVideoStreams.Contains((string)x[0]));
 
     // Helper to extract a frame from a video as a player would display it (auto-rotated & de-interlaced), with deterministic (bit-exact) conversion.
+    // Note: this does not work properly for videos that are both interlaced and rotated via metadata, since the de-interlacing runs after ffmpeg auto-rotates
+    // the frame, operating on the wrong field orientation - use a non-rotated (e.g. the original) file as the comparison reference in that case.
     private async Task ExtractVideoFrame(IAbsoluteFilePath videoFile, IAbsoluteFilePath frameFile, double timestamp)
     {
         await RunFFtoolProcessWithErrorHandling(
