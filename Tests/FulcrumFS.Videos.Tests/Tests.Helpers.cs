@@ -644,8 +644,11 @@ partial class Tests
     // Helper to compare the visual similarity of two extracted frames using SSIM, which is robust against codec noise (unlike exact pixel
     // comparisons), making it appropriate for comparing real video content. The larger frame is downscaled to the size of the smaller frame if the sizes
     // differ.
+    // Note: the default threshold leaves headroom for the hardware-accelerated modes, whose scalers/deinterlacers don't exactly match the software filters
+    // (software-mode scores are typically >= 0.94, with hw modes a bit lower). Cases that involve heavy downscaling (which scores lower due to scaler
+    // differences dominating) or tiny frames pass an explicitly lower threshold.
     private async Task CompareFrameToReferenceSSIM(
-        IAbsoluteFilePath referenceFrameFile, IAbsoluteFilePath actualFrameFile, string frameDescription, double minSimilarity = 0.85)
+        IAbsoluteFilePath referenceFrameFile, IAbsoluteFilePath actualFrameFile, string frameDescription, double minSimilarity = 0.91)
     {
         var referenceFrameInfo = Image.Identify(referenceFrameFile.PathExport);
         var actualFrameInfo = Image.Identify(actualFrameFile.PathExport);

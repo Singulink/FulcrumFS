@@ -480,9 +480,10 @@ partial class Tests
 
         // Extract comparison frames & ensure the resized output displays the same as the original (the SSIM comparison scales the original frame down to
         // the output size):
+        // Note: a lower threshold is used since scaler differences dominate at small target sizes (especially for the hardware-accelerated scalers).
         await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
         await ExtractVideoFrame(resultFile, outputFrameFile, 0.5);
-        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name, minSimilarity: 0.85);
     }
 
     [TestMethod]
@@ -531,9 +532,10 @@ partial class Tests
 
         // Extract comparison frames & ensure the resized output displays the same as the original (the SSIM comparison scales the original frame down to
         // the output size):
+        // Note: a lower threshold is used since scaler differences dominate at small target sizes (especially for the hardware-accelerated scalers).
         await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
         await ExtractVideoFrame(resultFile, outputFrameFile, 0.5);
-        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, outputFrameFile.Name, minSimilarity: 0.85);
     }
 #endif
 
@@ -2062,9 +2064,11 @@ partial class Tests
         probeOutput1.Contains("\"codec_name\": \"hevc\"", StringComparison.Ordinal).ShouldBeTrue();
 
         // Extract comparison frames & ensure the output displays the same as the input:
+        // Note: a lower threshold is used since the tiny 28x16 frame gives SSIM very few windows to work with, so upscaling interpolation differences
+        // dominate the score.
         await ExtractVideoFrame(smallInputFile, inputFrameFile, 0.5);
         await ExtractVideoFrame(outputFile, outputFrameFile, 0.5);
-        await CompareFrameToReferenceSSIM(inputFrameFile, outputFrameFile, "frame_output.png");
+        await CompareFrameToReferenceSSIM(inputFrameFile, outputFrameFile, "frame_output.png", minSimilarity: 0.85);
     }
 
     [TestMethod]
