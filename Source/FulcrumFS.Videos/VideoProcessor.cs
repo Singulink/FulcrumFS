@@ -1600,7 +1600,10 @@ public sealed class VideoProcessor : FileProcessor
 
                         // If resolution is above level 7.2 limit, enable level 8.5 support.
                         // Note: this is the only level 7.2 limit that x265 currently requires special handling for.
-                        if ((long)resultWidth * resultHeight > 142_606_336) requiresLevel85ForX265 = true;
+                        if ((long)resultWidth * resultHeight > 142_606_336)
+                        {
+                            requiresLevel85ForX265 = true;
+                        }
                     }
                 }
 
@@ -1687,8 +1690,9 @@ public sealed class VideoProcessor : FileProcessor
                     if (bitsPerSample <= 0)
                         canUseHardwareAcceleration = false;
 
-                    // If we're actually re-encoding with a critical filter, then mark our hwacceleration as potentially beneficial
+                    // If we're actually re-encoding with a critical filter, then mark our hwacceleration as potentially beneficial.
                     // Only include if input resolution is at least 64px - many hw accelerators are unlikely to even support below this kind of size.
+                    // Cases that don't match this are unlikely to be common anyway.
                     if (filterOverride.Critical && (width >= 64 || height >= 64))
                         worthUsingHardwareAcceleratedFilters = true;
 
