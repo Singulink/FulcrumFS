@@ -1713,7 +1713,7 @@ public sealed class VideoProcessor : FileProcessor
                     }
 
                     // Some hardware decoders will handle bff incorrectly (such as amf), so we fully disable hardware acceleration & decoding if it isn't tff.
-                    if (!IsProgressive(videoStream.FieldOrder) && videoStream.FieldOrder != "tff")
+                    if (!IsProgressive(videoStream.FieldOrder) && videoStream.FieldOrder != "tt")
                     {
                         canUseHardwareAcceleration = false;
                     }
