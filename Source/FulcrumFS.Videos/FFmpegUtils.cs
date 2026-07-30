@@ -196,7 +196,7 @@ internal static class FFmpegUtils
         public bool Is10BitForHW { get; set; }
         public string? PixelFormatAfterHWDownload { get; set; }
         public string? SarAfterHWResize { get; set; }
-        public int RotateForHWAccel { get; set; } // 0 - none, 90 - clockwise, 180 - reversal, 270 - counter-clockwise
+        public int Rotation { get; set; } // 0 - none, 90 - clockwise, 180 - reversal, 270 - counter-clockwise
 
         protected override string GetCommandArgument(string? hwaccel)
         {
@@ -216,8 +216,8 @@ internal static class FFmpegUtils
 
             // Note: rotation only needs to be applied manually when hardware accelerated decoding is used, since ffmpeg skips its automatic rotation for
             // hardware frames (or fails outright on some platforms) - software decoding applies it automatically.
-            bool doneRotate = hwaccel is null || RotateForHWAccel == 0;
-            string rotateDir = RotateForHWAccel switch
+            bool doneRotate = hwaccel is null || Rotation == 0;
+            string rotateDir = Rotation switch
             {
                 0 => "<error>",
                 90 => "clock",
@@ -270,7 +270,7 @@ internal static class FFmpegUtils
                     {
                         // See comments in resize/rotate section for why it's set up this way.
 
-                        if (RotateForHWAccel is 90 or 270)
+                        if (Rotation is 90 or 270)
                             (w1, h1) = (h1, w1);
 
                         filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
@@ -295,7 +295,42 @@ internal static class FFmpegUtils
                 else
                 {
                     EnsureHWDownload();
+
+                    // Note: in software decoding mode, ffmpeg automatically applies the rotation from the display matrix before our filters run, so the
+                    // frames we receive are already rotated - quarter-turns turn the interlaced field lines into columns, and half-turns swap the two
+                    // fields - which would break the deinterlacing. So we un-rotate the frames back to their coded orientation, deinterlace, and then
+                    // re-rotate them back to be correct.
+                    // Note: the software transpose filter does not support the reversal direction, so half-turns are done with flips instead.
+                    bool fixupRotation = hwaccel is null && Rotation != 0;
+
+                    if (fixupRotation)
+                    {
+                        if (Rotation == 180)
+                        {
+                            steps.Add("vflip");
+                            steps.Add("hflip");
+                        }
+                        else
+                        {
+                            // Un-rotate by applying the opposite direction to the rotation that ffmpeg automatically applied.
+                            steps.Add($"transpose=dir={(Rotation == 90 ? "cclock" : "clock")}");
+                        }
+                    }
+
                     steps.Add("bwdif");
+
+                    if (fixupRotation)
+                    {
+                        if (Rotation == 180)
+                        {
+                            steps.Add("vflip");
+                            steps.Add("hflip");
+                        }
+                        else
+                        {
+                            steps.Add($"transpose=dir={rotateDir}");
+                        }
+                    }
                 }
 
                 doneDeinterlace = true;
@@ -321,7 +356,7 @@ internal static class FFmpegUtils
                         // See comments in resize section for why it's set up this way.
 
                         // vpp_qsv does scaling and then rotating, so if we're rotating & scaling, we want to swap our dimensions for scaling
-                        if (RotateForHWAccel is 90 or 270)
+                        if (Rotation is 90 or 270)
                             (w1, h1) = (h1, w1);
 
                         filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
@@ -344,7 +379,7 @@ internal static class FFmpegUtils
                     // Note: the software transpose filter does not support the reversal direction, so half-turns are done with flips instead.
                     EnsureHWDownload();
 
-                    if (RotateForHWAccel == 180)
+                    if (Rotation == 180)
                     {
                         steps.Add("vflip");
                         steps.Add("hflip");

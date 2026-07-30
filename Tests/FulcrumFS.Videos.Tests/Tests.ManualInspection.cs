@@ -1677,6 +1677,7 @@ partial class Tests
         // correctly). It then processes it through the library with ForceProgressiveFrames = true and forced re-encoding to verify that de-interlacing and
         // rotation are handled correctly together, comparing an extracted frame against one from the original progressive un-rotated video (as a player would
         // display them).
+        // Note: original file should be played in VLC for most likely chance that it is interpreted correctly.
 
         using var repoCtx = GetRepo(out var repo);
 
@@ -1767,11 +1768,9 @@ partial class Tests
         // Extract comparison frames & ensure the output displays the same as the original:
         // Note: the original file is used as the reference (rather than the interlaced input) since de-interlacing an extracted frame of the rotated input
         // would operate on the wrong field orientation after the extraction auto-rotates it.
-        // Note: a lower similarity threshold is used since the interlacing lowpass and de-interlacing lose some detail at sharp edges (a wrong orientation
-        // produces similarity far below it).
         await ExtractVideoFrame(origFile, originalFrameFile, 0.5);
         await ExtractVideoFrame(outputFile, outputFrameFile, 0.5);
-        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, "frame_output.png", minSimilarity: 0.75);
+        await CompareFrameToReferenceSSIM(originalFrameFile, outputFrameFile, "frame_output.png");
     }
 
     [TestMethod]
