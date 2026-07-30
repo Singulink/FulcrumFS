@@ -450,12 +450,15 @@ internal static class FFmpegUtils
                 // Remap to HDR first for accurate results - however, this could have a performance penalty if we're also then scaling / sampling it after.
                 // Note: for a massive resolution video, this could fail to allocate memory for the frames due to requiring 96/128 bits per pixel (which eats into
                 // the 2^31 - 1 byte limit that ffmpeg imposes faster than usual).
-                steps.Add(
-                    $"zscale=t=linear:npl=500:r=full," +
-                    $"format={(AssumePotentialAlphaChannelForHDRToSDR ? "gbrapf32le" : "gbrpf32le")}," +
-                    $"zscale=p=bt709," +
-                    $"tonemap=tonemap=mobius:param=0.3:desat=0," +
-                    $"zscale=t=bt709:m=bt709:r=full");
+                // Note: we also strip the HDR mastering display & content light level side data, since it no longer applies to the tonemapped SDR frames
+                // (otherwise the encoder would copy the now-stale HDR metadata into the output).
+                steps.Add("zscale=t=linear:npl=500:r=full");
+                steps.Add($"format={(AssumePotentialAlphaChannelForHDRToSDR ? "gbrapf32le" : "gbrpf32le")}");
+                steps.Add("zscale=p=bt709");
+                steps.Add("tonemap=tonemap=mobius:param=0.3:desat=0");
+                steps.Add("zscale=t=bt709:m=bt709:r=full");
+                steps.Add("sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA");
+                steps.Add("sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL");
 
                 doneHDRToSDR = true;
                 doneRangeConversion = true;

@@ -140,6 +140,11 @@ public sealed class VideoProcessor : FileProcessor
         {
             throw new NotSupportedException("The required 'vflip' video filter is not supported by the configured ffmpeg installation.");
         }
+
+        if (!FFprobeUtils.Configuration.SupportsSidedataFilter)
+        {
+            throw new NotSupportedException("The required 'sidedata' video filter is not supported by the configured ffmpeg installation.");
+        }
     }
 
     /// <summary>

@@ -1010,28 +1010,58 @@ partial class Tests
         await CompareFrameToReferenceSSIM(inputFrameFile, stripMetadataFrameFile, "frame_strip_metadata.png");
     }
 
-#if !CI
     [TestMethod]
-    [DataRow("video114")]
-    [DataRow("Y0__auYqGXY-5s")]
+#if !CI
     [DataRow("Y0__auYqGXY-20s")]
+    [DataRow("video114")]
+#endif
+    [DataRow("Y0__auYqGXY-5s")]
     public async Task TestHDRToSDRMapping(string fileName)
     {
-        // Note: this test is excluded from CI runs since it is intended for manual inspection only (HDR->SDR logic is also tested in TestStandardizedOptions).
+        // Note: most of this test is excluded from CI runs since it is primarily intended for manual inspection only (HDR->SDR logic is also tested in
+        // TestStandardizedOptions).
         // Tests HDR to SDR color mapping. Outputs the result files for manual inspection.
+
+        async Task ValidateStaleHDRMetadataExistence(IAbsoluteFilePath file, bool expected)
+        {
+            // The HDR mastering display / content light level metadata should have been stripped during the HDR->SDR conversion, since it no longer applies to
+            // the tonemapped SDR frames. We check both the stream & first frame side data, since the metadata can be surfaced at either level depending on
+            // whether it comes from the container or the codec SEI.
+            string videoInfo = await RunFFtoolProcessWithErrorHandling(
+                "ffprobe",
+                [
+                    "-i", file.PathExport, "-hide_banner", "-print_format", "json", "-select_streams", "v:0",
+                    "-show_streams", "-show_frames", "-read_intervals", "%+#1", "-v", "error",
+                ],
+                TestContext.CancellationToken);
+
+            try
+            {
+                videoInfo.Contains("Mastering display metadata", StringComparison.OrdinalIgnoreCase).ShouldBe(expected);
+                videoInfo.Contains("Content light level metadata", StringComparison.OrdinalIgnoreCase).ShouldBe(expected);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Video's metadata validation failed. Info: " + videoInfo, ex);
+            }
+        }
 
         var resultFileH264 = _appDir.CombineDirectory("TestHDRToSDRMappingResults").CombineFile(fileName + "-H264.mp4");
         resultFileH264.ParentDirectory?.Create();
         resultFileH264.Delete();
 
+#if !CI
         var resultFileHEVC = _appDir.CombineDirectory("TestHDRToSDRMappingResults").CombineFile(fileName + "-HEVC.mp4");
         resultFileHEVC.ParentDirectory?.Create();
         resultFileHEVC.Delete();
+#endif
 
         using var repoCtx = GetRepo(out var repo);
 
         var origFile = _videoFilesDir.CombineFile(fileName + ".mp4");
         await using var stream = origFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await ValidateStaleHDRMetadataExistence(origFile, expected: true);
 
         var pipelineH264 = new VideoProcessor(VideoProcessingOptions.Preserve with
         {
@@ -1049,6 +1079,9 @@ partial class Tests
 
         File.Copy(videoPathH264.PathExport, resultFileH264.PathExport);
 
+        await ValidateStaleHDRMetadataExistence(resultFileH264, expected: false);
+
+#if !CI
         var pipelineHEVC = new VideoProcessor(VideoProcessingOptions.Preserve with
         {
             ForceValidateAllStreams = DefaultForceValidateAllStreams,
@@ -1064,8 +1097,10 @@ partial class Tests
         videoPathHEVC.Exists.ShouldBeTrue();
 
         File.Copy(videoPathHEVC.PathExport, resultFileHEVC.PathExport);
-    }
+
+        await ValidateStaleHDRMetadataExistence(resultFileHEVC, expected: false);
 #endif
+    }
 
     [TestMethod]
     public async Task TestStartTimeMetadataHandling()

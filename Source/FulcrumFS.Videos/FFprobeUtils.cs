@@ -91,6 +91,7 @@ internal static class FFprobeUtils
         Require(c.SupportsTransposeFilter);
         Require(c.SupportsHFlipFilter);
         Require(c.SupportsVFlipFilter);
+        Require(c.SupportsSidedataFilter);
     }
 
     public sealed class VideoFileInfo(string formatName, double? duration, ImmutableArray<StreamInfo> streams)
@@ -363,6 +364,7 @@ internal static class FFprobeUtils
         public bool SupportsTransposeFilter { get; set; }
         public bool SupportsHFlipFilter { get; set; }
         public bool SupportsVFlipFilter { get; set; }
+        public bool SupportsSidedataFilter { get; set; }
         public bool SupportsScaleVtFilter { get; set; }
         public bool SupportsScaleCudaFilter { get; set; }
         public bool SupportsBwdifCudaFilter { get; set; }
@@ -602,6 +604,7 @@ internal static class FFprobeUtils
                     case "transpose": _configInfo.SupportsTransposeFilter = true; break;
                     case "hflip": _configInfo.SupportsHFlipFilter = true; break;
                     case "vflip": _configInfo.SupportsVFlipFilter = true; break;
+                    case "sidedata": _configInfo.SupportsSidedataFilter = true; break;
                     case "scale_vt": _configInfo.SupportsScaleVtFilter = true; break;
                     case "scale_cuda": _configInfo.SupportsScaleCudaFilter = true; break;
                     case "bwdif_cuda": _configInfo.SupportsBwdifCudaFilter = true; break;
