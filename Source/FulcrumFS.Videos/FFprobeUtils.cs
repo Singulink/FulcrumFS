@@ -371,13 +371,8 @@ internal static class FFprobeUtils
         public bool SupportsVppAmfFilter { get; set; }
         public bool SupportsScaleD3D12Filter { get; set; }
         public bool SupportsDeinterlaceD3D12Filter { get; set; }
-        public bool SupportsScaleVulkanFilter { get; set; }
-        public bool SupportsBwdifVulkanFilter { get; set; }
         public bool SupportsTransposeVtFilter { get; set; }
         public bool SupportsTransposeCudaFilter { get; set; }
-        public bool SupportsTransposeVulkanFilter { get; set; }
-        public bool SupportsHFlipVulkanFilter { get; set; }
-        public bool SupportsVFlipVulkanFilter { get; set; }
 
         // Hardware acceleration support
         public bool SupportsVideoToolboxHWAccel { get; set; }
@@ -385,7 +380,6 @@ internal static class FFprobeUtils
         public bool SupportsQsvHWAccel { get; set; }
         public bool SupportsAmfHWAccel { get; set; }
         public bool SupportsD3D12VAHWAccel { get; set; }
-        public bool SupportsVulkanHWAccel { get; set; }
 
         // Pixel format support
         public bool SupportsVideoToolboxVLDPixelFormat { get; set; }
@@ -393,7 +387,6 @@ internal static class FFprobeUtils
         public bool SupportsQsvPixelFormat { get; set; }
         public bool SupportsAmfPixelFormat { get; set; }
         public bool SupportsD3D12PixelFormat { get; set; }
-        public bool SupportsVulkanPixelFormat { get; set; }
     }
 
     private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(
@@ -617,13 +610,8 @@ internal static class FFprobeUtils
                     case "vpp_amf": _configInfo.SupportsVppAmfFilter = true; break;
                     case "scale_d3d12": _configInfo.SupportsScaleD3D12Filter = true; break;
                     case "deinterlace_d3d12": _configInfo.SupportsDeinterlaceD3D12Filter = true; break;
-                    case "scale_vulkan": _configInfo.SupportsScaleVulkanFilter = true; break;
-                    case "bwdif_vulkan": _configInfo.SupportsBwdifVulkanFilter = true; break;
                     case "transpose_vt": _configInfo.SupportsTransposeVtFilter = true; break;
                     case "transpose_cuda": _configInfo.SupportsTransposeCudaFilter = true; break;
-                    case "transpose_vulkan": _configInfo.SupportsTransposeVulkanFilter = true; break;
-                    case "hflip_vulkan": _configInfo.SupportsHFlipVulkanFilter = true; break;
-                    case "vflip_vulkan": _configInfo.SupportsVFlipVulkanFilter = true; break;
                 }
             }
 
@@ -639,7 +627,6 @@ internal static class FFprobeUtils
                         case "qsv": _configInfo.SupportsQsvPixelFormat = true; break;
                         case "amf": _configInfo.SupportsAmfPixelFormat = true; break;
                         case "d3d12": _configInfo.SupportsD3D12PixelFormat = true; break;
-                        case "vulkan": _configInfo.SupportsVulkanPixelFormat = true; break;
                     }
                 }
             }
@@ -656,7 +643,6 @@ internal static class FFprobeUtils
                     case "qsv": _configInfo.SupportsQsvHWAccel = _configInfo.SupportsQsvPixelFormat && CheckHWAccelActuallySupported(name); break;
                     case "amf": _configInfo.SupportsAmfHWAccel = _configInfo.SupportsAmfPixelFormat && CheckHWAccelActuallySupported(name); break;
                     case "d3d12va": _configInfo.SupportsD3D12VAHWAccel = _configInfo.SupportsD3D12PixelFormat && CheckHWAccelActuallySupported(name); break;
-                    case "vulkan": _configInfo.SupportsVulkanHWAccel = _configInfo.SupportsVulkanPixelFormat && CheckHWAccelActuallySupported(name); break;
                 }
             }
 
@@ -687,11 +673,6 @@ internal static class FFprobeUtils
             _configInfo.SupportsD3D12VAHWAccel = true;
             bool pixFmtSupported = _configInfo.SupportsD3D12PixelFormat;
             bool scaleFilterSupported = _configInfo.SupportsScaleD3D12Filter;
-#elif CUSTOM_HWACCEL_MODE_VULKAN
-            string mode = "vulkan";
-            _configInfo.SupportsVulkanHWAccel = true;
-            bool pixFmtSupported = _configInfo.SupportsVulkanPixelFormat;
-            bool scaleFilterSupported = _configInfo.SupportsScaleVulkanFilter;
 #else
 #error Unrecognized CUSTOM_HWACCEL_MODE* value.
 #endif

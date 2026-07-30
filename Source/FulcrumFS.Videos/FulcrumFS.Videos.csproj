@@ -19,7 +19,6 @@
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'qsv' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_QSV</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'amf' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_AMF</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'd3d12va' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_D3D12VA</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'vulkan' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_VULKAN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

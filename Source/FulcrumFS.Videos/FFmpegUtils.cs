@@ -38,7 +38,6 @@ internal static class FFmpegUtils
         "qsv" => "qsv",
         "amf" => "amf",
         "d3d12va" => "d3d12",
-        "vulkan" => "vulkan",
         _ => throw new ArgumentException($"Unrecognized hardware acceleration mode: {hwaccel}", nameof(hwaccel)),
     };
 
@@ -292,11 +291,6 @@ internal static class FFmpegUtils
                     // Need to specify both bob mode & mode to match what normal bwdif does by default.
                     steps.Add("deinterlace_d3d12=method=bob:mode=field");
                 }
-                else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsBwdifVulkanFilter)
-                {
-                    // We need to set to send_field to match what normal bwdif does by default.
-                    steps.Add("bwdif_vulkan=mode=send_field");
-                }
                 else
                 {
                     EnsureHWDownload();
@@ -342,21 +336,6 @@ internal static class FFmpegUtils
                     }
 
                     steps.Add(filterPart);
-                }
-                else if (!doneHWDownload && hwaccel == "vulkan" &&
-                    FFprobeUtils.Configuration.SupportsTransposeVulkanFilter &&
-                    FFprobeUtils.Configuration.SupportsHFlipVulkanFilter &&
-                    FFprobeUtils.Configuration.SupportsVFlipVulkanFilter)
-                {
-                    if (RotateForHWAccel == 180)
-                    {
-                        steps.Add("vflip_vulkan");
-                        steps.Add("hflip_vulkan");
-                    }
-                    else
-                    {
-                        steps.Add($"transpose_vulkan=dir={rotateDir}");
-                    }
                 }
                 else
                 {
@@ -417,12 +396,6 @@ internal static class FFmpegUtils
                 {
                     // Note: d3d12 cannot ensure we match bicubic scaling that 'scale' uses by default, so we just use the default.
                     steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_d3d12=w={w2}:h={h2}"));
-                    resizeHW = true;
-                }
-                else if (!doneHWDownload && hwaccel == "vulkan" && FFprobeUtils.Configuration.SupportsScaleVulkanFilter)
-                {
-                    // Note: vulkan does not allow us to specify using bicubic, so we use high quality bilinear instead.
-                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_vulkan=w={w2}:h={h2}:scaler=bilinear:debayer=bilinear_hq"));
                     resizeHW = true;
                 }
                 else
