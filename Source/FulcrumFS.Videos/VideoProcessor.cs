@@ -1392,6 +1392,7 @@ public sealed class VideoProcessor : FileProcessor
                                 "Unimplemented FpsOptions.LimitMode value.");
 
                             // Find division factor: ceil(currentFps / maxFps)
+                            // Note: we don't need checked here, since we already ran this with checked in the if earlier in the code.
                             int lhs = videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2);
                             long rhs = (long)videoStream.FpsDen * maxFpsNum;
                             long divideBy = (lhs + rhs - 1) / rhs;

@@ -1,4 +1,3 @@
-using Microsoft.Testing.Platform.Extensions.TestHost;
 using PrefixClassName.MsTest;
 using Shouldly;
 

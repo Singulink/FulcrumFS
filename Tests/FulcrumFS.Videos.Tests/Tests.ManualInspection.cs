@@ -2,7 +2,6 @@ using System.Globalization;
 using Shouldly;
 using Singulink.IO;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 #pragma warning disable SA1118 // Parameter should not span multiple lines
 
