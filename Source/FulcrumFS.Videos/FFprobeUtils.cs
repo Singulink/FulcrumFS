@@ -636,7 +636,8 @@ internal static class FFprobeUtils
 
             // Initialize hardware acceleration support (note: command output also includes a 'Hardware acceleration methods:' line, and empty line after)
             // Note: it being listed in '-hwaccels' only means that ffmpeg was built with support for it, not that it is actually usable on the current system.
-#if !CUSTOM_HWACCEL_MODE
+            // Note: the 'auto' forced mode (used for testing) runs the same detection as normal builds, since it tests automatic hardware acceleration selection.
+#if !CUSTOM_HWACCEL_MODE || CUSTOM_HWACCEL_MODE_AUTO
             foreach (var (info, name) in RunFFprobeConfigurationExtraction("-hwaccels", noStartingLine: true, nameOnly: true, useFfmpegExe: true))
             {
                 switch (name)
@@ -650,7 +651,7 @@ internal static class FFprobeUtils
             }
 
             // Special handling for forced hardware acceleration mode (used for testing):
-#elif !CUSTOM_HWACCEL_MODE_NONE && !CUSTOM_HWACCEL_MODE_DECODEONLY
+#elif !CUSTOM_HWACCEL_MODE_DECODEONLY
 #if CUSTOM_HWACCEL_MODE_VIDEOTOOLBOX
             string mode = "videotoolbox";
             _configInfo.SupportsVideoToolboxHWAccel = true;

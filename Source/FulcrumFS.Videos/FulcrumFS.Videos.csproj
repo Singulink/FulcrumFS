@@ -12,7 +12,7 @@
 
     <!-- Handling for special custom hwaccel config mode -->
     <DefineConstants Condition=" '$(HWACCEL_MODE)' != '' ">$(DefineConstants);CUSTOM_HWACCEL_MODE</DefineConstants>
-    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'none' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_NONE</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'auto' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_AUTO</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'decodeonly' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_DECODEONLY</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'videotoolbox' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_VIDEOTOOLBOX</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'cuda' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_CUDA</DefineConstants>

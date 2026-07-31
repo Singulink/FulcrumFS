@@ -2235,7 +2235,7 @@ public sealed class VideoProcessor : FileProcessor
         // Set up the hardware acceleration if we can use it:
         if (canUseHardwareAcceleration && Options.HardwareAccelerationKind != HardwareAccelerationKind.None)
         {
-            command.HWAccel = null;
+            command.HWAccel = "auto";
             if (Options.HardwareAccelerationKind != HardwareAccelerationKind.DecodeOnly)
             {
                 command.HWAccel = Options.HardwareAccelerationKind switch
@@ -2256,7 +2256,7 @@ public sealed class VideoProcessor : FileProcessor
                         { SupportsAmfHWAccel: true } => "amf",
                         { SupportsQsvHWAccel: true } => "qsv",
                         { SupportsD3D12VAHWAccel: true } => "d3d12va",
-                        _ => null,
+                        _ => "auto",
                     },
                 };
                 command.UseHWAccelFiltersWhenPossible = worthUsingHardwareAcceleratedFilters;
@@ -2315,11 +2315,11 @@ public sealed class VideoProcessor : FileProcessor
 
                     // If we are in a forced hardware acceleration mode, we want to keep track of all that succeeded with hardware acceleration.
 #if CUSTOM_HWACCEL_MODE
-                    if (command.HWAccel is not ("none" or null))
+                    if (command.HWAccel is not ("none" or "auto"))
                         OnHWAccelAttemptSuccess();
 #endif
                 }
-                catch (Exception ex) when (command.HWAccel is not ("none" or null))
+                catch (Exception ex) when (command.HWAccel is not ("none" or "auto"))
                 {
                     progressUsed = mostRecentClampedProgress;
 
@@ -2328,7 +2328,7 @@ public sealed class VideoProcessor : FileProcessor
 
                     // Re-run with only opportunistic hardware acceleration for decoding if it failed with hardware acceleration enabled.
                     command.UseHWAccelFiltersWhenPossible = false;
-                    command.HWAccel = null;
+                    command.HWAccel = "auto";
                     await FFmpegUtils.RunFFmpegCommandAsync(
                         command,
                         localProgressCallback,

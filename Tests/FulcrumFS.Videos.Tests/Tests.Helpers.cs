@@ -27,9 +27,8 @@ partial class Tests
 
     // Note: we use 'ForceValidateAllStreams = false' for most tests in this file to reduce test time.
     // Note: this is only done in Release mode, so that Debug tests still run validation logic on all streams for better coverage.
-    // Note: we also use true in none & decodeonly hwaccel modes, so we can compare that behavior in CI to the default mode (opportunistic), and so the two
-    // modes can be compared to each other.
-#if DEBUG || CUSTOM_HWACCEL_MODE_NONE || CUSTOM_HWACCEL_MODE_DECODEONLY
+    // Note: we also use true in hwaccel builds so they are more directly comparable with Debug 'none' and test more codepaths in CI.
+#if DEBUG || CUSTOM_HWACCEL_MODE
     public const bool DefaultForceValidateAllStreams = true;
 #else
     public const bool DefaultForceValidateAllStreams = false;
@@ -678,7 +677,7 @@ partial class Tests
                 $"Expected '{frameDescription}' to have an SSIM similarity of at least {minSimilarity} to the reference frame (actual was {similarity})"));
     }
 
-#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_NONE && !CUSTOM_HWACCEL_MODE_DECODEONLY
+#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_DECODEONLY
     [TestInitialize]
     public void SetCaseNameForHWAccelStats()
     {

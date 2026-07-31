@@ -27,7 +27,7 @@ internal static class FFmpegUtils
         public int MapChaptersFrom { get; } = mapChaptersFrom;
         public bool ForceProgressiveDownloadSupport { get; } = forceProgressiveDownloadSupport;
         public bool IsToMov { get; } = isToMov;
-        public string? HWAccel { get; set; } = "none"; // Special values: 'null' means auto & not used for filters - 'none' means none & not used for filters
+        public string HWAccel { get; set; } = "none"; // Special values: 'auto' means auto & not used for filters - 'none' means none & not used for filters
         public bool UseHWAccelFiltersWhenPossible { get; set; } = true;
     }
 
@@ -738,28 +738,17 @@ internal static class FFmpegUtils
                 args.Add(threadLimit);
             }
 
-#if CUSTOM_HWACCEL_MODE_NONE
-            args.Add("-hwaccel");
-            args.Add("none");
-#elif CUSTOM_HWACCEL_MODE_DECODEONLY
+#if CUSTOM_HWACCEL_MODE_DECODEONLY
             args.Add("-hwaccel");
             args.Add("auto");
 #else
-            if (command.HWAccel is not null)
-            {
-                args.Add("-hwaccel");
-                args.Add(command.HWAccel);
+            args.Add("-hwaccel");
+            args.Add(command.HWAccel);
 
-                if (command.HWAccel != "none" && command.UseHWAccelFiltersWhenPossible)
-                {
-                    args.Add("-hwaccel_output_format");
-                    args.Add(MapHWAccelNameToFormatName(command.HWAccel));
-                }
-            }
-            else
+            if (command.HWAccel is not ("none" or "auto") && command.UseHWAccelFiltersWhenPossible)
             {
-                args.Add("-hwaccel");
-                args.Add("auto");
+                args.Add("-hwaccel_output_format");
+                args.Add(MapHWAccelNameToFormatName(command.HWAccel));
             }
 #endif
 
@@ -785,7 +774,7 @@ internal static class FFmpegUtils
         {
             string? hwAccelMode = command.HWAccel switch
             {
-                "none" or null => null,
+                "none" or "auto" => null,
                 _ when !command.UseHWAccelFiltersWhenPossible => null,
                 var x => x,
             };

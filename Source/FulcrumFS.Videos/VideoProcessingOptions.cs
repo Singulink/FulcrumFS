@@ -27,7 +27,8 @@ public sealed record VideoProcessingOptions
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
     /// <remarks>
-    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationKind" /> for options to control this.
+    /// Note: the result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
+    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.
     /// </remarks>
     public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
@@ -59,7 +60,8 @@ public sealed record VideoProcessingOptions
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
     /// <remarks>
-    /// Note: by default, the result might vary slightly from platform to platform, see <see cref="HardwareAccelerationKind" /> for options to control this.
+    /// Note: the result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
+    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.
     /// </remarks>
     public static VideoProcessingOptions StandardizedHEVCAACMP4 { get; } = new VideoProcessingOptions()
     {
@@ -629,7 +631,8 @@ public sealed record VideoProcessingOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// By default, allows minor variations in the result to improve hardware acceleration utilisation ability.
+    /// Defaults to <see cref="Videos.HardwareAccelerationKind.None" /> (no hardware acceleration), which keeps variation between devices to a minimum.
+    /// Enabling hardware acceleration allows more variation in the result to improve hardware acceleration utilisation ability.
     /// </para>
     /// <para>
     /// If you have an AMD or Intel GPU, you may want to explicitly set this to a specific mode that prioritizes your GPU, as it is assumed that AMD and Intel
@@ -644,5 +647,11 @@ public sealed record VideoProcessingOptions
             value.ThrowIfNotDefined();
             field = value;
         }
-    } = HardwareAccelerationKind.Auto;
+    }
+#if CUSTOM_HWACCEL_MODE
+        // Note: forced hardware acceleration test builds default to Auto so that the forced mode is exercised without per-test configuration.
+        = HardwareAccelerationKind.Auto;
+#else
+        = HardwareAccelerationKind.None;
+#endif
 }
