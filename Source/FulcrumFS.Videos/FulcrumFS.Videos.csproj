@@ -19,6 +19,9 @@
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'qsv' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_QSV</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'amf' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_AMF</DefineConstants>
     <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'd3d12va' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_D3D12VA</DefineConstants>
+
+    <!-- Handling for boosting the priority of long-running processes (used by CI to reduce flakiness) -->
+    <DefineConstants Condition=" '$(BOOST_LONG_RUNNING_PROCESS_PRIORITY)' == 'true' ">$(DefineConstants);BOOST_LONG_RUNNING_PROCESS_PRIORITY</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

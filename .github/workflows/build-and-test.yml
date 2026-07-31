@@ -49,6 +49,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-video-linux-x64' || 'test-video-macos-arm64' }}${{ matrix.run-mode == 'hwaccel' && '-explicit-hwaccel-modes' || '' }}
 
+    # Boost the priority of long-running ffmpeg processes so they do not get starved on busy CI machines, which otherwise can be responsible for some spurious test failures.
+    env:
+      BOOST_LONG_RUNNING_PROCESS_PRIORITY: 'true'
+
     steps:
     - name: Set hwaccel modes
       if: ${{ matrix.run-mode == 'hwaccel' }}
