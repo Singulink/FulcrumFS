@@ -1362,6 +1362,12 @@ public sealed class VideoProcessor : FileProcessor
 
                 FFmpegUtils.PerStreamFPSOverride? fpsOverride = null;
 
+                // The fps the resulting stream will have, or null if we have no way of knowing it. Interlaced sources are counted at their field rate, since
+                // re-encoding always deinterlaces them into one frame per field (see the deinterlacing block further below).
+                (long Num, long Den)? resultFps = videoStream.FpsNum > 0 && videoStream.FpsDen > 0
+                    ? ((long)videoStream.FpsNum * (IsProgressive(videoStream.FieldOrder) ? 1 : 2), videoStream.FpsDen)
+                    : null;
+
                 if (Options.FpsOptions is { } fpsOptions)
                 {
                     // Note: technically the max fps num & den possible is uint.MaxValue for H.264 and HEVC, but we don't expect to find anything that high or
@@ -1413,6 +1419,7 @@ public sealed class VideoProcessor : FileProcessor
                         }
 
                         filterOverride.FPS = (newFpsNum, newFpsDen);
+                        resultFps = (newFpsNum, newFpsDen);
                         perOutputStreamOverrides.Add(fpsOverride =
                             new FFmpegUtils.PerStreamFPSOverride(streamKind: 'v', streamIndexWithinKind: id, fpsNum: newFpsNum, fpsDen: newFpsDen));
                     }
@@ -1759,24 +1766,44 @@ public sealed class VideoProcessor : FileProcessor
                         // Make the file more compatible by using 'hvc1' tag:
                         perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamTagOverride(streamKind: 'v', streamIndexWithinKind: id, tag: "hvc1"));
 
-                        // We want to limit the threads for x265 if we have ThreadLimit set:
-                        string? threadLimitString = ThreadLimit is { } tl ? string.Create(CultureInfo.InvariantCulture, $"pools={tl}") : null;
+                        // List of x265 params to pass to the encoder.
+                        List<string> x265Params = [];
 
                         // Level 8.5 support is now under allow-non-conformance=1 on some builds of x265
                         // (https://bitbucket.org/multicoreware/x265_git/commits/e311ff2e7d477dcd85c5b1178b5129dd7472d3ce).
                         if (requiresLevel85ForX265)
                         {
-                            perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamX265ParamsOverride(
-                                streamKind: 'v',
-                                streamIndexWithinKind: id,
-                                paramsToPass: threadLimitString is { } ? $"allow-non-conformance=1:{threadLimitString}" : "allow-non-conformance=1"));
+                            x265Params.Add("allow-non-conformance=1");
                         }
-                        else if (threadLimitString is { })
+
+                        // We want to limit the threads for x265 if we have ThreadLimit set:
+                        if (ThreadLimit is { } tl)
+                        {
+                            x265Params.Add(string.Create(CultureInfo.InvariantCulture, $"pools={tl}"));
+                        }
+
+                        // See https://github.com/Multicorewareinc/x265/issues/934 - technically only 3 are required according to copilot, but to be safe we
+                        // use 10, which won't have much impact on most files anyway, as most would have more than 10 frames. Videos with unknown length may
+                        // falsely get flagged here too, but that should be fine, as we can still use p-frames, so the file might be slightly larger than
+                        // necessary in this edge case, but shouldn't be orders of magnitudes larger. Another reason to use 10 frames is that we fall back to
+                        // full file length, not only relying on only stream length, which means we could accidentally over-report the length a bit, leading
+                        // to the issue.
+                        double estimatedFrames = resultFps is { } fps && (videoStream.Duration ?? sourceInfo.Duration) is { } resultDuration
+                            ? resultDuration * fps.Num / fps.Den
+                            : 0.0;
+
+                        if (estimatedFrames <= 10.0)
+                        {
+                            x265Params.Add("bframes=0");
+                        }
+
+                        // Add the x265 params override if we have any params to pass:
+                        if (x265Params.Count > 0)
                         {
                             perOutputStreamOverrides.Add(new FFmpegUtils.PerStreamX265ParamsOverride(
                                 streamKind: 'v',
                                 streamIndexWithinKind: id,
-                                paramsToPass: threadLimitString));
+                                paramsToPass: string.Join(':', x265Params)));
                         }
                     }
                     else

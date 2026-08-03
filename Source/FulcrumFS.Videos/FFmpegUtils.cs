@@ -738,10 +738,6 @@ internal static class FFmpegUtils
                 args.Add(threadLimit);
             }
 
-#if CUSTOM_HWACCEL_MODE_DECODEONLY
-            args.Add("-hwaccel");
-            args.Add("auto");
-#else
             args.Add("-hwaccel");
             args.Add(command.HWAccel);
 
@@ -750,7 +746,6 @@ internal static class FFmpegUtils
                 args.Add("-hwaccel_output_format");
                 args.Add(MapHWAccelNameToFormatName(command.HWAccel));
             }
-#endif
 
             args.Add("-i");
             args.Add(command.InputFiles[i].File.PathExport);

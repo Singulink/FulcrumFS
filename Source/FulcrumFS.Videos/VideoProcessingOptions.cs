@@ -648,7 +648,10 @@ public sealed record VideoProcessingOptions
             field = value;
         }
     }
-#if CUSTOM_HWACCEL_MODE
+#if CUSTOM_HWACCEL_MODE_DECODEONLY
+        // Note: decodeonly test builds default to DecodeOnly so that the decodeonly mode is exercised without per-test configuration.
+        = HardwareAccelerationKind.DecodeOnly;
+#elif CUSTOM_HWACCEL_MODE
         // Note: forced hardware acceleration test builds default to Auto so that the forced mode is exercised without per-test configuration.
         = HardwareAccelerationKind.Auto;
 #else

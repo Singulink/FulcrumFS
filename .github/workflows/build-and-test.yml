@@ -57,7 +57,7 @@ jobs:
     - name: Set hwaccel modes
       if: ${{ matrix.run-mode == 'hwaccel' }}
       shell: bash
-      run: echo "HWACCEL_MODES=${{ matrix.os == 'windows-latest' && 'auto decodeonly qsv amf d3d12va' || matrix.os == 'ubuntu-latest' && 'auto decodeonly qsv' || 'auto decodeonly videotoolbox' }}" >> "$GITHUB_ENV"
+      run: echo "HWACCEL_MODES=${{ matrix.os == 'windows-latest' && 'decodeonly auto d3d12va' || matrix.os == 'ubuntu-latest' && 'decodeonly auto' || 'decodeonly auto videotoolbox' }}" >> "$GITHUB_ENV"
     - name: Checkout
       uses: actions/checkout@v6
     - name: Setup .NET
