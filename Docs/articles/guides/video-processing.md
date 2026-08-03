@@ -84,7 +84,7 @@ var amdOptions = VideoProcessingOptions.StandardizedH264AACMP4 with {
     HardwareAccelerationKind = HardwareAccelerationKind.Amf,
 };
 
-// Machine has an Intel GPU (e.g. Arc) - use it rather than letting Auto deprioritize AMF.
+// Machine has an Intel GPU (e.g. Arc) - use it rather than letting Auto deprioritize QSV.
 var intelOptions = VideoProcessingOptions.StandardizedH264AACMP4 with {
     HardwareAccelerationKind = HardwareAccelerationKind.Qsv,
 };
