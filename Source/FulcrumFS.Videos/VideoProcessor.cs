@@ -2343,20 +2343,20 @@ public sealed class VideoProcessor : FileProcessor
 
                     // If we are in a forced hardware acceleration mode, we want to keep track of all that succeeded with hardware acceleration.
 #if CUSTOM_HWACCEL_MODE
-                    if (command.HWAccel is not ("none" or "auto"))
+                    if (command.HWAccel != "none")
                         OnHWAccelAttemptSuccess();
 #endif
                 }
-                catch (Exception ex) when (command.HWAccel is not ("none" or "auto"))
+                catch (Exception ex) when (command.HWAccel != "none")
                 {
                     progressUsed = mostRecentClampedProgress;
 
                     // Reset the duration high-water mark, since the re-run starts from zero again - the updated progressUsed keeps reports monotonic.
                     lastDone = 0.0;
 
-                    // Re-run with only opportunistic hardware acceleration for decoding if it failed with hardware acceleration enabled.
+                    // Re-run with no hardware acceleration at all (not even opportunistic decoding, as it can have issues sometimes).
                     command.UseHWAccelFiltersWhenPossible = false;
-                    command.HWAccel = "auto";
+                    command.HWAccel = "none";
                     await FFmpegUtils.RunFFmpegCommandAsync(
                         command,
                         localProgressCallback,

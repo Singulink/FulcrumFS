@@ -57,7 +57,7 @@ jobs:
     - name: Set hwaccel modes
       if: ${{ matrix.run-mode == 'hwaccel' }}
       shell: bash
-      run: echo "HWACCEL_MODES=${{ matrix.os == 'windows-latest' && 'decodeonly auto d3d12va' || matrix.os == 'ubuntu-latest' && 'decodeonly auto' || 'decodeonly auto videotoolbox' }}" >> "$GITHUB_ENV"
+      run: echo "HWACCEL_MODES=${{ matrix.os == 'macos-latest' && 'decodeonly auto videotoolbox' || 'decodeonly auto' }}" >> "$GITHUB_ENV"
     - name: Checkout
       uses: actions/checkout@v6
     - name: Setup .NET
@@ -109,22 +109,7 @@ jobs:
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
       run: |
-        if [[ "$RUNNER_OS" == "Linux" ]]; then
-          cpu_vendor=$(grep -m1 vendor_id /proc/cpuinfo | awk '{print $3}')
-        elif [[ "$RUNNER_OS" == "Windows" ]]; then
-          cpu_vendor=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Manufacturer" | tr -d '\r')
-        else
-          cpu_vendor=""
-        fi
         for mode in $HWACCEL_MODES; do
-          if [[ "$mode" == "qsv" && -n "$cpu_vendor" && "$cpu_vendor" != *Intel* ]]; then
-            echo "Skipping HWACCEL_MODE=qsv (CPU vendor is '$cpu_vendor', not Intel)"
-            continue
-          fi
-          if [[ "$mode" == "amf" && -n "$cpu_vendor" && "$cpu_vendor" != *AMD* && "$cpu_vendor" != *Advanced* ]]; then
-            echo "Skipping HWACCEL_MODE=amf (CPU vendor is '$cpu_vendor', not AMD)"
-            continue
-          fi
           echo "::group::HWACCEL_MODE=$mode"
           export HWACCEL_MODE="$mode"
           dotnet build FulcrumFS.slnx --configuration Release --no-restore

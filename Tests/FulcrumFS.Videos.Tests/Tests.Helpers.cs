@@ -677,7 +677,7 @@ partial class Tests
                 $"Expected '{frameDescription}' to have an SSIM similarity of at least {minSimilarity} to the reference frame (actual was {similarity})"));
     }
 
-#if CUSTOM_HWACCEL_MODE && !CUSTOM_HWACCEL_MODE_DECODEONLY
+#if CUSTOM_HWACCEL_MODE
     [TestInitialize]
     public void SetCaseNameForHWAccelStats()
     {
