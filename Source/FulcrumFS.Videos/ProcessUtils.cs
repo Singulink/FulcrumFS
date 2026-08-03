@@ -373,7 +373,7 @@ internal static class ProcessUtils
 
         if (returnCode != 0)
         {
-#if DEBUG
+#if DEBUG || CUSTOM_HWACCEL_MODE
             StringBuilder sb = new();
             sb.AppendLine(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
             sb.AppendLine(CultureInfo.InvariantCulture, $"ExecutablePath: {fileName.PathExport}");
@@ -422,7 +422,7 @@ internal static class ProcessUtils
 
         if (returnCode != 0)
         {
-#if DEBUG
+#if DEBUG || CUSTOM_HWACCEL_MODE
             StringBuilder sb = new();
             sb.AppendLine(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
             sb.AppendLine(CultureInfo.InvariantCulture, $"ExecutablePath: {fileName.PathExport}");
