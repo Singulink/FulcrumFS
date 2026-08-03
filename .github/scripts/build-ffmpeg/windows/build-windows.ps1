@@ -39,7 +39,7 @@ foreach ($f in 'media-autobuild_suite.ini', 'ffmpeg_options.txt', 'mpv_options.t
 
 # We want to run the suite in CI mode so it doesn't ask for input; however, the CI env var doesn't get passed into mintty, so we need to manually adjust the
 # batch file so it sets it. Otherwise CI can get stuck for 6 hours & not retry.
-$bat = ".\media-autobuild_suite.bat"
+$bat = Join-Path $suiteDir 'media-autobuild_suite.bat'
 $content = [System.IO.File]::ReadAllText($bat)
 $old = @'
 "%command% %arg%"
@@ -57,7 +57,7 @@ Set-Content $bat $content -Encoding UTF8
 $PSNativeCommandUseErrorActionPreference = $false
 Push-Location $suiteDir
 try {
-    & cmd /c media-autobuild_suite.bat
+    & cmd /c $bat
 }
 finally {
     Pop-Location
