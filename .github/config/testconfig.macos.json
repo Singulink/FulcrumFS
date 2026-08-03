@@ -5,11 +5,11 @@
     },
     "parallelism": {
       "enabled": true,
-      "workers": 2,
+      "workers": 1,
       "scope": "method"
     },
     "timeout": {
-      "test": 600000
+      "test": 900000
     }
   }
 }

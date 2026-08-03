@@ -37,12 +37,27 @@ foreach ($f in 'media-autobuild_suite.ini', 'ffmpeg_options.txt', 'mpv_options.t
     Copy-Item -Force -Path (Join-Path $PSScriptRoot $f) -Destination (Join-Path $buildDir $f)
 }
 
+# We want to run the suite in CI mode so it doesn't ask for input; however, the CI env var doesn't get passed into mintty, so we need to manually adjust the
+# batch file so it sets it. Otherwise CI can get stuck for 6 hours & not retry.
+$bat = ".\media-autobuild_suite.bat"
+$content = [System.IO.File]::ReadAllText($bat)
+$old = @'
+"%command% %arg%"
+'@
+$new = @'
+"export CI=true ; %command% %arg%"
+'@
+if ([regex]::Matches($content, [regex]::Escape($old)).Count -ne 1) {
+    throw "Expected exactly one match in $bat"
+}
+$content = $content.Replace($old, $new)
+Set-Content $bat $content -Encoding UTF8
+
 # Run the suite.
 $PSNativeCommandUseErrorActionPreference = $false
 Push-Location $suiteDir
 try {
-    # Redirect stdin from NUL so the suite can never block on interactive prompts, rather than waiting 6 hours for CI to fail & not retrying.
-    & cmd.exe /c 'media-autobuild_suite.bat < NUL'
+    & cmd /c media-autobuild_suite.bat
 }
 finally {
     Pop-Location
