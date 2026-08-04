@@ -114,6 +114,7 @@ jobs:
           export HWACCEL_MODE="$mode"
           dotnet build FulcrumFS.slnx --configuration Release --no-restore
           dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+          echo ""
           if [[ "$mode" == "decodeonly" ]]; then
             echo "::endgroup::"
             continue

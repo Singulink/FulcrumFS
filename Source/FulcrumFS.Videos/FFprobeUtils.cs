@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -485,14 +486,54 @@ internal static class FFprobeUtils
 
     private static bool CheckHWAccelActuallySupported(string mode)
     {
-        var (_, _, returnCode) = ProcessUtils.RunProcessToStringAsync(
-            VideoProcessor.FFmpegExePath,
-            ["-hide_banner", "-loglevel", "error", "-init_hw_device", mode, "-f", "lavfi", "-i", "nullsrc", "-frames:v", "1", "-f", "null", "-"],
-            lifetime: ProcessLifetime.ShortLived,
-            cancellationToken: CancellationToken.None,
-            runAsynchronously: false).GetAwaiter().GetResult();
+        // Creating a device proves very little, since it does not touch the video decoding hardware at all: videotoolbox always succeeds (its device creation
+        // is a no-op), d3d12va succeeds against a software adapter, and amf only checks that the runtime library loads. The remaining modes need a real driver
+        // to create a device, but still do not establish that the decoding engine supports what we throw at it. We assume that any useful hardware accelerator
+        // will support decoding H.264 at 128x128 resolution.
 
-        return returnCode == 0;
+        string hwAccelOutputFormat = FFmpegUtils.MapHWAccelNameToFormatName(mode);
+        var testFile = FilePath.CreateTempFile();
+
+        try
+        {
+            var (_, _, encodeReturnCode) = ProcessUtils.RunProcessToStringAsync(
+                VideoProcessor.FFmpegExePath,
+                [
+                    "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-r", "1", "-i", "color=c=black:s=128x128", "-frames:v", "1", "-c:v", "libx264",
+                    "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-f", "h264", "-y", testFile.PathExport,
+                ],
+                lifetime: ProcessLifetime.ShortLived,
+                cancellationToken: CancellationToken.None,
+                runAsynchronously: false).GetAwaiter().GetResult();
+
+            Debug.Assert(encodeReturnCode == 0);
+
+            if (encodeReturnCode != 0)
+                return false;
+
+            var (_, _, decodeReturnCode) = ProcessUtils.RunProcessToStringAsync(
+                VideoProcessor.FFmpegExePath,
+                [
+                    "-hide_banner", "-loglevel", "error", "-hwaccel", mode, "-hwaccel_output_format", hwAccelOutputFormat, "-f", "h264", "-i",
+                    testFile.PathExport, "-frames:v", "1", "-f", "null", "-",
+                ],
+                lifetime: ProcessLifetime.ShortLived,
+                cancellationToken: CancellationToken.None,
+                runAsynchronously: false).GetAwaiter().GetResult();
+
+            return decodeReturnCode == 0;
+        }
+        finally
+        {
+            try
+            {
+                testFile.Delete(ignoreNotFound: true);
+            }
+            catch
+            {
+                // Not worth failing over.
+            }
+        }
     }
 
     private static void EnsureConfigurationInfoInitialized()
