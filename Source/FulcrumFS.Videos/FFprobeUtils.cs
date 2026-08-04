@@ -489,7 +489,8 @@ internal static class FFprobeUtils
         // Creating a device proves very little, since it does not touch the video decoding hardware at all: videotoolbox always succeeds (its device creation
         // is a no-op), d3d12va succeeds against a software adapter, and amf only checks that the runtime library loads. The remaining modes need a real driver
         // to create a device, but still do not establish that the decoding engine supports what we throw at it. We assume that any useful hardware accelerator
-        // will support decoding H.264 at 128x128 resolution.
+        // will support decoding H.264 at 128x128 resolution. The frames are downloaded back out of hardware and hashed so that the accelerator has to actually
+        // produce pixel data instead of merely accepting the stream.
 
         string hwAccelOutputFormat = FFmpegUtils.MapHWAccelNameToFormatName(mode);
         var testFile = FilePath.CreateTempFile();
@@ -499,7 +500,7 @@ internal static class FFprobeUtils
             var (_, _, encodeReturnCode) = ProcessUtils.RunProcessToStringAsync(
                 VideoProcessor.FFmpegExePath,
                 [
-                    "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-r", "1", "-i", "color=c=black:s=128x128", "-frames:v", "1", "-c:v", "libx264",
+                    "-hide_banner", "-f", "lavfi", "-r", "10", "-i", "testsrc2=s=128x128", "-frames:v", "10", "-c:v", "libx264",
                     "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-f", "h264", "-y", testFile.PathExport,
                 ],
                 lifetime: ProcessLifetime.ShortLived,
@@ -514,8 +515,8 @@ internal static class FFprobeUtils
             var (_, _, decodeReturnCode) = ProcessUtils.RunProcessToStringAsync(
                 VideoProcessor.FFmpegExePath,
                 [
-                    "-hide_banner", "-loglevel", "error", "-hwaccel", mode, "-hwaccel_output_format", hwAccelOutputFormat, "-f", "h264", "-i",
-                    testFile.PathExport, "-frames:v", "1", "-f", "null", "-",
+                    "-hide_banner", "-hwaccel", mode, "-hwaccel_output_format", hwAccelOutputFormat, "-f", "h264", "-i",
+                    testFile.PathExport, "-filter:v", "hwdownload,format=nv12", "-f", "framemd5", "-",
                 ],
                 lifetime: ProcessLifetime.ShortLived,
                 cancellationToken: CancellationToken.None,
