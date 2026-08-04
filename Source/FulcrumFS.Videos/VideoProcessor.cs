@@ -3337,7 +3337,8 @@ public sealed class VideoProcessor : FileProcessor
 #if CUSTOM_HWACCEL_MODE
     private static int _totalHWAccelAttempts = 0;
     private static int _totalHWAccelFailures = 0;
-    private static readonly List<(Exception Error, string? TestCase)> _hwAccelFailureExceptions = [];
+    private static readonly List<(Exception Error, string TestCase)> _hwAccelFailureExceptions = [];
+    private static readonly List<string?> _hwAccelSuccessTestCases = [];
     private static readonly Lock _hwAccelLock = new();
     private static readonly AsyncLocal<string?> _testCase = new();
 
@@ -3364,6 +3365,7 @@ public sealed class VideoProcessor : FileProcessor
         lock (_hwAccelLock)
         {
             _totalHWAccelAttempts++;
+            _hwAccelSuccessTestCases.Add(_testCase.Value ?? "<unknown>");
         }
     }
 
@@ -3387,6 +3389,7 @@ public sealed class VideoProcessor : FileProcessor
         {
             var report = new StringBuilder();
             report.AppendLine($"HWAccel Attempts: {_totalHWAccelAttempts}, Failures: {_totalHWAccelFailures}");
+
             foreach (var (e, c) in _hwAccelFailureExceptions)
             {
                 report.AppendLine(c + ":");
@@ -3396,6 +3399,14 @@ public sealed class VideoProcessor : FileProcessor
                 report.AppendLine();
                 report.AppendLine();
             }
+
+            report.AppendLine("Successful Test Cases:");
+
+            foreach (var c in _hwAccelSuccessTestCases)
+            {
+                report.AppendLine("- " + c);
+            }
+
             return report.ToString().Trim();
         }
     }
