@@ -3338,7 +3338,7 @@ public sealed class VideoProcessor : FileProcessor
     private static int _totalHWAccelAttempts = 0;
     private static int _totalHWAccelFailures = 0;
     private static readonly List<(Exception Error, string TestCase)> _hwAccelFailureExceptions = [];
-    private static readonly List<string?> _hwAccelSuccessTestCases = [];
+    private static readonly List<string> _hwAccelSuccessTestCases = [];
     private static readonly Lock _hwAccelLock = new();
     private static readonly AsyncLocal<string?> _testCase = new();
 
@@ -3402,7 +3402,7 @@ public sealed class VideoProcessor : FileProcessor
 
             report.AppendLine("Successful Test Cases:");
 
-            foreach (var c in _hwAccelSuccessTestCases)
+            foreach (string c in _hwAccelSuccessTestCases)
             {
                 report.AppendLine("- " + c);
             }
