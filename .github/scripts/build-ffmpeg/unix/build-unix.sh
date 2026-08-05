@@ -45,3 +45,10 @@ fi
 
 # Copy ffmpeg and ffprobe into the output directory.
 cp "$ffmpeg_package_dir/ffmpeg" "$ffmpeg_package_dir/ffprobe" "$FFMPEG_OUTPUT_DIR/"
+
+# On CI, delete the build tree now that the (statically linked) binaries have been extracted from it. CI runners have very limited disk space (generally ~14GB),
+# and the sources plus build artifacts take up a large chunk of it. Only do this on CI so local runs can inspect the tree if desired.
+if [[ "${CI:-}" != "" ]]; then
+  echo "Removing the ffmpeg build tree to free up disk space (CI only)."
+  rm -rf ~/Clones
+fi

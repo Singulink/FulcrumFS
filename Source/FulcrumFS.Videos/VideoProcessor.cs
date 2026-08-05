@@ -3402,7 +3402,12 @@ public sealed class VideoProcessor : FileProcessor
 
             report.AppendLine("Successful Test Cases:");
 
-            foreach (string c in _hwAccelSuccessTestCases)
+            var cases = _hwAccelSuccessTestCases
+                .GroupBy((x) => x)
+                .OrderBy((x) => x.Key, StringComparer.Ordinal)
+                .Select((x) => string.Create(CultureInfo.InvariantCulture, $"{x.Key} ({x.Count()}/{x.Count() + _hwAccelFailureExceptions.Count((y) => y.TestCase == x.Key)})"));
+
+            foreach (string c in cases)
             {
                 report.AppendLine("- " + c);
             }

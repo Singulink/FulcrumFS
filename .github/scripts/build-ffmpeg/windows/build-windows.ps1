@@ -78,6 +78,13 @@ foreach ($exe in 'ffmpeg.exe', 'ffprobe.exe') {
     Write-Host "Copied $exe to $env:FFMPEG_OUTPUT_DIR."
 }
 
+# On CI, delete the build tree now that the (statically linked) binaries have been extracted from it. CI runners have very limited disk space (generally ~14GB),
+# and the sources plus build artifacts take up a large chunk of it. Only do this on CI so local runs can inspect the tree if desired.
+if ($env:CI -ne '') {
+    Write-Host 'Removing the ffmpeg build tree to free up disk space (CI only).'
+    Remove-Item -Recurse -Force -Path $suiteRoot -ErrorAction SilentlyContinue
+}
+
 # media-autobuild_suite.bat exits non-zero even on success, leaving $LASTEXITCODE set. The GitHub
 # Actions pwsh wrapper exits with $LASTEXITCODE, which would fail the step despite a good build.
 # Success is already verified above (compilation_failed marker + binary existence), so exit cleanly.

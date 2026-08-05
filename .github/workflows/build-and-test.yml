@@ -57,7 +57,7 @@ jobs:
     - name: Set hwaccel modes
       if: ${{ matrix.run-mode == 'hwaccel' }}
       shell: bash
-      run: echo "HWACCEL_MODES=${{ matrix.os == 'macos-latest' && 'videotoolbox auto decodeonly' || 'decodeonly auto' }}" >> "$GITHUB_ENV"
+      run: echo "HWACCEL_MODES=${{ matrix.os == 'macos-latest' && 'decodeonly auto videotoolbox' || 'decodeonly auto' }}" >> "$GITHUB_ENV"
     - name: Checkout
       uses: actions/checkout@v6
     - name: Setup .NET
@@ -112,7 +112,7 @@ jobs:
         for mode in $HWACCEL_MODES; do
           echo "::group::HWACCEL_MODE=$mode"
           export HWACCEL_MODE="$mode"
-          dotnet build FulcrumFS.slnx --configuration Release --no-restore
+          dotnet build FulcrumFS.slnx --configuration Release
           dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
           echo ""
           cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Short.txt
@@ -120,4 +120,7 @@ jobs:
           echo "::group::HWACCEL_MODE=$mode (Detailed Report of Hardware Acceleration Failures)"
           cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Detailed.txt
           echo "::endgroup::"
+          # Delete the video test build output before the next mode runs - we only have ~14GB total and using a high fraction can cause the tasks to slow down
+          # much more than they should.
+          rm -rf Tests/FulcrumFS.Videos.Tests/bin Tests/FulcrumFS.Videos.Tests/obj
         done
