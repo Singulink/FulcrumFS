@@ -44,20 +44,22 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
-        run-mode: [normal, hwaccel]
+        hwaccel-mode: [none, decodeonly, auto]
+        include:
+        - os: macos-latest
+          hwaccel-mode: videotoolbox
 
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-video-linux-x64' || 'test-video-macos-arm64' }}${{ matrix.run-mode == 'hwaccel' && '-explicit-hwaccel-modes' || '' }}
+    name: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-video-linux-x64' || 'test-video-macos-arm64' }}${{ matrix.hwaccel-mode != 'none' && format('-hwaccel-{0}', matrix.hwaccel-mode) || '' }}
 
-    # Boost the priority of long-running ffmpeg processes so they do not get starved on busy CI machines, which otherwise can be responsible for some spurious test failures.
     env:
+      # Boost the priority of long-running ffmpeg processes so they do not get starved on busy CI machines, which otherwise can be responsible for some spurious test failures.
       BOOST_LONG_RUNNING_PROCESS_PRIORITY: 'true'
 
+      # Selects the forced hardware acceleration mode the sources are compiled against - must be empty for the 'none' (i.e. non-forced) runs.
+      HWACCEL_MODE: ${{ matrix.hwaccel-mode != 'none' && matrix.hwaccel-mode || '' }}
+
     steps:
-    - name: Set hwaccel modes
-      if: ${{ matrix.run-mode == 'hwaccel' }}
-      shell: bash
-      run: echo "HWACCEL_MODES=${{ matrix.os == 'macos-latest' && 'decodeonly auto videotoolbox' || 'decodeonly auto' }}" >> "$GITHUB_ENV"
     - name: Checkout
       uses: actions/checkout@v6
     - name: Setup .NET
@@ -88,39 +90,34 @@ jobs:
     - name: Install dependencies
       run: dotnet restore FulcrumFS.slnx
     - name: Build (Debug)
-      if: ${{ matrix.run-mode == 'normal' && success() }}
+      if: ${{ matrix.hwaccel-mode == 'none' && success() }}
       run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
     - name: Build (Release)
-      if: ${{ matrix.run-mode == 'normal' && success() }}
+      if: ${{ matrix.hwaccel-mode == 'none' && success() }}
       run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
     - name: Test (Debug)
-      if: ${{ matrix.run-mode == 'normal' && success() }}
+      if: ${{ matrix.hwaccel-mode == 'none' && success() }}
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
     - name: Test (Release)
-      if: ${{ matrix.run-mode == 'normal' && !cancelled() }}
+      if: ${{ matrix.hwaccel-mode == 'none' && !cancelled() }}
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-    - name: Build and test hwaccel modes (Release)
-      if: ${{ matrix.run-mode == 'hwaccel' && success() }}
-      shell: bash
+    - name: Build (Release, hwaccel mode)
+      if: ${{ matrix.hwaccel-mode != 'none' && success() }}
+      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
+    - name: Test (Release, hwaccel mode)
+      if: ${{ matrix.hwaccel-mode != 'none' && success() }}
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-      run: |
-        for mode in $HWACCEL_MODES; do
-          echo "::group::HWACCEL_MODE=$mode"
-          export HWACCEL_MODE="$mode"
-          dotnet build FulcrumFS.slnx --configuration Release
-          dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
-          echo ""
-          cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Short.txt
-          echo "::endgroup::"
-          echo "::group::HWACCEL_MODE=$mode (Detailed Report of Hardware Acceleration Failures)"
-          cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Detailed.txt
-          echo "::endgroup::"
-          # Delete the video test build output before the next mode runs - we only have ~14GB total and using a high fraction can cause the tasks to slow down
-          # much more than they should.
-          rm -rf Tests/FulcrumFS.Videos.Tests/bin Tests/FulcrumFS.Videos.Tests/obj
-        done
+    - name: Hardware acceleration failures report
+      if: ${{ matrix.hwaccel-mode != 'none' && !cancelled() }}
+      shell: bash
+      run: cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Short.txt
+    - name: Hardware acceleration failures report (detailed)
+      if: ${{ matrix.hwaccel-mode != 'none' && !cancelled() }}
+      shell: bash
+      run: cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Detailed.txt
