@@ -2349,6 +2349,10 @@ public sealed class VideoProcessor : FileProcessor
                 }
                 catch (Exception ex) when (command.HWAccel != "none")
                 {
+                    // Check if we have cancelled the operation, and if so, we can use that
+                    context.CancellationToken.ThrowIfCancellationRequested();
+
+                    // Update progressUsed
                     progressUsed = mostRecentClampedProgress;
 
                     // Reset the duration high-water mark, since the re-run starts from zero again - the updated progressUsed keeps reports monotonic.
