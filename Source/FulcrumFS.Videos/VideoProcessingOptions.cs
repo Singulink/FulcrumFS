@@ -26,6 +26,10 @@ public sealed record VideoProcessingOptions
     /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
+    /// <remarks>
+    /// Note: the result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
+    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.
+    /// </remarks>
     public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
         ResultVideoCodecs = [VideoCodec.H264],
@@ -55,6 +59,10 @@ public sealed record VideoProcessingOptions
     /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
     /// limit) yourself via <see cref="ResizeOptions" />.</para>
     /// </summary>
+    /// <remarks>
+    /// Note: the result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
+    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.
+    /// </remarks>
     public static VideoProcessingOptions StandardizedHEVCAACMP4 { get; } = new VideoProcessingOptions()
     {
         ResultVideoCodecs = [VideoCodec.HEVC],
@@ -616,5 +624,38 @@ public sealed record VideoProcessingOptions
 #if DEBUG
     // Internal property to force usage of libfdk_aac or native aac encoding for testing purposes:
     internal bool? ForceLibFDKAACUsage { get; set; }
+#endif
+
+    /// <summary>
+    /// Gets or initializes the hardware acceleration mode to use for operations (such as decode or scaling).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Defaults to <see cref="HardwareAccelerationKind.None" /> (no hardware acceleration), which keeps variation between devices to a minimum.
+    /// Enabling hardware acceleration allows more variation in the result to improve hardware acceleration utilisation ability.
+    /// </para>
+    /// <para>
+    /// If you have an AMD or Intel GPU, you may want to explicitly set this to a specific mode that prioritizes your GPU, rather than
+    /// <see cref="HardwareAccelerationKind.Auto" />, as it is assumed that AMD and Intel acceleration modes represent a CPU's integrated media engine instead,
+    /// which would be undesirable to use over a high-power device like a GPU.
+    /// </para>
+    /// </remarks>
+    public HardwareAccelerationKind HardwareAccelerationKind
+    {
+        get;
+        init
+        {
+            value.ThrowIfNotDefined();
+            field = value;
+        }
+    }
+#if CUSTOM_HWACCEL_MODE_DECODEONLY
+        // Note: decodeonly test builds default to DecodeOnly so that the decodeonly mode is exercised without per-test configuration.
+        = HardwareAccelerationKind.DecodeOnly;
+#elif CUSTOM_HWACCEL_MODE
+        // Note: forced hardware acceleration test builds default to Auto so that the forced mode is exercised without per-test configuration.
+        = HardwareAccelerationKind.Auto;
+#else
+        = HardwareAccelerationKind.None;
 #endif
 }

@@ -57,9 +57,61 @@ var options = VideoProcessingOptions.StandardizedH264AACMP4 with {
 };
 ```
 
+## Hardware Acceleration
+
+Transcoding in software is slow, and it is the single biggest cost of a video upload endpoint. If the machine doing the processing has a GPU (or a CPU with an integrated media engine), <xref:FulcrumFS.Videos.VideoProcessingOptions.HardwareAccelerationKind> can offload decoding and some filtering (such as scaling and deinterlacing) to it for a measurable speed improvement. Encoding is still always done in software.
+
+Hardware acceleration is **disabled by default** (<xref:FulcrumFS.Videos.HardwareAccelerationKind.None>), because it introduces considerably more variation in the output. Opt in by setting the option:
+
+```csharp
+// Let the library pick whatever acceleration the machine offers.
+var options = VideoProcessingOptions.StandardizedH264AACMP4 with {
+    HardwareAccelerationKind = HardwareAccelerationKind.Auto,
+};
+```
+
+### Choosing a mode
+
+<xref:FulcrumFS.Videos.HardwareAccelerationKind.Auto> detects what the configured FFmpeg build and the current system support and picks a mode for you, preferring VideoToolbox, then CUDA, then AMF, then QSV, then D3D12. Note that this order of selection is an implementation detail, and could be changed at any time.
+
+The two vendor modes worth calling out are **AMF** (AMD) and **QSV** (Intel), because `Auto` deliberately deprioritizes them. Both are frequently reported by a CPU's *integrated* media engine rather than a discrete GPU, and picking an integrated engine over a discrete GPU that is also present would be the wrong trade. `Auto` therefore only falls back to them once the other modes that are more likely to map to a real GPU have been ruled out, and it prefers AMF over QSV, since AMD discrete GPUs are more common than Intel discrete GPUs while Intel CPUs are very common (meaning QSV would be matching a CPU in most scenarios).
+
+So if the processing machine genuinely has an AMD or Intel GPU you want used, you should select it explicitly rather than relying on `Auto` (and doing this for other modes also is not a bad idea too, just not as likely to be a problem):
+
+```csharp
+// Machine has an AMD GPU - use it rather than letting Auto deprioritize AMF.
+var amdOptions = VideoProcessingOptions.StandardizedH264AACMP4 with {
+    HardwareAccelerationKind = HardwareAccelerationKind.Amf,
+};
+
+// Machine has an Intel GPU (e.g. Arc) - use it rather than letting Auto deprioritize QSV.
+var intelOptions = VideoProcessingOptions.StandardizedH264AACMP4 with {
+    HardwareAccelerationKind = HardwareAccelerationKind.Qsv,
+};
+```
+
+Note that if the requested acceleration mode is not available, it will fall back to `Auto`.
+
+<xref:FulcrumFS.Videos.HardwareAccelerationKind.DecodeOnly> is a useful middle ground: decoding is accelerated, but all filtering stays in software, so most of the output quality characteristics of a pure software run are preserved while still cutting a meaningful (but smaller) amount of time off each transcode - however `DecodeOnly` can still introduce differences in some cases, so if you run into any issues, first compare the result with `None` to see if it's a hardware acceleration specific issue.
+
+| Mode | Hardware | Platforms |
+| --- | --- | --- |
+| <xref:FulcrumFS.Videos.HardwareAccelerationKind.VideoToolbox> | Apple silicon / Intel Mac media engine | macOS |
+| <xref:FulcrumFS.Videos.HardwareAccelerationKind.Cuda> | NVIDIA GPUs | Windows, Linux |
+| <xref:FulcrumFS.Videos.HardwareAccelerationKind.Amf> | AMD GPUs (discrete or integrated) | Windows, Linux |
+| <xref:FulcrumFS.Videos.HardwareAccelerationKind.Qsv> | Intel Quick Sync (usually an integrated GPU) | Windows, Linux |
+| <xref:FulcrumFS.Videos.HardwareAccelerationKind.D3D12> | Any vendor, via Direct3D 12 | Windows |
+
+### Requirements and fallback
+
+The mode you request is a *preference*, not a guarantee. The FFmpeg build you configured must actually have been compiled with support for the mode, and the system must be able to initialize it. If a requested mode is unavailable, the library selects the best available alternative (or plain software processing), and if an accelerated run fails partway through, it is automatically retried with hardware filtering turned off, leaving only opportunistic hardware decoding. Certain inputs also disable acceleration on a per-file basis where the hardware path would not currently produce a correct result due to lacking explicit handling, or is unlikely to work anyway. In every case, the file should still process successfully - you do not need need to handle "hardware acceleration was not available" case yourself.
+
+> [!IMPORTANT]
+> Processed output is never guaranteed to be identical across devices, even in pure software - different FFmpeg builds and CPUs can produce slightly different results. Hardware acceleration widens that gap considerably: hardware decoders and filters differ between vendors, driver versions and hardware generations, and the difference is sometimes visible (for example, noticeably softer scaling, different colours when scaling, slightly different video length when de-interlacing, etc.). Weigh that against the speed gain, and prefer leaving acceleration disabled if higher consistency between devices matters to you.
+
 ## Extracting a Thumbnail
 
-<xref:FulcrumFS.Videos.VideoFrameExtractionProcessor> extracts a poster frame as a PNG, which is what a gallery view needs so the user can see what each video looks like without playing it. It performs no validation itself, so when validation matters, run a <xref:FulcrumFS.Videos.VideoProcessor> first and chain the thumbnail step after it. Configure it with <xref:FulcrumFS.Videos.VideoThumbnailProcessingOptions>, and use the predefined <xref:FulcrumFS.Videos.VideoThumbnailProcessingOptions.Standard> for typical needs.
+<xref:FulcrumFS.Videos.VideoFrameExtractionProcessor> extracts a poster frame as a PNG, which is what a gallery view needs so the user can see what each video looks like without playing it. It performs no validation itself, so when validation matters, run a <xref:FulcrumFS.Videos.VideoProcessor> first and chain the thumbnail step after it. Configure it with <xref:FulcrumFS.Videos.VideoFrameExtractionProcessingOptions>, and use the predefined <xref:FulcrumFS.Videos.VideoFrameExtractionProcessingOptions.Standard> for typical needs.
 
 A full-resolution PNG poster frame is usually larger than a gallery tile needs, so a real thumbnail variant chains the extractor with an <xref:FulcrumFS.Images.ImageProcessor> that resizes it down and converts to JPEG:
 

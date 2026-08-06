@@ -123,6 +123,31 @@ internal static class ProcessUtils
         }
     }
 
+#if BOOST_LONG_RUNNING_PROCESS_PRIORITY
+    /// <summary>
+    /// Gets the duration a process must have been running for before its priority is boosted.
+    /// </summary>
+    private static TimeSpan LongRunningProcessPriorityBoostDelay => TimeSpan.FromMinutes(1);
+
+    private static void BoostLongRunningProcessPriority(Process process)
+    {
+        try
+        {
+            if (process.HasExited)
+                return;
+
+            // Note: only boost if we would actually be raising the priority - the enum values are not ordered by priority, so they must be checked explicitly.
+            if (process.PriorityClass is ProcessPriorityClass.Idle or ProcessPriorityClass.BelowNormal or ProcessPriorityClass.Normal)
+                process.PriorityClass = ProcessPriorityClass.AboveNormal;
+        }
+        catch
+        {
+            // Ignore exceptions - the process may have exited or been disposed in the meantime. This is only a best-effort "optimization" for testing, so it is
+            // not a problem if it does not work.
+        }
+    }
+#endif
+
     private static async ValueTask RedirectStreamAsync(StreamReader reader, TextWriter writer, bool runAsynchronously, CancellationToken cancellationToken)
     {
         // Rent a buffer that we can use for reading/writing:
@@ -200,6 +225,18 @@ internal static class ProcessUtils
                 {
                     process.PriorityClass = priorityClass;
                 }
+
+#if BOOST_LONG_RUNNING_PROCESS_PRIORITY
+                // Boost the priority of the process once it has been running for a while. This is useful in testing environments, since some test cases may be
+                // much more expensive than others (e.g., those working with 65k resolution video), and it is better for all tests if they just hurry up and
+                // finish, rather than wasting resources for minutes at a time only to then time out and have higher chance to cause a test to run out of
+                // memory (second part is mainly relevant for running locally).
+                using var priorityBoostTimer = new Timer(
+                    static state => BoostLongRunningProcessPriority((Process)state!),
+                    process,
+                    LongRunningProcessPriorityBoostDelay,
+                    Timeout.InfiniteTimeSpan);
+#endif
 
                 if (OperatingSystem.IsWindows())
                 {
@@ -336,7 +373,7 @@ internal static class ProcessUtils
 
         if (returnCode != 0)
         {
-#if DEBUG
+#if DEBUG || CUSTOM_HWACCEL_MODE
             StringBuilder sb = new();
             sb.AppendLine(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
             sb.AppendLine(CultureInfo.InvariantCulture, $"ExecutablePath: {fileName.PathExport}");
@@ -385,7 +422,7 @@ internal static class ProcessUtils
 
         if (returnCode != 0)
         {
-#if DEBUG
+#if DEBUG || CUSTOM_HWACCEL_MODE
             StringBuilder sb = new();
             sb.AppendLine(CultureInfo.InvariantCulture, $"Process exited with code {returnCode}.");
             sb.AppendLine(CultureInfo.InvariantCulture, $"ExecutablePath: {fileName.PathExport}");

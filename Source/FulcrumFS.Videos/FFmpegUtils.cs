@@ -27,7 +27,19 @@ internal static class FFmpegUtils
         public int MapChaptersFrom { get; } = mapChaptersFrom;
         public bool ForceProgressiveDownloadSupport { get; } = forceProgressiveDownloadSupport;
         public bool IsToMov { get; } = isToMov;
+        public string HWAccel { get; set; } = "none"; // Special values: 'auto' means auto & not used for filters - 'none' means none & not used for filters
+        public bool UseHWAccelFiltersWhenPossible { get; set; } = true;
     }
+
+    public static string MapHWAccelNameToFormatName(string hwaccel) => hwaccel switch
+    {
+        "videotoolbox" => "videotoolbox_vld",
+        "cuda" => "cuda",
+        "qsv" => "qsv",
+        "amf" => "amf",
+        "d3d12va" => "d3d12",
+        _ => throw new ArgumentException($"Unrecognized hardware acceleration mode: {hwaccel}", nameof(hwaccel)),
+    };
 
     // For streamIndexWithinKind, if set to -1, applies to all streams of that kind in the file.
     // Additionally, if streamKind is set to '\0', applies to all streams in the file.
@@ -41,17 +53,24 @@ internal static class FFmpegUtils
         public bool AppliesToAllStreamsKinds => StreamKind == '\0';
         public bool AppliesToAllStreamsOfKind => StreamIndexWithinKind == -1;
 
-        protected void Validate()
+        protected virtual void Validate()
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(StreamIndexWithinKind, -1);
         }
 
         protected abstract string CommandName { get; }
         protected abstract string CommandArgument { get; }
+        protected virtual bool ShouldInclude(string? hwaccel) => true;
+        protected virtual string GetCommandArgument(string? hwaccel) => CommandArgument;
 
-        public virtual void PrepareArguments(List<string> args)
+        public virtual void PrepareArguments(List<string> args, string? hwaccel)
         {
             Validate();
+
+            if (!ShouldInclude(hwaccel))
+            {
+                return;
+            }
 
             if (!AppliesToAllStreamsOfKind && !AppliesToAllStreamsKinds)
             {
@@ -70,7 +89,7 @@ internal static class FFmpegUtils
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"-{CommandName}:{StreamKind}"));
             }
 
-            args.Add(CommandArgument);
+            args.Add(GetCommandArgument(hwaccel));
         }
     }
 
@@ -160,7 +179,18 @@ internal static class FFmpegUtils
     public sealed class PerStreamFilterOverride(char streamKind, int streamIndexWithinKind)
         : PerOutputStreamOverride(streamKind, streamIndexWithinKind)
     {
-        // Note: the setter is public, but the CommandArgument is cached - correct usage requires setting all properties before first call to CommandArgument.
+        protected override string CommandArgument => throw new NotSupportedException();
+        protected override bool ShouldInclude(string? hwaccel) => Critical || (hwaccel is not null && StreamKind == 'v');
+
+        protected override void Validate()
+        {
+            // The hardware acceleration handling is set up assuming this runs on 1 video stream at a time, this could be extended in the future if required.
+            base.Validate();
+            ArgumentOutOfRangeException.ThrowIfNotEqual(StreamKind, 'v');
+            ArgumentOutOfRangeException.ThrowIfNegative(StreamIndexWithinKind);
+        }
+
+        public bool Critical { get; set; } = true;
         public (long Num, long Den)? FPS { get; set; }
         public (int Width, int Height)? ResizeTo { get; set; }
         public bool HDRToSDR { get; set; }
@@ -170,45 +200,330 @@ internal static class FFmpegUtils
         protected override string CommandName => "filter";
         public bool AssumePotentialAlphaChannelForHDRToSDR { get; set; }
         public bool ForceConvertToFullRange { get; set; }
-        protected override string CommandArgument => field ??= string.Join(',', ((string?[])[Deinterlace switch
+        public bool Is10BitForHW { get; set; }
+        public string? PixelFormatAfterHWDownload { get; set; }
+        public string? SarAfterHWResize { get; set; }
+        public int Rotation { get; set; } // 0 - none, 90 - clockwise, 180 - reversal, 270 - counter-clockwise
+
+        protected override string GetCommandArgument(string? hwaccel)
         {
-            false => null,
-            true => "bwdif",
-        }, HDRToSDR switch
-        {
-            // Remap to HDR first for accurate results - however, this could have a performance penalty if we're also then scaling / sampling it after.
-            // Note: for a massive resolution video, this could fail to allocate memory for the frames due to requiring 96/128 bits per pixel (which eats into
-            // the 2^31 - 1 byte limit that ffmpeg imposes faster than usual).
-            false => null,
-            _ =>
-                $"zscale=t=linear:npl=500:r=full," +
-                $"format={(AssumePotentialAlphaChannelForHDRToSDR ? "gbrapf32le" : "gbrpf32le")}," +
-                $"zscale=p=bt709," +
-                $"tonemap=tonemap=mobius:param=0.3:desat=0," +
-                $"zscale=t=bt709:m=bt709:r=full",
-        }, PixelFormat switch
-        {
-            null => null,
-            var pf => $"format={pf}",
-        }, ForceConvertToFullRange switch
-        {
-            false => null,
-            _ when HDRToSDR => null, // We already handled this above.
-            true => "scale=out_range=full",
-        }, FPS switch
-        {
-            null => null,
-            (long num, 1) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}:eof_action=pass"),
-            var (num, den) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}/{den}:eof_action=pass"),
-        }, ResizeTo switch
-        {
-            null => null,
-            var (w, h) => string.Create(CultureInfo.InvariantCulture, $"scale=w={w}:h={h}:force_original_aspect_ratio=disable"),
-        }, MakePixelsSquareMode switch
-        {
-            not 1 => "setsar=sar=1/1",
-            _ => null,
-        }]).Where((x) => x is not null));
+            // Suppress this warning - it is about our bool flags, but it is better for maintainability so they are actually accurate for future changes.
+#pragma warning disable IDE0059 // Unnecessary assignment of a value
+            List<string> steps = [];
+
+            bool doneDeinterlace = false;
+            bool doneHDRToSDR = false;
+            bool doneResize = false;
+            bool doneHWDownload = hwaccel is null;
+            bool donePixelFormat = false;
+            bool doneRangeConversion = false;
+            bool doneFPS = false;
+            bool doneMakePixelsSquare = false;
+            bool resizeHW = false;
+
+            // Note: rotation only needs to be applied manually when hardware accelerated decoding is used, since ffmpeg skips its automatic rotation for
+            // hardware frames (or fails outright on some platforms) - software decoding applies it automatically.
+            bool doneRotate = hwaccel is null || Rotation == 0;
+            string rotateDir = Rotation switch
+            {
+                0 => "<error>",
+                90 => "clock",
+                180 => "reversal",
+                270 => "cclock",
+                _ => throw new InvalidOperationException("Rotate must be 0, 90, 180, or 270."),
+            };
+
+            void EnsureHWDownload()
+            {
+                if (!doneHWDownload)
+                {
+                    steps.Add($"format={MapHWAccelNameToFormatName(hwaccel!)}");
+                    steps.Add("hwdownload");
+
+                    // These formats work most commonly for download - other formats might work in some cases, but more sporadically. We convert to the format
+                    // we actually wanted immediately afterwards.
+                    steps.Add($"format={(Is10BitForHW ? "p010le" : "nv12")}");
+
+                    if (PixelFormatAfterHWDownload is not null)
+                    {
+                        steps.Add($"format={PixelFormatAfterHWDownload}");
+                        donePixelFormat = true;
+                    }
+
+                    doneHWDownload = true;
+                }
+            }
+
+            if (Deinterlace && !doneDeinterlace)
+            {
+                if (!doneHWDownload && hwaccel == "cuda" && FFprobeUtils.Configuration.SupportsBwdifCudaFilter)
+                {
+                    // We need to set mode to send_field to match what normal bwdif does by default.
+                    steps.Add("bwdif_cuda=mode=send_field");
+                }
+                else if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
+                {
+                    // Use bob mode to make more similar to what bwdif does, rather than advanced mode.
+                    // Note: we also need to set to field to match what bwdif does by default.
+                    // TODO: QSV chops off a frame compared to the other deinterlacers - for now, we accept this.
+                    string filterPart = "vpp_qsv=deinterlace=bob:rate=field";
+
+                    // If we're also rotating, do that at the same time.
+                    if (!doneRotate)
+                    {
+                        filterPart += $":transpose={rotateDir}";
+                        doneRotate = true;
+                    }
+
+                    // If we're also scaling, do that at the same time.
+                    if (ResizeTo is var (w1, h1) && !doneResize)
+                    {
+                        // See comments in resize/rotate section for why it's set up this way.
+
+                        if (Rotation is 90 or 270)
+                            (w1, h1) = (h1, w1);
+
+                        filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
+                        doneResize = true;
+                        resizeHW = true;
+                    }
+
+                    // If we're also doing tv->pc range conversion (and not HDR->SDR conversion), do that at the same time too.
+                    if (ForceConvertToFullRange && !HDRToSDR && !doneRangeConversion)
+                    {
+                        filterPart += ":out_range=full";
+                        doneRangeConversion = true;
+                    }
+
+                    steps.Add(filterPart);
+                }
+                else if (!doneHWDownload && hwaccel == "d3d12va" && FFprobeUtils.Configuration.SupportsDeinterlaceD3D12Filter)
+                {
+                    // Need to specify both bob mode & mode to match what normal bwdif does by default.
+                    steps.Add("deinterlace_d3d12=method=bob:mode=field");
+                }
+                else
+                {
+                    EnsureHWDownload();
+
+                    // HACK: in software decoding mode, ffmpeg automatically applies the rotation from the display matrix before our filters run, so the
+                    // frames we receive are already rotated - quarter-turns turn the interlaced field lines into columns, and half-turns swap the two
+                    // fields - which would break the deinterlacing. So we un-rotate the frames back to their coded orientation, deinterlace, and then
+                    // re-rotate them back to be correct.
+                    // Note: the software transpose filter does not support the reversal direction, so half-turns are done with flips instead.
+                    bool fixupRotation = hwaccel is null && Rotation != 0;
+
+                    if (fixupRotation)
+                    {
+                        if (Rotation == 180)
+                        {
+                            steps.Add("vflip");
+                            steps.Add("hflip");
+                        }
+                        else
+                        {
+                            // Un-rotate by applying the opposite direction to the rotation that ffmpeg automatically applied.
+                            steps.Add($"transpose=dir={(Rotation == 90 ? "cclock" : "clock")}");
+                        }
+                    }
+
+                    steps.Add("bwdif");
+
+                    if (fixupRotation)
+                    {
+                        if (Rotation == 180)
+                        {
+                            steps.Add("vflip");
+                            steps.Add("hflip");
+                        }
+                        else
+                        {
+                            steps.Add($"transpose=dir={rotateDir}");
+                        }
+                    }
+                }
+
+                doneDeinterlace = true;
+            }
+
+            if (!doneRotate)
+            {
+                if (!doneHWDownload && hwaccel == "videotoolbox" && FFprobeUtils.Configuration.SupportsTransposeVtFilter)
+                {
+                    steps.Add($"transpose_vt=dir={rotateDir}");
+                }
+                else if (!doneHWDownload && hwaccel == "cuda" && FFprobeUtils.Configuration.SupportsTransposeCudaFilter)
+                {
+                    steps.Add($"transpose_cuda=dir={rotateDir}");
+                }
+                else if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
+                {
+                    string filterPart = $"vpp_qsv=transpose={rotateDir}";
+
+                    // If we're also scaling, do that at the same time.
+                    if (ResizeTo is var (w1, h1) && !doneResize)
+                    {
+                        // See comments in resize section for why it's set up this way.
+
+                        // vpp_qsv does scaling and then rotating, so if we're rotating & scaling, we want to swap our dimensions for scaling
+                        if (Rotation is 90 or 270)
+                            (w1, h1) = (h1, w1);
+
+                        filterPart += string.Create(CultureInfo.InvariantCulture, $":w={w1}:h={h1}:scale_mode=hq");
+                        doneResize = true;
+                        resizeHW = true;
+                    }
+
+                    // If we're also doing tv->pc range conversion (and not HDR->SDR conversion), do that at the same time too.
+                    if (ForceConvertToFullRange && !HDRToSDR && !doneRangeConversion)
+                    {
+                        filterPart += ":out_range=full";
+                        doneRangeConversion = true;
+                    }
+
+                    steps.Add(filterPart);
+                }
+                else
+                {
+                    // Note: there is no hardware transpose filter for some modes (e.g. amf), so we download and use the software filters.
+                    // Note: the software transpose filter does not support the reversal direction, so half-turns are done with flips instead.
+                    EnsureHWDownload();
+
+                    if (Rotation == 180)
+                    {
+                        steps.Add("vflip");
+                        steps.Add("hflip");
+                    }
+                    else
+                    {
+                        steps.Add($"transpose=dir={rotateDir}");
+                    }
+                }
+
+                doneRotate = true;
+            }
+
+            if (ResizeTo is var (w2, h2) && !doneResize)
+            {
+                if (!doneHWDownload && hwaccel == "videotoolbox" && FFprobeUtils.Configuration.SupportsScaleVtFilter)
+                {
+                    // Note: videotoolbox cannot ensure we match the bicubic scaling that 'scale' uses by default, so we just use the default.
+                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_vt=w={w2}:h={h2}"));
+                    resizeHW = true;
+                }
+                else if (!doneHWDownload && hwaccel == "cuda" && FFprobeUtils.Configuration.SupportsScaleCudaFilter)
+                {
+                    // Note: we set interp_algo to bicubic to match what 'scale' uses by default.
+                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_cuda=w={w2}:h={h2}:interp_algo=bicubic"));
+                    resizeHW = true;
+                }
+                else if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
+                {
+                    // Note: qsv cannot ensure we match bicubic scaling that 'scale' uses by default, however 'hq' is most likely to either be it or be closest.
+                    string filterPart = string.Create(CultureInfo.InvariantCulture, $"vpp_qsv=w={w2}:h={h2}:scale_mode=hq");
+
+                    // If we're also doing tv->pc range conversion (and not HDR->SDR conversion), do that at the same time.
+                    if (ForceConvertToFullRange && !HDRToSDR && !doneRangeConversion)
+                    {
+                        filterPart += ":out_range=full";
+                        doneRangeConversion = true;
+                    }
+
+                    steps.Add(filterPart);
+                    resizeHW = true;
+                }
+                else if (!doneHWDownload && hwaccel == "amf" && FFprobeUtils.Configuration.SupportsVppAmfFilter)
+                {
+                    // Note: we set interp_algo to bicubic to match what 'scale' uses by default.
+                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"vpp_amf=w={w2}:h={h2}:scale_type=bicubic"));
+                    resizeHW = true;
+                }
+                else if (!doneHWDownload && hwaccel == "d3d12va" && FFprobeUtils.Configuration.SupportsScaleD3D12Filter)
+                {
+                    // Note: d3d12 cannot ensure we match bicubic scaling that 'scale' uses by default, so we just use the default.
+                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale_d3d12=w={w2}:h={h2}"));
+                    resizeHW = true;
+                }
+                else
+                {
+                    EnsureHWDownload();
+                    steps.Add(string.Create(CultureInfo.InvariantCulture, $"scale=w={w2}:h={h2}:force_original_aspect_ratio=disable"));
+                }
+
+                doneResize = true;
+            }
+
+            if (HDRToSDR && !doneHDRToSDR)
+            {
+                EnsureHWDownload();
+
+                // Remap to HDR first for accurate results - however, this could have a performance penalty if we're also then scaling / sampling it after.
+                // Note: for a massive resolution video, this could fail to allocate memory for the frames due to requiring 96/128 bits per pixel (which eats into
+                // the 2^31 - 1 byte limit that ffmpeg imposes faster than usual).
+                // Note: we also strip the HDR mastering display & content light level side data, since it no longer applies to the tonemapped SDR frames
+                // (otherwise the encoder would copy the now-stale HDR metadata into the output).
+                steps.Add("zscale=t=linear:npl=500:r=full");
+                steps.Add($"format={(AssumePotentialAlphaChannelForHDRToSDR ? "gbrapf32le" : "gbrpf32le")}");
+                steps.Add("zscale=p=bt709");
+                steps.Add("tonemap=tonemap=mobius:param=0.3:desat=0");
+                steps.Add("zscale=t=bt709:m=bt709:r=full");
+                steps.Add("sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA");
+                steps.Add("sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL");
+
+                doneHDRToSDR = true;
+                doneRangeConversion = true;
+            }
+
+            if (ForceConvertToFullRange && !doneRangeConversion)
+            {
+                // Note: colorspace_cuda exists, but it does not seem to actually work properly.
+                if (!doneHWDownload && hwaccel == "qsv" && FFprobeUtils.Configuration.SupportsVppQsvFilter)
+                {
+                    steps.Add("vpp_qsv=out_range=full");
+                }
+                else
+                {
+                    EnsureHWDownload();
+                    steps.Add("scale=out_range=full");
+                }
+
+                doneRangeConversion = true;
+            }
+
+            EnsureHWDownload();
+
+            if (FPS is { } fps && !doneFPS)
+            {
+                steps.Add(fps switch
+                {
+                    (long num, 1) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}:eof_action=pass"),
+                    var (num, den) => string.Create(CultureInfo.InvariantCulture, $"fps=fps={num}/{den}:eof_action=pass"),
+                });
+
+                doneFPS = true;
+            }
+
+            if (PixelFormat is not null && !donePixelFormat)
+            {
+                steps.Add($"format={PixelFormat}");
+
+                donePixelFormat = true;
+            }
+
+            if ((MakePixelsSquareMode != 1 || resizeHW) && !doneMakePixelsSquare)
+            {
+                // Note: we use max int for the max, to match what scale does.
+                if (!resizeHW || SarAfterHWResize is null)
+                    steps.Add("setsar=sar=1/1");
+                else
+                    steps.Add($"setsar=sar={SarAfterHWResize}:max={int.MaxValue}");
+
+                doneMakePixelsSquare = true;
+            }
+#pragma warning restore IDE0059 // Unnecessary assignment of a value
+
+            return string.Join(',', steps);
+        }
     }
 
     public sealed class PerStreamChannelsOverride(char streamKind, int streamIndexWithinKind, int channels)
@@ -276,7 +591,7 @@ internal static class FFmpegUtils
         protected override string CommandName => string.Empty;
         protected override string CommandArgument => string.Empty;
 
-        public override void PrepareArguments(List<string> args)
+        public override void PrepareArguments(List<string> args, string? hwaccel)
         {
             if (StreamKind != '\0' || StreamIndexWithinKind < 0)
             {
@@ -433,6 +748,19 @@ internal static class FFmpegUtils
                 args.Add(threadLimit);
             }
 
+            // 'none' is the default for ffmpeg, so we don't need to specify it.
+            if (command.HWAccel != "none")
+            {
+                args.Add("-hwaccel");
+                args.Add(command.HWAccel);
+
+                if (command.HWAccel is not ("none" or "auto") && command.UseHWAccelFiltersWhenPossible)
+                {
+                    args.Add("-hwaccel_output_format");
+                    args.Add(MapHWAccelNameToFormatName(command.HWAccel));
+                }
+            }
+
             args.Add("-i");
             args.Add(command.InputFiles[i].File.PathExport);
         }
@@ -453,7 +781,14 @@ internal static class FFmpegUtils
         // Per-output-stream overrides:
         foreach (var perOutputOverride in command.PerOutputStreamOverrides)
         {
-            perOutputOverride.PrepareArguments(args);
+            string? hwAccelMode = command.HWAccel switch
+            {
+                "none" or "auto" => null,
+                _ when !command.UseHWAccelFiltersWhenPossible => null,
+                var x => x,
+            };
+
+            perOutputOverride.PrepareArguments(args, hwAccelMode);
         }
 
         // Set mov/mp4 specific options if outputting to .mov/.mp4:

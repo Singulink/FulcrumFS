@@ -9,6 +9,19 @@
       metadata stripping, bitrate limiting, and audio stripping, for both original videos and their derived variants.
     </Description>
     <PackageTags></PackageTags>
+
+    <!-- Handling for special custom hwaccel config mode -->
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' != '' ">$(DefineConstants);CUSTOM_HWACCEL_MODE</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'auto' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_AUTO</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'decodeonly' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_DECODEONLY</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'videotoolbox' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_VIDEOTOOLBOX</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'cuda' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_CUDA</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'qsv' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_QSV</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'amf' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_AMF</DefineConstants>
+    <DefineConstants Condition=" '$(HWACCEL_MODE)' == 'd3d12va' ">$(DefineConstants);CUSTOM_HWACCEL_MODE_D3D12VA</DefineConstants>
+
+    <!-- Handling for boosting the priority of long-running processes (used by CI to reduce flakiness) -->
+    <DefineConstants Condition=" '$(BOOST_LONG_RUNNING_PROCESS_PRIORITY)' == 'true' ">$(DefineConstants);BOOST_LONG_RUNNING_PROCESS_PRIORITY</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

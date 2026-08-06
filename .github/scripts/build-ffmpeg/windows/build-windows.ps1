@@ -37,6 +37,22 @@ foreach ($f in 'media-autobuild_suite.ini', 'ffmpeg_options.txt', 'mpv_options.t
     Copy-Item -Force -Path (Join-Path $PSScriptRoot $f) -Destination (Join-Path $buildDir $f)
 }
 
+# HACK: We want to run the suite in CI mode so it doesn't ask for input; however, the CI env var doesn't get passed into mintty, so we need to manually adjust
+# the batch file so it sets it. Otherwise CI can get stuck for 6 hours & not retry.
+$bat = Join-Path $suiteDir 'media-autobuild_suite.bat'
+$content = [System.IO.File]::ReadAllText($bat)
+$old = @'
+"%command% %arg%"
+'@
+$new = @'
+"export CI=true ; %command% %arg%"
+'@
+if ([regex]::Matches($content, [regex]::Escape($old)).Count -ne 1) {
+    throw "Expected exactly one match in $bat"
+}
+$content = $content.Replace($old, $new)
+Set-Content $bat $content -Encoding UTF8
+
 # Run the suite.
 $PSNativeCommandUseErrorActionPreference = $false
 Push-Location $suiteDir
@@ -60,6 +76,13 @@ foreach ($exe in 'ffmpeg.exe', 'ffprobe.exe') {
     if (-not (Test-Path $source)) { throw "Could not find Windows $exe in $binVideoDir" }
     Copy-Item -Force -Path $source -Destination $env:FFMPEG_OUTPUT_DIR
     Write-Host "Copied $exe to $env:FFMPEG_OUTPUT_DIR."
+}
+
+# On CI, delete the build tree now that the (statically linked) binaries have been extracted from it. CI runners have very limited disk space (generally ~14GB),
+# and the sources plus build artifacts take up a large chunk of it. Only do this on CI so local runs can inspect the tree if desired.
+if ($env:CI -ne '') {
+    Write-Host 'Removing the ffmpeg build tree to free up disk space (CI only).'
+    Remove-Item -Recurse -Force -Path $suiteRoot -ErrorAction SilentlyContinue
 }
 
 # media-autobuild_suite.bat exits non-zero even on success, leaving $LASTEXITCODE set. The GitHub

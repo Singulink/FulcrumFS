@@ -27,7 +27,8 @@ partial class Tests
 
     // Note: we use 'ForceValidateAllStreams = false' for most tests in this file to reduce test time.
     // Note: this is only done in Release mode, so that Debug tests still run validation logic on all streams for better coverage.
-#if DEBUG
+    // Note: we also use true in hwaccel builds so they are more directly comparable with Debug 'none' and test more codepaths in CI.
+#if DEBUG || CUSTOM_HWACCEL_MODE
     public const bool DefaultForceValidateAllStreams = true;
 #else
     public const bool DefaultForceValidateAllStreams = false;
@@ -486,7 +487,7 @@ partial class Tests
         return equal;
     }
 
-    public static IEnumerable<object[]> VideosToCheck => field ??= [.. Enumerable.Range(1, 203).Select((x) => (object[])[
+    public static IEnumerable<object[]> VideosToCheck => field ??= [.. Enumerable.Range(1, 205).Select((x) => (object[])[
         ((IEnumerable<string>)[".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".mpeg", ".3gp"])
             .Select((y) => "video" + x.ToString(CultureInfo.InvariantCulture) + y).Single((y) => _videoFilesDir.CombineFile(y).Exists)
     ])];
@@ -584,4 +585,127 @@ partial class Tests
 
     public static IEnumerable<object[]> ValidVideosWithVideoStreamsToCheck => field
         ??= ValidVideosToCheck.Where((x) => !VideoFilesWithoutVideoStreams.Contains((string)x[0]));
+
+    // Helper to extract a frame from a video as a player would display it (auto-rotated & de-interlaced), with deterministic (bit-exact) conversion.
+    // The timestamp is measured from the first frame (timestamps are zero-based via setpts before selecting), rather than seeking on the file's own timestamp
+    // grid - this ensures the same content frame is picked from an original & processed copy of a video even when their start offsets / frame rates differ
+    // (e.g. a start_time that was rounded differently by the container, or a de-interlaced output at double the frame rate).
+    // Note: this does not work properly for videos that are both interlaced and rotated via metadata, since the de-interlacing runs after ffmpeg auto-rotates
+    // the frame, operating on the wrong field orientation - use a non-rotated (e.g. the original) file as the comparison reference in that case.
+    private async Task ExtractVideoFrame(IAbsoluteFilePath videoFile, IAbsoluteFilePath frameFile, double timestamp)
+    {
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-sws_flags", "accurate_rnd+bitexact",
+                "-i", videoFile.PathExport,
+                "-vf", string.Create(CultureInfo.InvariantCulture, $"setpts=PTS-STARTPTS,bwdif=deint=interlaced,select=gte(t\\,{timestamp})"),
+                "-frames:v", "1",
+                "-y", frameFile.PathExport,
+            ],
+            TestContext.CancellationToken);
+    }
+
+    // Helper to compare two extracted frames, ensuring all pixel color channels are within the given tolerance of each other. Only appropriate for
+    // comparing synthetic content (i.e. solid colors) where codec noise does not throw off exact pixel comparisons.
+    private static void CompareFrameToReference(
+        IAbsoluteFilePath referenceFrameFile, IAbsoluteFilePath actualFrameFile, string frameDescription, double tolerance)
+    {
+        using var referenceFrame = Image.Load<Rgba32>(referenceFrameFile.PathExport);
+        using var actualFrame = Image.Load<Rgba32>(actualFrameFile.PathExport);
+
+        actualFrame.Width.ShouldBe(referenceFrame.Width);
+        actualFrame.Height.ShouldBe(referenceFrame.Height);
+
+        int maxDiff = 0;
+        referenceFrame.ProcessPixelRows(actualFrame, (accessor1, accessor2) =>
+        {
+            for (int y = 0; y < accessor1.Height; y++)
+            {
+                var row1 = accessor1.GetRowSpan(y);
+                var row2 = accessor2.GetRowSpan(y);
+
+                for (int x = 0; x < row1.Length; x++)
+                {
+                    maxDiff = int.Max(maxDiff, int.Abs(row1[x].R - row2[x].R));
+                    maxDiff = int.Max(maxDiff, int.Abs(row1[x].G - row2[x].G));
+                    maxDiff = int.Max(maxDiff, int.Abs(row1[x].B - row2[x].B));
+                }
+            }
+        });
+
+        (maxDiff / 255.0).ShouldBeLessThanOrEqualTo(
+            tolerance,
+            string.Create(CultureInfo.InvariantCulture,
+                $"Expected all pixel color channels of '{frameDescription}' to be within {tolerance:P0} of the reference frame (max difference was {maxDiff}/255)"));
+    }
+
+    // Helper to compare the visual similarity of two extracted frames using SSIM, which is robust against codec noise (unlike exact pixel
+    // comparisons), making it appropriate for comparing real video content. The larger frame is downscaled to the size of the smaller frame if the sizes
+    // differ.
+    // Note: the default threshold leaves headroom for the hardware-accelerated modes, whose scalers/deinterlacers don't exactly match the software filters
+    // (software-mode scores are typically >= 0.94, with hw modes a bit lower). Cases that involve heavy downscaling (which scores lower due to scaler
+    // differences dominating) or tiny frames pass an explicitly lower threshold.
+    private async Task CompareFrameToReferenceSSIM(
+        IAbsoluteFilePath referenceFrameFile, IAbsoluteFilePath actualFrameFile, string frameDescription, double minSimilarity = 0.91)
+    {
+        var referenceFrameInfo = Image.Identify(referenceFrameFile.PathExport);
+        var actualFrameInfo = Image.Identify(actualFrameFile.PathExport);
+
+        int width = int.Min(referenceFrameInfo.Width, actualFrameInfo.Width);
+        int height = int.Min(referenceFrameInfo.Height, actualFrameInfo.Height);
+
+        string scaleFilter = string.Create(
+            CultureInfo.InvariantCulture, $"scale=w={width}:h={height}:force_original_aspect_ratio=disable:flags=accurate_rnd+bitexact+bicubic");
+        string filterGraph = $"[0:v]{scaleFilter}[expected];[1:v]{scaleFilter}[actual];[expected][actual]ssim";
+
+        var (_, error, returnCode) = await RunFFtoolProcess(
+            "ffmpeg",
+            ["-i", referenceFrameFile.PathExport, "-i", actualFrameFile.PathExport, "-filter_complex", filterGraph, "-f", "null", "-"],
+            TestContext.CancellationToken);
+        returnCode.ShouldBe(0);
+
+        int allIndex = error.LastIndexOf("All:", StringComparison.Ordinal);
+        allIndex.ShouldBeGreaterThanOrEqualTo(0, "Expected ffmpeg to report an SSIM score. Output: " + error);
+        var similarityStr = error.AsSpan(allIndex + "All:".Length).TrimStart();
+        similarityStr = similarityStr[..similarityStr.IndexOf(' ')];
+        double similarity = double.Parse(similarityStr, CultureInfo.InvariantCulture);
+
+        similarity.ShouldBeGreaterThanOrEqualTo(
+            minSimilarity,
+            string.Create(CultureInfo.InvariantCulture,
+                $"Expected '{frameDescription}' to have an SSIM similarity of at least {minSimilarity} to the reference frame (actual was {similarity})"));
+    }
+
+#if CUSTOM_HWACCEL_MODE
+    [TestInitialize]
+    public void SetCaseNameForHWAccelStats()
+    {
+        // Set the test case name for HWAccel stats reporting:
+        VideoProcessor.SetHWAccelTestCase(TestContext.TestDisplayName ?? TestContext.TestName);
+    }
+
+    [TestCleanup]
+    public void UnsetCaseNameForHWAccelStats()
+    {
+        // Unset the test case name for HWAccel stats reporting:
+        VideoProcessor.SetHWAccelTestCase(null);
+    }
+
+    [AssemblyCleanup]
+    public static void WriteHWAccelStats()
+    {
+        string projectDir = AppContext.BaseDirectory;
+        while (projectDir is not null && !File.Exists(Path.Combine(projectDir, "FulcrumFS.Videos.Tests.csproj")))
+        {
+            projectDir = Path.GetDirectoryName(projectDir);
+        }
+
+        if (projectDir is null)
+            throw new InvalidOperationException("Could not find project directory for FulcrumFS.Videos.Tests.csproj");
+
+        File.WriteAllText(Path.Combine(projectDir, "HWAccelFailuresReport_Short.txt"), VideoProcessor.GetShortHWAccelFailuresReport());
+        File.WriteAllText(Path.Combine(projectDir, "HWAccelFailuresReport_Detailed.txt"), VideoProcessor.GetDetailedHWAccelFailuresReport());
+    }
+#endif
 }

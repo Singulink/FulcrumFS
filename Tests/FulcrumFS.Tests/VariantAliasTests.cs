@@ -294,23 +294,26 @@ public sealed class VariantAliasTests
             // The barrier releases both tasks as close together as possible to maximize the chance they actually contend on 'a's source lock.
             using var gate = new Barrier(2);
 
-            var delete = Task.Run(async () =>
+            var makeDeleteTask = () => async () =>
             {
                 gate.SignalAndWait();
 
                 try { await repo.DeleteVariantsAsync(fileId, "a"); }
                 catch (RepoFileNotFoundException) { }
-            });
+            };
 
-            var add = Task.Run(async () =>
+            var makeAddTask = () => async () =>
             {
                 gate.SignalAndWait();
 
                 try { await repo.GetOrAddVariantAsync(fileId, "c", sourceVariantId: "a", VariantPipelines.Alias(), TestContext.CancellationToken); }
                 catch (RepoFileNotFoundException) { }
-            });
+            };
 
-            await Task.WhenAll(delete, add);
+            if (i % 2 == 0)
+                await Task.WhenAll(Task.Run(makeDeleteTask()), Task.Run(makeAddTask()));
+            else
+                await Task.WhenAll(Task.Run(makeAddTask()), Task.Run(makeDeleteTask()));
 
             // Regardless of ordering, 'a' is gone afterwards.
             await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -87,6 +88,10 @@ internal static class FFprobeUtils
         Require(c.SupportsFormatFilter);
         Require(c.SupportsBwdifFilter);
         Require(c.SupportsSetsarFilter);
+        Require(c.SupportsTransposeFilter);
+        Require(c.SupportsHFlipFilter);
+        Require(c.SupportsVFlipFilter);
+        Require(c.SupportsSidedataFilter);
     }
 
     public sealed class VideoFileInfo(string formatName, double? duration, ImmutableArray<StreamInfo> streams)
@@ -123,7 +128,8 @@ internal static class FFprobeUtils
         string? FieldOrder,
         int BitsPerSample,
         bool AlphaMode,
-        int Rotation)
+        int Rotation,
+        bool HasNonStandardDisplayMatrix)
     : StreamInfo;
 
     public sealed record AudioStreamInfo(
@@ -190,6 +196,14 @@ internal static class FFprobeUtils
                 (int fpsNum, int fpsDen) = ParseFraction(s.RFrameRate, '/', defaultIfMissing: (0, 0));
                 (int sarNum, int sarDen) = ParseFraction(s.SampleAspectRatio, ':', defaultIfMissing: (1, 1));
 
+                var displayMatrix = s.SideDataList?.FirstOrDefault((sd) => sd?.SideDataType == "Display Matrix");
+                int rotation = (displayMatrix?.Rotation ?? 0) % 360;
+
+                if (rotation <= -180)
+                    rotation += 360;
+                else if (rotation > 180)
+                    rotation -= 360;
+
                 return new VideoStreamInfo(
                     s.CodecName!,
                     s.CodecTagString!,
@@ -215,7 +229,8 @@ internal static class FFprobeUtils
                     s.FieldOrder,
                     s.BitsPerRawSample ?? -1,
                     t?.IsAlphaMode ?? false,
-                    s.SideDataList?.FirstOrDefault((sd) => sd?.SideDataType == "Display Matrix")?.Rotation ?? 0);
+                    rotation,
+                    HasNonStandardDisplayMatrix(displayMatrix, rotation));
 
             case "audio":
                 return new AudioStreamInfo(s.CodecName!, s.Profile, language, s.Duration, s.Channels ?? -1, s.SampleRate, s.ChannelLayout);
@@ -250,6 +265,49 @@ internal static class FFprobeUtils
         }
 
         return (-1, -1);
+    }
+
+    private static bool HasNonStandardDisplayMatrix(FFprobeSideData? displayMatrix, int rotation)
+    {
+        if (displayMatrix is null)
+            return false;
+
+        // The display matrix string is formatted as rows of '0000000N:' labels (which fail to parse and are skipped) followed by three values each, giving
+        // [a, b, u, c, d, v, x, y, w]. The rotation/scale values are 16.16 fixed point (65536 = 1) and w is 2.30 fixed point (1073741824 = 1).
+
+        Span<long> values = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+        int idx = 0;
+
+        foreach (string token in (displayMatrix.DisplayMatrix ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (long.TryParse(token, CultureInfo.InvariantCulture, out long value))
+            {
+                if (idx >= 9)
+                    return true;
+
+                values[idx++] = value;
+            }
+        }
+
+        if (idx != 9)
+            return true;
+
+        // Zero out the translation entries ([x, y]) since they are legitimately used in combination with standard rotations:
+        values[6] = 0;
+        values[7] = 0;
+
+        // Compare against the standard matrix that ffmpeg writes for the reported rotation - anything else (e.g. flips / mirroring, scaling, or
+        // non-quarter-turn rotations) is non-standard.
+        ReadOnlySpan<long> expected = rotation switch
+        {
+            0 => [65536, 0, 0, 0, 65536, 0, 0, 0, 1073741824],
+            90 => [0, -65536, 0, 65536, 0, 0, 0, 0, 1073741824],
+            180 => [-65536, 0, 0, 0, -65536, 0, 0, 0, 1073741824],
+            -90 => [0, 65536, 0, -65536, 0, 0, 0, 0, 1073741824],
+            _ => default,
+        };
+
+        return !values.SequenceEqual(expected);
     }
 
     public struct ConfigurationInfo
@@ -303,19 +361,52 @@ internal static class FFprobeUtils
         public bool SupportsFormatFilter { get; set; }
         public bool SupportsBwdifFilter { get; set; }
         public bool SupportsSetsarFilter { get; set; }
+        public bool SupportsTransposeFilter { get; set; }
+        public bool SupportsHFlipFilter { get; set; }
+        public bool SupportsVFlipFilter { get; set; }
+        public bool SupportsSidedataFilter { get; set; }
+        public bool SupportsScaleVtFilter { get; set; }
+        public bool SupportsScaleCudaFilter { get; set; }
+        public bool SupportsBwdifCudaFilter { get; set; }
+        public bool SupportsColorspaceCudaFilter { get; set; }
+        public bool SupportsVppQsvFilter { get; set; }
+        public bool SupportsVppAmfFilter { get; set; }
+        public bool SupportsScaleD3D12Filter { get; set; }
+        public bool SupportsDeinterlaceD3D12Filter { get; set; }
+        public bool SupportsTransposeVtFilter { get; set; }
+        public bool SupportsTransposeCudaFilter { get; set; }
+
+        // Hardware acceleration support
+        public bool SupportsVideoToolboxHWAccel { get; set; }
+        public bool SupportsCudaHWAccel { get; set; }
+        public bool SupportsQsvHWAccel { get; set; }
+        public bool SupportsAmfHWAccel { get; set; }
+        public bool SupportsD3D12VAHWAccel { get; set; }
+
+        // Pixel format support
+        public bool SupportsVideoToolboxVLDPixelFormat { get; set; }
+        public bool SupportsCudaPixelFormat { get; set; }
+        public bool SupportsQsvPixelFormat { get; set; }
+        public bool SupportsAmfPixelFormat { get; set; }
+        public bool SupportsD3D12PixelFormat { get; set; }
     }
 
     private static IEnumerable<(string Info, string Name)> RunFFprobeConfigurationExtraction(
         string command,
         bool noStartingLine,
-        CancellationToken cancellationToken = default)
+        bool nameOnly = false,
+        bool useFfmpegExe = false)
     {
+        // We only support nameOnly in noStartingLine mode.
+        if (nameOnly && !noStartingLine)
+            throw new ArgumentException("nameOnly can only be used in noStartingLine mode.", nameof(nameOnly));
+
         // Get the raw configuration output from ffprobe.
         string result = ProcessUtils.RunProcessToStringWithErrorHandlingAsync(
-            VideoProcessor.FFprobeExePath,
+            useFfmpegExe ? VideoProcessor.FFmpegExePath : VideoProcessor.FFprobeExePath,
             [command, "-hide_banner", "-v", "error"],
             lifetime: ProcessLifetime.ShortLived,
-            cancellationToken: cancellationToken,
+            cancellationToken: CancellationToken.None,
             runAsynchronously: false).GetAwaiter().GetResult();
 
         // Handle skipping the starting line if needed.
@@ -364,6 +455,16 @@ internal static class FFprobeUtils
                 yield return (info.ToString(), name.ToString());
             }
         }
+        else if (nameOnly)
+        {
+            // Enumerate through each line in the configuration info section and return only the names to the caller.
+            while ((line = lineReader.ReadLine()) != null)
+            {
+                var sp = line.AsSpan().Trim(' ');
+                if (sp.Length == 0) continue;
+                yield return (string.Empty, sp.ToString());
+            }
+        }
         else
         {
             // Enumerate through each line in the configuration info section and return them to the caller.
@@ -383,6 +484,59 @@ internal static class FFprobeUtils
         }
     }
 
+    private static bool CheckHWAccelActuallySupported(string mode)
+    {
+        // Creating a device proves very little, since it does not touch the video decoding hardware at all: videotoolbox always succeeds (its device creation
+        // is a no-op), d3d12va succeeds against a software adapter, and amf only checks that the runtime library loads. The remaining modes need a real driver
+        // to create a device, but still do not establish that the decoding engine supports what we throw at it. We assume that any useful hardware accelerator
+        // will support decoding H.264 at 128x128 resolution. The frames are downloaded back out of hardware and hashed so that the accelerator has to actually
+        // produce pixel data instead of merely accepting the stream.
+
+        string hwAccelOutputFormat = FFmpegUtils.MapHWAccelNameToFormatName(mode);
+        var testFile = FilePath.CreateTempFile();
+
+        try
+        {
+            var (_, _, encodeReturnCode) = ProcessUtils.RunProcessToStringAsync(
+                VideoProcessor.FFmpegExePath,
+                [
+                    "-hide_banner", "-f", "lavfi", "-r", "10", "-i", "testsrc2=s=128x128", "-frames:v", "10", "-c:v", "libx264",
+                    "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-f", "h264", "-y", testFile.PathExport,
+                ],
+                lifetime: ProcessLifetime.ShortLived,
+                cancellationToken: CancellationToken.None,
+                runAsynchronously: false).GetAwaiter().GetResult();
+
+            Debug.Assert(encodeReturnCode == 0);
+
+            if (encodeReturnCode != 0)
+                return false;
+
+            var (_, _, decodeReturnCode) = ProcessUtils.RunProcessToStringAsync(
+                VideoProcessor.FFmpegExePath,
+                [
+                    "-hide_banner", "-hwaccel", mode, "-hwaccel_output_format", hwAccelOutputFormat, "-f", "h264", "-i",
+                    testFile.PathExport, "-filter:v", "hwdownload,format=nv12", "-f", "framemd5", "-",
+                ],
+                lifetime: ProcessLifetime.ShortLived,
+                cancellationToken: CancellationToken.None,
+                runAsynchronously: false).GetAwaiter().GetResult();
+
+            return decodeReturnCode == 0;
+        }
+        finally
+        {
+            try
+            {
+                testFile.Delete(ignoreNotFound: true);
+            }
+            catch
+            {
+                // Not worth failing over.
+            }
+        }
+    }
+
     private static void EnsureConfigurationInfoInitialized()
     {
         // Note: the volatile read here + write after we set all fields ensures that all threads see a fully initialized struct.
@@ -393,6 +547,9 @@ internal static class FFprobeUtils
         InitImpl();
         static void InitImpl()
         {
+            // User may have called with a failing initialization previously that threw an exception - just reset to default:
+            _configInfo = default;
+
             // Initialize encoders
             foreach (var (info, name) in RunFFprobeConfigurationExtraction("-encoders", noStartingLine: false))
             {
@@ -488,8 +645,98 @@ internal static class FFprobeUtils
                     case "format": _configInfo.SupportsFormatFilter = true; break;
                     case "bwdif": _configInfo.SupportsBwdifFilter = true; break;
                     case "setsar": _configInfo.SupportsSetsarFilter = true; break;
+                    case "transpose": _configInfo.SupportsTransposeFilter = true; break;
+                    case "hflip": _configInfo.SupportsHFlipFilter = true; break;
+                    case "vflip": _configInfo.SupportsVFlipFilter = true; break;
+                    case "sidedata": _configInfo.SupportsSidedataFilter = true; break;
+                    case "scale_vt": _configInfo.SupportsScaleVtFilter = true; break;
+                    case "scale_cuda": _configInfo.SupportsScaleCudaFilter = true; break;
+                    case "bwdif_cuda": _configInfo.SupportsBwdifCudaFilter = true; break;
+                    case "colorspace_cuda": _configInfo.SupportsColorspaceCudaFilter = true; break;
+                    case "vpp_qsv": _configInfo.SupportsVppQsvFilter = true; break;
+                    case "vpp_amf": _configInfo.SupportsVppAmfFilter = true; break;
+                    case "scale_d3d12": _configInfo.SupportsScaleD3D12Filter = true; break;
+                    case "deinterlace_d3d12": _configInfo.SupportsDeinterlaceD3D12Filter = true; break;
+                    case "transpose_vt": _configInfo.SupportsTransposeVtFilter = true; break;
+                    case "transpose_cuda": _configInfo.SupportsTransposeCudaFilter = true; break;
                 }
             }
+
+            // Initialize pixel format support
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-pix_fmts", noStartingLine: false))
+            {
+                if (info is [_, _, 'H', ..])
+                {
+                    switch (name)
+                    {
+                        case "videotoolbox_vld": _configInfo.SupportsVideoToolboxVLDPixelFormat = true; break;
+                        case "cuda": _configInfo.SupportsCudaPixelFormat = true; break;
+                        case "qsv": _configInfo.SupportsQsvPixelFormat = true; break;
+                        case "amf": _configInfo.SupportsAmfPixelFormat = true; break;
+                        case "d3d12": _configInfo.SupportsD3D12PixelFormat = true; break;
+                    }
+                }
+            }
+
+            // Initialize hardware acceleration support (note: command output also includes a 'Hardware acceleration methods:' line, and empty line after)
+            // Note: it being listed in '-hwaccels' only means that ffmpeg was built with support for it, not that it is actually usable on the current system.
+            // Note: the 'auto' forced mode (used for testing) runs the same detection as normal builds, since it tests automatic hardware acceleration selection.
+#if !CUSTOM_HWACCEL_MODE || CUSTOM_HWACCEL_MODE_AUTO
+            foreach (var (info, name) in RunFFprobeConfigurationExtraction("-hwaccels", noStartingLine: true, nameOnly: true, useFfmpegExe: true))
+            {
+                switch (name)
+                {
+                    case "videotoolbox": _configInfo.SupportsVideoToolboxHWAccel = _configInfo.SupportsVideoToolboxVLDPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "cuda": _configInfo.SupportsCudaHWAccel = _configInfo.SupportsCudaPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "qsv": _configInfo.SupportsQsvHWAccel = _configInfo.SupportsQsvPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "amf": _configInfo.SupportsAmfHWAccel = _configInfo.SupportsAmfPixelFormat && CheckHWAccelActuallySupported(name); break;
+                    case "d3d12va": _configInfo.SupportsD3D12VAHWAccel = _configInfo.SupportsD3D12PixelFormat && CheckHWAccelActuallySupported(name); break;
+                }
+            }
+
+            // Special handling for forced hardware acceleration mode (used for testing):
+#elif !CUSTOM_HWACCEL_MODE_DECODEONLY
+#if CUSTOM_HWACCEL_MODE_VIDEOTOOLBOX
+            string mode = "videotoolbox";
+            _configInfo.SupportsVideoToolboxHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsVideoToolboxVLDPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleVtFilter;
+#elif CUSTOM_HWACCEL_MODE_CUDA
+            string mode = "cuda";
+            _configInfo.SupportsCudaHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsCudaPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleCudaFilter;
+#elif CUSTOM_HWACCEL_MODE_QSV
+            string mode = "qsv";
+            _configInfo.SupportsQsvHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsQsvPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsVppQsvFilter;
+#elif CUSTOM_HWACCEL_MODE_AMF
+            string mode = "amf";
+            _configInfo.SupportsAmfHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsAmfPixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsVppAmfFilter;
+#elif CUSTOM_HWACCEL_MODE_D3D12VA
+            string mode = "d3d12va";
+            _configInfo.SupportsD3D12VAHWAccel = true;
+            bool pixFmtSupported = _configInfo.SupportsD3D12PixelFormat;
+            bool scaleFilterSupported = _configInfo.SupportsScaleD3D12Filter;
+#else
+#error Unrecognized CUSTOM_HWACCEL_MODE* value.
+#endif
+
+            if (!RunFFprobeConfigurationExtraction("-hwaccels", noStartingLine: true, nameOnly: true, useFfmpegExe: true).Any((x) => x.Name == mode))
+                throw new InvalidOperationException($"The configured ffmpeg build does not support the forced hardware acceleration mode '{mode}'.");
+
+            if (!CheckHWAccelActuallySupported(mode))
+                throw new InvalidOperationException($"The system does not actually support the forced hardware acceleration mode '{mode}'.");
+
+            if (!pixFmtSupported)
+                throw new InvalidOperationException($"The configured ffmpeg build does not support the pixel format required for the forced hardware acceleration mode '{mode}'.");
+
+            if (!scaleFilterSupported)
+                throw new InvalidOperationException($"The configured ffmpeg build does not support the scale filter required for the forced hardware acceleration mode '{mode}'.");
+#endif
 
             // Ensure we only mark it as initialized after (with a volatile write) we're certain the struct is fully initialized by using a volatile write.
             _configInfoInitialized = true;
@@ -559,7 +806,7 @@ internal sealed record FFprobeTagsData(string? Language, string? Title, string? 
     public bool IsAlphaMode => AlphaMode == "1";
 }
 
-internal sealed record FFprobeSideData(string? SideDataType, int? Rotation);
+internal sealed record FFprobeSideData(string? SideDataType, int? Rotation, [property: JsonPropertyName("displaymatrix")] string? DisplayMatrix);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,

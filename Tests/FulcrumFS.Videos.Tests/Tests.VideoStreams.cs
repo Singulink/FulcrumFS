@@ -1419,4 +1419,186 @@ partial class Tests
             throw new Exception("Failed to verify output video dimensions. Info: " + processedInfo, ex);
         }
     }
+
+    [TestMethod]
+    [DataRow(true, 20, 20, 20, 16, "1:1")]
+    [DataRow(false, 16, 16, 16, 16, "5:4")]
+    public async Task TestRotationWithSarResizingHandling(
+        bool forceSquarePixels, int maxWidth, int maxHeight, int outputWidth, int outputHeight, string outputSar)
+    {
+        // Tests combined rotation metadata + non-square SAR + resize handling through the re-encode path.
+        // The input video is physically rotated 90 degrees clockwise at 32x30 with a 3:4 SAR, with rotation metadata set to -90 so that it displays correctly
+        // when played. ffmpeg bakes in the rotation when re-encoding, so the decoded frames are 30x32 with the SAR inverted to 4:3 (i.e., a 40x32 display
+        // size).
+        // - With ForceSquarePixels = true, the video should be effectively rotated and then have its pixels made square while resizing, so fitting the 40x32
+        //   display size within 20x20 should produce a 20x16 result with a 1:1 SAR.
+        // - With ForceSquarePixels = false, the rotated 30x32 coded frame should just be scaled directly to fit within 16x16 (15x16, which becomes 16x16
+        //   after rounding to even dimensions) with no extra SAR-based scaling - the SAR instead ends up adjusted to preserve the display aspect ratio
+        //   (4:3 * (30/16)/(32/16) = 5:4).
+
+        using var repoCtx = GetRepo(out var repo);
+
+        // Create a video that is physically rotated 90 degrees clockwise at 32x30 with a 3:4 SAR, with rotation metadata set to -90 so that it displays
+        // correctly when played.
+        string tempRotatedFilePath = GetUniqueTempFilePath(".mp4");
+        string inputFilePath = GetUniqueTempFilePath(".mp4");
+
+        var origFile = _videoFilesDir.CombineFile("video1.mp4");
+
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", "transpose=1,scale=w=32:h=30:force_original_aspect_ratio=disable,setsar=3/4",
+                "-c:v", "libx264",
+                "-c:a", "copy",
+                "-y", tempRotatedFilePath,
+            ],
+            TestContext.CancellationToken);
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            ["-display_rotation", "90", "-i", tempRotatedFilePath, "-c", "copy", "-y", inputFilePath],
+            TestContext.CancellationToken);
+
+        // Validate the input file has the expected physical dimensions, SAR, and rotation metadata:
+        string originalInfo = await RunFFtoolProcessWithErrorHandling(
+            "ffprobe",
+            ["-i", inputFilePath, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+
+        try
+        {
+            originalInfo.Contains("\"width\": 32", StringComparison.Ordinal).ShouldBeTrue();
+            originalInfo.Contains("\"height\": 30", StringComparison.Ordinal).ShouldBeTrue();
+            originalInfo.Contains("\"sample_aspect_ratio\": \"3:4\"", StringComparison.Ordinal).ShouldBeTrue();
+            originalInfo.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeTrue();
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Failed with original info: " + originalInfo, ex);
+        }
+
+        // Process through the re-encode path:
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ResultVideoCodecs = [VideoCodec.H264],
+            VideoReencodeMode = StreamReencodeMode.Always,
+            ForceSquarePixels = forceSquarePixels,
+            ResizeOptions = new VideoResizeOptions(VideoResizeMode.FitDown, maxWidth, maxHeight),
+        }).ToPipeline();
+
+        var inputFile = FilePath.ParseAbsolute(inputFilePath);
+        await using var stream = inputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn = await repo.BeginTransactionAsync();
+        var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath = (await repo.GetAsync(fileId)).Path;
+        videoPath.Exists.ShouldBeTrue();
+
+        // Validate the output has the rotation baked in with the expected dimensions and SAR:
+        string processedInfo = await RunFFtoolProcessWithErrorHandling(
+            "ffprobe",
+            ["-i", videoPath.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+
+        try
+        {
+            processedInfo.Contains(string.Create(CultureInfo.InvariantCulture, $"\"width\": {outputWidth}"), StringComparison.Ordinal).ShouldBeTrue();
+            processedInfo.Contains(string.Create(CultureInfo.InvariantCulture, $"\"height\": {outputHeight}"), StringComparison.Ordinal).ShouldBeTrue();
+            processedInfo.Contains(string.Create(CultureInfo.InvariantCulture,
+                $"\"sample_aspect_ratio\": \"{outputSar}\""), StringComparison.Ordinal).ShouldBeTrue();
+            processedInfo.Contains("\"Display Matrix\"", StringComparison.Ordinal).ShouldBeFalse();
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Failed with processed info: " + processedInfo, ex);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(60, "40/1")] // 60fps interlaced = 120 fields/s -> divide by ceil(120/45) = 3 -> 40fps
+    [DataRow(30, "30/1")] // 30fps interlaced = 60 fields/s -> divide by ceil(60/45) = 2 -> 30fps
+    [DataRow(15, "30/1")] // 15fps interlaced = 30 fields/s -> already within the limit, so just de-interlaced -> 30fps
+    public async Task TestInterlacedFpsLimitHandling(int storedFps, string expectedOutputFrameRate)
+    {
+        // Tests the interaction between interlacing and FPS limits. An interlaced video plays back at double its stored frame rate once de-interlaced (one
+        // frame per field), so the FPS limit must be detected and applied against the field rate rather than the stored frame rate.
+        // Uses LimitByIntegerDivision with a limit of 45 so that the division factor also validates that the field rate (rather than the stored frame rate)
+        // is being scaled correctly, and ForceProgressiveFrames so that the case already within the limit is still de-interlaced (rather than returned
+        // unchanged).
+
+        using var repoCtx = GetRepo(out var repo);
+
+        // Create an interlaced (tff) input video at the requested stored frame rate in the temp folder:
+        // Note: the fps filter upsamples the 30fps source to double the stored rate first, which the interlace filter then halves back down.
+        string inputFilePath = GetUniqueTempFilePath(".mp4");
+
+        var origFile = _videoFilesDir.CombineFile("video1.mp4");
+
+        await RunFFtoolProcessWithErrorHandling(
+            "ffmpeg",
+            [
+                "-i", origFile.PathExport,
+                "-vf", string.Create(CultureInfo.InvariantCulture, $"fps=fps={storedFps * 2},interlace=scan=tff:lowpass=complex"),
+                "-c:v", "libx264",
+                "-x264-params", "tff=1",
+                "-c:a", "copy",
+                "-y", inputFilePath,
+            ],
+            TestContext.CancellationToken);
+
+        // Validate the input file has the expected frame rate and interlacing:
+        string originalInfo = await RunFFtoolProcessWithErrorHandling(
+            "ffprobe",
+            ["-i", inputFilePath, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+
+        try
+        {
+            originalInfo.Contains(string.Create(CultureInfo.InvariantCulture, $"\"r_frame_rate\": \"{storedFps}/1\""), StringComparison.Ordinal).ShouldBeTrue();
+            originalInfo.Contains("\"field_order\": \"tt\"", StringComparison.Ordinal).ShouldBeTrue();
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Failed with original info: " + originalInfo, ex);
+        }
+
+        // Process with an integer division FPS limit of 45:
+        var pipeline = new VideoProcessor(VideoProcessingOptions.Preserve with
+        {
+            ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            ForceProgressiveFrames = true,
+            FpsOptions = new VideoFpsOptions(VideoFpsMode.LimitByIntegerDivision, 45),
+        }).ToPipeline();
+
+        var inputFile = FilePath.ParseAbsolute(inputFilePath);
+        await using var stream = inputFile.OpenAsyncStream(access: FileAccess.Read, share: FileShare.Read);
+
+        await using var txn = await repo.BeginTransactionAsync();
+        var fileId = (await txn.AddAsync(stream, true, pipeline, TestContext.CancellationToken)).FileId;
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var videoPath = (await repo.GetAsync(fileId)).Path;
+        videoPath.Exists.ShouldBeTrue();
+
+        // Validate the output has been de-interlaced with the expected frame rate:
+        string processedInfo = await RunFFtoolProcessWithErrorHandling(
+            "ffprobe",
+            ["-i", videoPath.PathExport, "-hide_banner", "-print_format", "json", "-show_streams", "-v", "error"],
+            TestContext.CancellationToken);
+
+        try
+        {
+            processedInfo.Contains(string.Create(CultureInfo.InvariantCulture,
+                $"\"r_frame_rate\": \"{expectedOutputFrameRate}\""), StringComparison.Ordinal).ShouldBeTrue();
+            processedInfo.Contains("\"field_order\": \"progressive\"", StringComparison.Ordinal).ShouldBeTrue();
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Failed with processed info: " + processedInfo, ex);
+        }
+    }
 }

@@ -6,16 +6,21 @@ on:
   pull_request:
     branches: [ main ]
 
+# Auto-cancel any old in-progress runs for the same PR, but not for non-PR runs
+concurrency:
+  group: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test-core:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
         configuration: [Debug, Release]
 
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os == 'windows-latest' && 'test-core-windows-x64' || 'test-core-linux-x64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
+    name: ${{ matrix.os == 'windows-latest' && 'test-core-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-core-linux-x64' || 'test-core-macos-arm64' }}-${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
 
     steps:
     - name: Checkout
@@ -34,9 +39,32 @@ jobs:
     - name: Test
       run: dotnet test FulcrumFS.NoVideos.slnf --configuration ${{ matrix.configuration }} --no-build --verbosity normal
 
-  build-and-test-video-linux:
-    runs-on: ubuntu-latest
-    name: test-video-linux-x64
+  build-and-test-video:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        hwaccel-mode: [none]
+
+        # Only macOS supports hardware acceleration in CI currently, so just run the hardware acceleration configs on that.
+        # We do want coverage of running decodeonly/auto even if no hardware acceleration is available, so ensure we keep those even if we remove macOS runners.
+        include:
+        - os: macos-latest
+          hwaccel-mode: videotoolbox
+        - os: macos-latest
+          hwaccel-mode: decodeonly
+        - os: macos-latest
+          hwaccel-mode: auto
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-video-linux-x64' || 'test-video-macos-arm64' }}${{ matrix.hwaccel-mode != 'none' && format('-hwaccel-{0}', matrix.hwaccel-mode) || '' }}
+
+    env:
+      # Boost the priority of long-running ffmpeg processes so they do not get starved on busy CI machines, which otherwise can be responsible for some spurious test failures.
+      BOOST_LONG_RUNNING_PROCESS_PRIORITY: 'true'
+
+      # Selects the forced hardware acceleration mode the sources are compiled against - must be empty for the 'none' (i.e. non-forced) runs.
+      HWACCEL_MODE: ${{ matrix.hwaccel-mode != 'none' && matrix.hwaccel-mode || '' }}
 
     steps:
     - name: Checkout
@@ -46,63 +74,57 @@ jobs:
       with:
         dotnet-version: |
           10.0.x
-    - name: Build ffmpeg binaries
+    - name: Build ffmpeg binaries (Unix)
+      if: ${{ runner.os != 'Windows' && success() }}
       env:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
       run: |
         mkdir -p "$FFMPEG_OUTPUT_DIR"
-        bash .github/scripts/build-ffmpeg/linux/bootstrap-linux.sh
+        bash .github/scripts/build-ffmpeg/unix/bootstrap-unix.sh
         chmod +x "$FFMPEG_OUTPUT_DIR"/*
-    - name: Clean
-      run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
-    - name: Install dependencies
-      run: dotnet restore FulcrumFS.slnx
-    - name: Build (Debug)
-      run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
-    - name: Build (Release)
-      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
-    - name: Test (Debug)
-      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
-      env:
-        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-    - name: Test (Release)
-      if: ${{ !cancelled() }}
-      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
-      env:
-        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-
-  build-and-test-video-windows:
-    runs-on: windows-latest
-    name: test-video-windows-x64
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: |
-          10.0.x
-    - name: Build ffmpeg binaries
+    - name: Build ffmpeg binaries (Windows)
+      if: ${{ runner.os == 'Windows' && success() }}
       env:
         FFMPEG_OUTPUT_DIR: ${{ github.workspace }}/Binaries
       run: |
         New-Item -ItemType Directory -Force -Path $env:FFMPEG_OUTPUT_DIR | Out-Null
         .\.github\scripts\build-ffmpeg\windows\bootstrap-windows.ps1
+    - name: Copy test config
+      shell: bash
+      run: cp ".github/config/testconfig.${{ runner.os == 'Windows' && 'windows' || runner.os == 'Linux' && 'linux' || 'macos' }}.json" Tests/FulcrumFS.Videos.Tests/testconfig.json
     - name: Clean
       run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
     - name: Install dependencies
       run: dotnet restore FulcrumFS.slnx
     - name: Build (Debug)
+      if: ${{ matrix.hwaccel-mode == 'none' && success() }}
       run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
     - name: Build (Release)
+      if: ${{ matrix.hwaccel-mode == 'none' && success() }}
       run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
     - name: Test (Debug)
+      if: ${{ matrix.hwaccel-mode == 'none' && success() }}
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Debug --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
     - name: Test (Release)
-      if: ${{ !cancelled() }}
+      if: ${{ matrix.hwaccel-mode == 'none' && !cancelled() }}
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    - name: Build (hwaccel mode)
+      if: ${{ matrix.hwaccel-mode != 'none' && success() }}
+      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
+    - name: Test (hwaccel mode)
+      if: ${{ matrix.hwaccel-mode != 'none' && success() }}
+      run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
+      env:
+        FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
+    - name: Hardware acceleration failures report
+      if: ${{ matrix.hwaccel-mode != 'none' && !cancelled() }}
+      shell: bash
+      run: cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Short.txt
+    - name: Hardware acceleration failures report (detailed)
+      if: ${{ matrix.hwaccel-mode != 'none' && !cancelled() }}
+      shell: bash
+      run: cat Tests/FulcrumFS.Videos.Tests/HWAccelFailuresReport_Detailed.txt
