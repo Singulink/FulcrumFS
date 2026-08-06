@@ -43,7 +43,7 @@ public enum HardwareAccelerationKind
     /// </summary>
     /// <remarks>
     /// If you have an AMD or Intel GPU, you will want to manually select the appropriate mode (AMF or QSV) instead of using this option, as we deprioritize
-    /// those modes, as we assume they are most likely going to match the CPU on most systems, rather than a GPU.
+    /// those modes, as we assume they are most likely going to match the CPU's integrated media engine on most systems, rather than a GPU.
     /// </remarks>
     Auto,
 

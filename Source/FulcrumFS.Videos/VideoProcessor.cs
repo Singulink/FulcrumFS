@@ -1649,7 +1649,7 @@ public sealed class VideoProcessor : FileProcessor
 
                     filterOverride.MakePixelsSquareMode = Options.ForceSquarePixels ? 0 : 1;
 
-                    // We need to fix-up the sar manually for hwaccel mode always, so calculate now what it should be in '1' mode
+                    // HACK: We need to fix-up the sar manually for hwaccel mode always, so calculate now what it should be in '1' mode
                     if (filterOverride.MakePixelsSquareMode == 1)
                     {
                         // Note: sarNum/sarDen already have the rotation inversion applied to match the decoded (auto-rotated) frames.
@@ -1691,7 +1691,6 @@ public sealed class VideoProcessor : FileProcessor
                 }
 
                 // Ensure hardware acceleration info is available on 'filterOverride' for if we need it:
-                // Note: PixelFormat is always set when re-encoding (via the pixel format block above), so the fallback is defensive only.
                 if (reencode)
                 {
                     Debug.Assert(filterOverride.PixelFormat != null);
@@ -1706,12 +1705,12 @@ public sealed class VideoProcessor : FileProcessor
                     }
 
                     // If we're actually re-encoding with a critical filter, then mark our hwacceleration as potentially beneficial.
-                    // Only include if input resolution is at least 64px - many hw accelerators are unlikely to even support below this kind of size.
-                    // Cases that don't match this are unlikely to be common anyway.
+                    // Only include if input resolution is at least 64px in both dimensions - many hw accelerators are unlikely to even support below this kind
+                    // of size. Cases that don't match this are unlikely to be common anyway.
                     // Also, do not count as worth trying if we have h263, vp8, mpeg1video or mpeg2video - these are unlikely to be accelerated on modern
                     // hardware, and they are not likely to ever become more likely to be accelerated (as opposed to something like VVC).
                     if (filterOverride.Critical &&
-                        (width >= 64 || height >= 64) &&
+                        (width >= 64 && height >= 64) &&
                         videoStream.CodecName is not ("h263" or "vp8" or "mpeg1video" or "mpeg2video"))
                     {
                         worthUsingHardwareAcceleratedFilters = true;
@@ -1725,7 +1724,8 @@ public sealed class VideoProcessor : FileProcessor
                         canUseHardwareAcceleration = false;
                     }
 
-                    // Some hardware decoders will handle bff incorrectly (such as amf), so we fully disable hardware acceleration & decoding if it isn't tff.
+                    // HACK: Some hardware decoders will handle bff incorrectly (such as amf), so we fully disable hardware acceleration & decoding if it isn't
+                    // tff or progressive.
                     if (!IsProgressive(videoStream.FieldOrder) && videoStream.FieldOrder != "tt")
                     {
                         canUseHardwareAcceleration = false;
@@ -1782,8 +1782,8 @@ public sealed class VideoProcessor : FileProcessor
                             x265Params.Add(string.Create(CultureInfo.InvariantCulture, $"pools={tl}"));
                         }
 
-                        // See https://github.com/Multicorewareinc/x265/issues/934 - technically only 3 are required according to copilot, but to be safe we
-                        // use 10, which won't have much impact on most files anyway, as most would have more than 10 frames. Videos with unknown length may
+                        // HACK: See https://github.com/Multicorewareinc/x265/issues/934 - technically only 3 are required according to copilot, but to be safe
+                        // we use 10, which won't have much impact on most files anyway, as most would have more than 10 frames. Videos with unknown length may
                         // falsely get flagged here too, but that should be fine, as we can still use p-frames, so the file might be slightly larger than
                         // necessary in this edge case, but shouldn't be orders of magnitudes larger. Another reason to use 10 frames is that we fall back to
                         // full file length, not only relying on only stream length, which means we could accidentally over-report the length a bit, leading

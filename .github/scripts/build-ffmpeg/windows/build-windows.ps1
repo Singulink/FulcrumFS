@@ -37,8 +37,8 @@ foreach ($f in 'media-autobuild_suite.ini', 'ffmpeg_options.txt', 'mpv_options.t
     Copy-Item -Force -Path (Join-Path $PSScriptRoot $f) -Destination (Join-Path $buildDir $f)
 }
 
-# We want to run the suite in CI mode so it doesn't ask for input; however, the CI env var doesn't get passed into mintty, so we need to manually adjust the
-# batch file so it sets it. Otherwise CI can get stuck for 6 hours & not retry.
+# HACK: We want to run the suite in CI mode so it doesn't ask for input; however, the CI env var doesn't get passed into mintty, so we need to manually adjust
+# the batch file so it sets it. Otherwise CI can get stuck for 6 hours & not retry.
 $bat = Join-Path $suiteDir 'media-autobuild_suite.bat'
 $content = [System.IO.File]::ReadAllText($bat)
 $old = @'
@@ -57,7 +57,7 @@ Set-Content $bat $content -Encoding UTF8
 $PSNativeCommandUseErrorActionPreference = $false
 Push-Location $suiteDir
 try {
-    & cmd /c $bat
+    & cmd.exe /c 'media-autobuild_suite.bat'
 }
 finally {
     Pop-Location

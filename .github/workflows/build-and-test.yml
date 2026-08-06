@@ -44,10 +44,17 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
-        hwaccel-mode: [none, decodeonly, auto]
+        hwaccel-mode: [none]
+
+        # Only macOS supports hardware acceleration in CI currently, so just run the hardware acceleration configs on that.
+        # We do want coverage of running decodeonly/auto even if no hardware acceleration is available, so ensure we keep those even if we remove macOS runners.
         include:
         - os: macos-latest
           hwaccel-mode: videotoolbox
+        - os: macos-latest
+          hwaccel-mode: decodeonly
+        - os: macos-latest
+          hwaccel-mode: auto
 
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-video-linux-x64' || 'test-video-macos-arm64' }}${{ matrix.hwaccel-mode != 'none' && format('-hwaccel-{0}', matrix.hwaccel-mode) || '' }}
@@ -105,10 +112,10 @@ jobs:
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
       env:
         FFMPEG_BINARIES_PATH: ${{ github.workspace }}/Binaries
-    - name: Build (Release, hwaccel mode)
+    - name: Build (hwaccel mode)
       if: ${{ matrix.hwaccel-mode != 'none' && success() }}
       run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
-    - name: Test (Release, hwaccel mode)
+    - name: Test (hwaccel mode)
       if: ${{ matrix.hwaccel-mode != 'none' && success() }}
       run: dotnet test Tests/FulcrumFS.Videos.Tests/FulcrumFS.Videos.Tests.csproj --configuration Release --no-build --verbosity normal
       env:

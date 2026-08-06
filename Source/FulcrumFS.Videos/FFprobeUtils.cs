@@ -547,6 +547,9 @@ internal static class FFprobeUtils
         InitImpl();
         static void InitImpl()
         {
+            // User may have called with a failing initialization previously that threw an exception - just reset to default:
+            _configInfo = default;
+
             // Initialize encoders
             foreach (var (info, name) in RunFFprobeConfigurationExtraction("-encoders", noStartingLine: false))
             {

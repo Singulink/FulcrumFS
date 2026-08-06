@@ -58,10 +58,9 @@ internal static class FFmpegUtils
             ArgumentOutOfRangeException.ThrowIfLessThan(StreamIndexWithinKind, -1);
         }
 
-        protected virtual bool ShouldInclude(string? hwaccel) => true;
-
         protected abstract string CommandName { get; }
         protected abstract string CommandArgument { get; }
+        protected virtual bool ShouldInclude(string? hwaccel) => true;
         protected virtual string GetCommandArgument(string? hwaccel) => CommandArgument;
 
         public virtual void PrepareArguments(List<string> args, string? hwaccel)
@@ -185,7 +184,7 @@ internal static class FFmpegUtils
 
         protected override void Validate()
         {
-            // The hardware acceleration handling is set up assuming this runs on 1 stream at a time, this could be extended in the future if required.
+            // The hardware acceleration handling is set up assuming this runs on 1 video stream at a time, this could be extended in the future if required.
             base.Validate();
             ArgumentOutOfRangeException.ThrowIfNotEqual(StreamKind, 'v');
             ArgumentOutOfRangeException.ThrowIfNegative(StreamIndexWithinKind);
@@ -240,6 +239,9 @@ internal static class FFmpegUtils
                 {
                     steps.Add($"format={MapHWAccelNameToFormatName(hwaccel!)}");
                     steps.Add("hwdownload");
+
+                    // These formats work most commonly for download - other formats might work in some cases, but more sporadically. We convert to the format
+                    // we actually wanted immediately afterwards.
                     steps.Add($"format={(Is10BitForHW ? "p010le" : "nv12")}");
 
                     if (PixelFormatAfterHWDownload is not null)
@@ -263,7 +265,7 @@ internal static class FFmpegUtils
                 {
                     // Use bob mode to make more similar to what bwdif does, rather than advanced mode.
                     // Note: we also need to set to field to match what bwdif does by default.
-                    // Note: QSV chops off a frame compared to the other deinterlacers - for now, we accept this.
+                    // TODO: QSV chops off a frame compared to the other deinterlacers - for now, we accept this.
                     string filterPart = "vpp_qsv=deinterlace=bob:rate=field";
 
                     // If we're also rotating, do that at the same time.
@@ -304,7 +306,7 @@ internal static class FFmpegUtils
                 {
                     EnsureHWDownload();
 
-                    // Note: in software decoding mode, ffmpeg automatically applies the rotation from the display matrix before our filters run, so the
+                    // HACK: in software decoding mode, ffmpeg automatically applies the rotation from the display matrix before our filters run, so the
                     // frames we receive are already rotated - quarter-turns turn the interlaced field lines into columns, and half-turns swap the two
                     // fields - which would break the deinterlacing. So we un-rotate the frames back to their coded orientation, deinterlace, and then
                     // re-rotate them back to be correct.

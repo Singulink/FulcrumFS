@@ -72,11 +72,11 @@ var options = VideoProcessingOptions.StandardizedH264AACMP4 with {
 
 ### Choosing a mode
 
-<xref:FulcrumFS.Videos.HardwareAccelerationKind.Auto> detects what the configured FFmpeg build and the current system support and picks a mode for you, preferring VideoToolbox, then CUDA, then AMF, then QSV, then D3D12. Note that this order of selection is an implementation detail, and could be changed at any time if issues arise.
+<xref:FulcrumFS.Videos.HardwareAccelerationKind.Auto> detects what the configured FFmpeg build and the current system support and picks a mode for you, preferring VideoToolbox, then CUDA, then AMF, then QSV, then D3D12. Note that this order of selection is an implementation detail, and could be changed at any time.
 
 The two vendor modes worth calling out are **AMF** (AMD) and **QSV** (Intel), because `Auto` deliberately deprioritizes them. Both are frequently reported by a CPU's *integrated* media engine rather than a discrete GPU, and picking an integrated engine over a discrete GPU that is also present would be the wrong trade. `Auto` therefore only falls back to them once the other modes that are more likely to map to a real GPU have been ruled out, and it prefers AMF over QSV, since AMD discrete GPUs are more common than Intel discrete GPUs while Intel CPUs are very common (meaning QSV would be matching a CPU in most scenarios).
 
-So if the processing machine genuinely has an AMD or Intel GPU you want used, select it explicitly rather than relying on `Auto`:
+So if the processing machine genuinely has an AMD or Intel GPU you want used, you should select it explicitly rather than relying on `Auto` (and doing this for other modes also is not a bad idea too, just not as likely to be a problem):
 
 ```csharp
 // Machine has an AMD GPU - use it rather than letting Auto deprioritize AMF.
@@ -104,7 +104,7 @@ Note that if the requested acceleration mode is not available, it will fall back
 
 ### Requirements and fallback
 
-The mode you request is a *preference*, not a guarantee. The FFmpeg build you configured must actually have been compiled with support for the mode, and the system must be able to initialize it. If a requested mode is unavailable, the library selects the best available alternative (or plain software processing), and if an accelerated run fails partway through, it is automatically retried with hardware filtering turned off, leaving only opportunistic hardware decoding. Certain inputs also disable acceleration on a per-file basis where the hardware path would not currently produce a correct result due to lacking explicit handling, or is unlikely to work anyway. In every case, the file still processes successfully - you never need to handle "hardware acceleration was not available" yourself.
+The mode you request is a *preference*, not a guarantee. The FFmpeg build you configured must actually have been compiled with support for the mode, and the system must be able to initialize it. If a requested mode is unavailable, the library selects the best available alternative (or plain software processing), and if an accelerated run fails partway through, it is automatically retried with hardware filtering turned off, leaving only opportunistic hardware decoding. Certain inputs also disable acceleration on a per-file basis where the hardware path would not currently produce a correct result due to lacking explicit handling, or is unlikely to work anyway. In every case, the file should still process successfully - you do not need need to handle "hardware acceleration was not available" case yourself.
 
 > [!IMPORTANT]
 > Processed output is never guaranteed to be identical across devices, even in pure software - different FFmpeg builds and CPUs can produce slightly different results. Hardware acceleration widens that gap considerably: hardware decoders and filters differ between vendors, driver versions and hardware generations, and the difference is sometimes visible (for example, noticeably softer scaling, different colours when scaling, slightly different video length when de-interlacing, etc.). Weigh that against the speed gain, and prefer leaving acceleration disabled if higher consistency between devices matters to you.
