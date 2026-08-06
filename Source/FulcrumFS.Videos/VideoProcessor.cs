@@ -519,8 +519,7 @@ public sealed class VideoProcessor : FileProcessor
             double expectedMaxDuration,
             int[] mappedInputIndicesOrdered,
             IEnumerable<FFmpegUtils.PerStreamMapOverride>? mappedStreams,
-            bool countDuration,
-            double progressOffset = 0.0)
+            bool countDuration)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
             Debug.Assert(!mappedInputIndicesOrdered.Any((x) => validatedStreams[x]), "None of the streams to validate should have already been validated.");
@@ -537,7 +536,7 @@ public sealed class VideoProcessor : FileProcessor
             // Scale the [0.0, 1.0] fraction reported by FullyValidateStreamsAsync into this validation's share of the overall progress:
             double progressBudget = (double)mappedInputIndicesOrdered.Length / sourceInfo.Streams.Length * ValidateProgressFraction;
             Func<double, ValueTask>? scaledProgressCallback = progressCallback is not null
-                ? async (fraction) => await progressCallback(progressUsed + progressOffset + (fraction * progressBudget)).ConfigureAwait(false)
+                ? async (fraction) => await progressCallback(progressUsed + (fraction * progressBudget)).ConfigureAwait(false)
                 : null;
 
             var (exceededMaxLength, actualMaxDuration, progressTempFile2) = await FullyValidateStreamsAsync(
@@ -1142,21 +1141,19 @@ public sealed class VideoProcessor : FileProcessor
                         expectedMaxDuration: maxDuration,
                         mappedInputIndicesOrdered: [i],
                         mappedStreams: null,
-                        countDuration: false,
-                        progressOffset: StreamCompatibilityCheckProgressFraction * ((double)i / (sourceInfo.Streams.Length + 2))).ConfigureAwait(false);
+                        countDuration: false).ConfigureAwait(false);
                 }
 
                 reportProgress:
 
                 if (progressCallback != null)
                 {
-                    await progressCallback(
-                        progressUsed + (StreamCompatibilityCheckProgressFraction * ((double)(i + 1) / (sourceInfo.Streams.Length + 2))))
-                    .ConfigureAwait(false);
+                    // This can accumulate floating point error & end up slightly off of 'StreamCompatibilityCheckProgressFraction' in the end, but that is fine,
+                    // and is necessary to ensure (or at least make easy to verify) we cannot backtrack due to the ValidateStreamsAsync logic rounding differently.
+                    progressUsed += StreamCompatibilityCheckProgressFraction * (1.0 / (sourceInfo.Streams.Length + 1));
+                    await progressCallback(progressUsed).ConfigureAwait(false);
                 }
             }
-
-            progressUsed += StreamCompatibilityCheckProgressFraction;
         }
 
         // Set up the main command:
