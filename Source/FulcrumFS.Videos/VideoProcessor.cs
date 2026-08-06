@@ -2264,6 +2264,7 @@ public sealed class VideoProcessor : FileProcessor
         if (canUseHardwareAcceleration && Options.HardwareAccelerationKind != HardwareAccelerationKind.None)
         {
             command.HWAccel = "auto";
+
             if (Options.HardwareAccelerationKind != HardwareAccelerationKind.DecodeOnly)
             {
                 command.HWAccel = Options.HardwareAccelerationKind switch

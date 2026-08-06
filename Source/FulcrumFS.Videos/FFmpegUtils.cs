@@ -183,6 +183,14 @@ internal static class FFmpegUtils
         protected override string CommandArgument => throw new NotSupportedException();
         protected override bool ShouldInclude(string? hwaccel) => Critical || (hwaccel is not null && StreamKind == 'v');
 
+        protected override void Validate()
+        {
+            // The hardware acceleration handling is set up assuming this runs on 1 stream at a time, this could be extended in the future if required.
+            base.Validate();
+            ArgumentOutOfRangeException.ThrowIfNotEqual(StreamKind, 'v');
+            ArgumentOutOfRangeException.ThrowIfNegative(StreamIndexWithinKind);
+        }
+
         public bool Critical { get; set; } = true;
         public (long Num, long Den)? FPS { get; set; }
         public (int Width, int Height)? ResizeTo { get; set; }
@@ -738,13 +746,17 @@ internal static class FFmpegUtils
                 args.Add(threadLimit);
             }
 
-            args.Add("-hwaccel");
-            args.Add(command.HWAccel);
-
-            if (command.HWAccel is not ("none" or "auto") && command.UseHWAccelFiltersWhenPossible)
+            // 'none' is the default for ffmpeg, so we don't need to specify it.
+            if (command.HWAccel != "none")
             {
-                args.Add("-hwaccel_output_format");
-                args.Add(MapHWAccelNameToFormatName(command.HWAccel));
+                args.Add("-hwaccel");
+                args.Add(command.HWAccel);
+
+                if (command.HWAccel is not ("none" or "auto") && command.UseHWAccelFiltersWhenPossible)
+                {
+                    args.Add("-hwaccel_output_format");
+                    args.Add(MapHWAccelNameToFormatName(command.HWAccel));
+                }
             }
 
             args.Add("-i");

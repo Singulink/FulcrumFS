@@ -631,12 +631,13 @@ public sealed record VideoProcessingOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Defaults to <see cref="Videos.HardwareAccelerationKind.None" /> (no hardware acceleration), which keeps variation between devices to a minimum.
+    /// Defaults to <see cref="HardwareAccelerationKind.None" /> (no hardware acceleration), which keeps variation between devices to a minimum.
     /// Enabling hardware acceleration allows more variation in the result to improve hardware acceleration utilisation ability.
     /// </para>
     /// <para>
-    /// If you have an AMD or Intel GPU, you may want to explicitly set this to a specific mode that prioritizes your GPU, as it is assumed that AMD and Intel
-    /// acceleration modes represent CPUs instead, which would be undesirable to use over a high-power device like a GPU.
+    /// If you have an AMD or Intel GPU, you may want to explicitly set this to a specific mode that prioritizes your GPU, rather than
+    /// <see cref="HardwareAccelerationKind.Auto" />, as it is assumed that AMD and Intel acceleration modes represent CPUs instead, which would be undesirable
+    /// to use over a high-power device like a GPU.
     /// </para>
     /// </remarks>
     public HardwareAccelerationKind HardwareAccelerationKind
