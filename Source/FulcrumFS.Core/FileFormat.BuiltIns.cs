@@ -175,4 +175,26 @@ public abstract partial class FileFormat
     public static FileFormat Epub { get; } = new MimetypeZipFileFormat("EPUB", ".epub", "application/epub+zip");
 
     #endregion
+
+    #region CAD
+
+    /// <summary>Gets the STEP (ISO 10303-21) CAD model file format. Extensions: <c>.step</c> (primary), <c>.stp</c>. Validates the ISO 10303-21 exchange
+    /// file header.</summary>
+    public static FileFormat Step { get; } = new StepFileFormat();
+
+    /// <summary>Gets the SolidWorks part (SLDPRT) file format. Extension: <c>.sldprt</c>. Validates the modern SolidWorks document container signature, or
+    /// for legacy documents, validates the OLE Compound Document container signature and rejects files whose contents identify them as one of the other
+    /// known OLE document types.</summary>
+    public static FileFormat SolidWorksPart { get; } = new SolidWorksFileFormat("SLDPRT", ".sldprt");
+
+    /// <summary>Gets the SolidWorks assembly (SLDASM) file format. Extension: <c>.sldasm</c>. Validates the modern SolidWorks document container signature,
+    /// or for legacy documents, validates the OLE Compound Document container signature and rejects files whose contents identify them as one of the other
+    /// known OLE document types.</summary>
+    public static FileFormat SolidWorksAssembly { get; } = new SolidWorksFileFormat("SLDASM", ".sldasm");
+
+    /// <summary>Gets the eDrawings assembly (EASM) file format. Extension: <c>.easm</c>. Validates that the file is a ZIP archive containing the required
+    /// <c>eModel</c> entry.</summary>
+    public static FileFormat EDrawingsAssembly { get; } = new EDrawingsFileFormat("EASM", ".easm");
+
+    #endregion
 }

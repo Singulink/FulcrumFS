@@ -11,7 +11,9 @@ Install the packages that match what you need:
 - `Singulink.FulcrumFS` is the main transactional storage and processing engine. This is what a server-side app will install.
 - `Singulink.FulcrumFS.Core` provides the lightweight <xref:FulcrumFS.FileId> type, repository path helpers, and the standalone <xref:FulcrumFS.FileFormat> validation API. The main package references it, so you only install it directly when you want validation or path mapping in a project that does not host a repository (for example, a desktop client that pre-validates uploads before sending them to the server).
 - `Singulink.FulcrumFS.Images` adds image processing pipeline steps (powered by ImageSharp). Install this to resize images, generate thumbnails, strip EXIF data, etc.
+- `Singulink.FulcrumFS.Pdf` adds PDF image extraction pipeline steps (powered by PDFium via PDFtoImage). Install this to render PDF pages to images, e.g. for thumbnails.
 - `Singulink.FulcrumFS.Videos` adds video processing pipeline steps (powered by FFmpeg and FFprobe). Install this to transcode uploads to web-friendly formats and extract poster frames.
+- `Singulink.FulcrumFS.Documents` adds document to PDF conversion pipeline steps (powered by LibreOffice). Install this to generate PDF previews of word processing documents, spreadsheets and presentations.
 
 **Supported Runtimes**: .NET 10.0+
 

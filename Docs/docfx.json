@@ -9,7 +9,9 @@
           "files": [
             "FulcrumFS.Core/FulcrumFS.Core.csproj",
             "FulcrumFS/FulcrumFS.csproj",
+            "FulcrumFS.Documents/FulcrumFS.Documents.csproj",
             "FulcrumFS.Images/FulcrumFS.Images.csproj",
+            "FulcrumFS.Pdf/FulcrumFS.Pdf.csproj",
             "FulcrumFS.Videos/FulcrumFS.Videos.csproj"
           ],
           "src": "../Source"

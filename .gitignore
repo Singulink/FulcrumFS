@@ -354,3 +354,6 @@ MigrationBackup/
 
 # FulcrumFS.Videos.Tests project environment variables file
 /Tests/FulcrumFS.Videos.Tests/ffmpeg_path.txt
+
+# FulcrumFS.Documents.Tests project environment variables file
+/Tests/FulcrumFS.Documents.Tests/libreoffice_path.txt

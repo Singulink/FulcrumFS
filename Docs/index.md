@@ -24,6 +24,7 @@ The libraries are available on NuGet. Install the packages that match your needs
 - `Singulink.FulcrumFS.Images` - image processing pipeline steps (powered by ImageSharp).
 - `Singulink.FulcrumFS.Pdf` - PDF image extraction pipeline steps (powered by PDFium / PDFtoImage).
 - `Singulink.FulcrumFS.Videos` - video processing pipeline steps (powered by FFmpeg / FFprobe).
+- `Singulink.FulcrumFS.Documents` - document to PDF conversion pipeline steps (powered by LibreOffice).
 
 **Supported Runtimes**: .NET 10.0+
 

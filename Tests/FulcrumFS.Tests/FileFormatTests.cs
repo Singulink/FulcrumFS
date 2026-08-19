@@ -61,6 +61,11 @@ public sealed class FileFormatTests
         [FileFormat.Ods, "sample.ods"],
         [FileFormat.Odp, "sample.odp"],
         [FileFormat.Epub, "sample.epub"],
+        [FileFormat.Step, "sample.step"],
+        [FileFormat.Step, "sample.stp"],
+        [FileFormat.SolidWorksPart, "sample.sldprt"],
+        [FileFormat.SolidWorksAssembly, "sample.sldasm"],
+        [FileFormat.EDrawingsAssembly, "sample.easm"],
     ];
 
     [TestMethod]
@@ -174,6 +179,7 @@ public sealed class FileFormatTests
             FileFormat.Pdf, FileFormat.Rtf, FileFormat.Doc, FileFormat.Xls, FileFormat.Ppt,
             FileFormat.Zip, FileFormat.Docx, FileFormat.Xlsx, FileFormat.Pptx,
             FileFormat.Odt, FileFormat.Ods, FileFormat.Odp, FileFormat.Epub,
+            FileFormat.Step, FileFormat.SolidWorksPart, FileFormat.SolidWorksAssembly, FileFormat.EDrawingsAssembly,
         ];
 
         foreach (FileFormat type in all)
@@ -187,6 +193,86 @@ public sealed class FileFormatTests
                 ext.ShouldStartWith(".", customMessage: $"Extension '{ext}' on {type.Name} must include leading dot.");
         }
     }
+
+    #region CAD
+
+    // Positive cases for the CAD formats are covered by BuiltInType_ValidSample_Succeeds via the STEPcode project samples (STEP) and real SolidWorks /
+    // eDrawings files (see the SampleFiles readme for provenance). Modern SolidWorks documents use a proprietary container with nibble-swapped entry names,
+    // legacy ones use OLE Compound Documents (both containers are accepted), and modern eDrawings documents are ZIP archives with an 'eModel' entry.
+
+    [TestMethod]
+    public async Task Step_LeadingWhitespace_Succeeds()
+    {
+        await using var stream = new MemoryStream("\r\n  ISO-10303-21;\nHEADER;"u8.ToArray());
+        var result = await FileFormat.Step.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task Step_Utf8Bom_Succeeds()
+    {
+        await using var stream = new MemoryStream([0xEF, 0xBB, 0xBF, .. "ISO-10303-21;\nHEADER;"u8]);
+        var result = await FileFormat.Step.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task Step_PlainText_Fails()
+    {
+        await using var stream = new MemoryStream("This is just a text file, not a STEP model."u8.ToArray());
+        var result = await FileFormat.Step.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+        result.ErrorMessage.ShouldContain("STEP");
+    }
+
+    [TestMethod]
+    public async Task SolidWorksPart_DocBytes_Fails()
+    {
+        // A Word document is a valid OLE container, so this exercises the known-OLE-type rejection on the legacy container path.
+        await using var stream = File.OpenRead(_sampleDir.CombineFile("sample.doc").PathExport);
+        var result = await FileFormat.SolidWorksPart.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+        result.ErrorMessage.ShouldContain("Doc");
+    }
+
+    [TestMethod]
+    public async Task SolidWorksAssembly_XlsBytes_Fails()
+    {
+        await using var stream = File.OpenRead(_sampleDir.CombineFile("sample.xls").PathExport);
+        var result = await FileFormat.SolidWorksAssembly.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+        result.ErrorMessage.ShouldContain("Xls");
+    }
+
+    [TestMethod]
+    public async Task EDrawingsAssembly_ZipBytes_Fails()
+    {
+        // A plain ZIP archive is a valid container but lacks the required 'eModel' entry.
+        await using var stream = File.OpenRead(_sampleDir.CombineFile("sample.zip").PathExport);
+        var result = await FileFormat.EDrawingsAssembly.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+        result.ErrorMessage.ShouldContain("eModel");
+    }
+
+    [TestMethod]
+    public async Task SolidWorksPart_SldAsmBytes_Succeeds()
+    {
+        // Part and assembly documents cannot be reliably distinguished from each other at the container level, so either accepts the other's content.
+        await using var stream = File.OpenRead(_sampleDir.CombineFile("sample.sldasm").PathExport);
+        var result = await FileFormat.SolidWorksPart.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task SolidWorksPart_GarbageBytes_Fails()
+    {
+        await using var stream = new MemoryStream(new byte[8 * 1024]);
+        var result = await FileFormat.SolidWorksPart.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+        result.ErrorMessage.ShouldNotBeNullOrEmpty();
+    }
+
+    #endregion
 
     #region ZIP-family
 

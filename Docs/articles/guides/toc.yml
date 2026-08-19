@@ -22,6 +22,9 @@
 - name: Video Processing
   href: video-processing.md
 
+- name: Document PDF Conversion
+  href: document-pdf-conversion.md
+
 - name: Deleting Files and Variants
   href: deleting-files.md
 

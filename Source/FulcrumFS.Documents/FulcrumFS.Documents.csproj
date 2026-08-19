@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+
+    <PackageId>Singulink.FulcrumFS.Documents</PackageId>
+    <Description>
+      FulcrumFS extension that adds document to PDF conversion capabilities using LibreOffice, allowing PDF variants (e.g. for previewing or archiving) to be
+      generated from word processing documents, spreadsheets and presentations.
+    </Description>
+    <PackageTags></PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FulcrumFS\FulcrumFS.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,26 @@
+<Project Sdk="MSTest.Sdk/4.0.2">
+  <PropertyGroup>
+    <RootNamespace>FulcrumFS.Documents</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\FulcrumFS.Documents\FulcrumFS.Documents.csproj" />
+    <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
+  </ItemGroup>
+
+  <!-- Real sample documents are shared with FulcrumFS.Tests - see the provenance notes in its SampleFiles readme -->
+  <ItemGroup>
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.doc" Link="SampleFiles\sample.doc" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.docx" Link="SampleFiles\sample.docx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.xls" Link="SampleFiles\sample.xls" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.xlsx" Link="SampleFiles\sample.xlsx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.xlsm" Link="SampleFiles\sample.xlsm" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.ppt" Link="SampleFiles\sample.ppt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.pptx" Link="SampleFiles\sample.pptx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.odt" Link="SampleFiles\sample.odt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.ods" Link="SampleFiles\sample.ods" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.odp" Link="SampleFiles\sample.odp" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FulcrumFS.Tests\SampleFiles\sample.rtf" Link="SampleFiles\sample.rtf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

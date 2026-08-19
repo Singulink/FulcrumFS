@@ -23,6 +23,7 @@ Details of each component are provided below:
 | --- | --- | --- | --- |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Documents** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Documents.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Documents/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Pdf** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Videos** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
@@ -71,6 +72,12 @@ A lightweight library that exposes the `FileId` type, repository paths, and the 
 The `FileFormat` API ships with built-in singletons for common formats (`Jpeg`, `Png`, `Pdf`, `Mp4`, `Mkv`, `Docx`, `Zip`, and many more), factory methods for text formats (`TextAscii`, `TextUnicode`, `TextEncoding`) and content-agnostic types (`AnyContent`), and is extensible so you can derive your own `FileFormat` for custom formats. Validation returns a `FileFormatValidationResult` (valid or invalid with an error message) rather than throwing, so callers can handle outcomes however they prefer.
 
 The main `FulcrumFS` library uses `FileFormat` via the `FileFormatValidationProcessor`, which integrates validation into a processing pipeline and converts invalid results to `FileProcessingException`s.
+
+#### FulcrumFS.Documents
+
+Extension package that adds document to PDF conversion capabilities to file processing pipelines, allowing PDF variants (e.g. for previewing or archiving) to be generated from word processing documents, spreadsheets and presentations.
+
+Document conversion is provided by [LibreOffice](https://www.libreoffice.org/).
 
 #### FulcrumFS.Images
 

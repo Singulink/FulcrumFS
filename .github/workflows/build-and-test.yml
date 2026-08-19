@@ -37,7 +37,73 @@ jobs:
     - name: Build
       run: dotnet build FulcrumFS.slnx --configuration ${{ matrix.configuration }} --no-restore
     - name: Test
-      run: dotnet test FulcrumFS.NoVideos.slnf --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+      run: dotnet test FulcrumFS.NoExternalTools.slnf --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+
+  build-and-test-documents-linux:
+    runs-on: ubuntu-latest
+    name: test-documents-linux-x64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Install LibreOffice
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress
+    - name: Clean
+      run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore FulcrumFS.slnx
+    - name: Build (Debug)
+      run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
+    - name: Build (Release)
+      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
+    - name: Test (Debug)
+      run: dotnet test Tests/FulcrumFS.Documents.Tests/FulcrumFS.Documents.Tests.csproj --configuration Debug --no-build --verbosity normal
+      env:
+        LIBREOFFICE_PROGRAM_PATH: /usr/lib/libreoffice/program
+    - name: Test (Release)
+      if: ${{ !cancelled() }}
+      run: dotnet test Tests/FulcrumFS.Documents.Tests/FulcrumFS.Documents.Tests.csproj --configuration Release --no-build --verbosity normal
+      env:
+        LIBREOFFICE_PROGRAM_PATH: /usr/lib/libreoffice/program
+
+  build-and-test-documents-windows:
+    runs-on: windows-latest
+    name: test-documents-windows-x64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+    - name: Install LibreOffice
+      run: choco install libreoffice-still -y --no-progress
+    - name: Clean
+      run: dotnet clean FulcrumFS.slnx && dotnet nuget locals all --clear
+    - name: Install dependencies
+      run: dotnet restore FulcrumFS.slnx
+    - name: Build (Debug)
+      run: dotnet build FulcrumFS.slnx --configuration Debug --no-restore
+    - name: Build (Release)
+      run: dotnet build FulcrumFS.slnx --configuration Release --no-restore
+    - name: Test (Debug)
+      run: dotnet test Tests/FulcrumFS.Documents.Tests/FulcrumFS.Documents.Tests.csproj --configuration Debug --no-build --verbosity normal
+      env:
+        LIBREOFFICE_PROGRAM_PATH: C:\Program Files\LibreOffice\program
+    - name: Test (Release)
+      if: ${{ !cancelled() }}
+      run: dotnet test Tests/FulcrumFS.Documents.Tests/FulcrumFS.Documents.Tests.csproj --configuration Release --no-build --verbosity normal
+      env:
+        LIBREOFFICE_PROGRAM_PATH: C:\Program Files\LibreOffice\program
 
   build-and-test-video:
     strategy:
