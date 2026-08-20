@@ -65,6 +65,7 @@ public sealed class FileFormatTests
         [FileFormat.Step, "sample.stp"],
         [FileFormat.SolidWorksPart, "sample.sldprt"],
         [FileFormat.SolidWorksAssembly, "sample.sldasm"],
+        [FileFormat.SolidWorksDrawing, "sample.slddrw"],
         [FileFormat.EDrawingsAssembly, "sample.easm"],
         [FileFormat.Dxf, "sample.dxf"],
         [FileFormat.Dwg, "sample.dwg"],
@@ -270,10 +271,6 @@ public sealed class FileFormatTests
         var result = await FileFormat.SolidWorksPart.ValidateAsync(stream, TestContext.CancellationToken);
         result.IsValid.ShouldBeTrue();
     }
-
-    // Note: FileFormat.SolidWorksDrawing shares the SolidWorks container validation, but a real .slddrw sample
-    // has not been sourced yet, so it has no positive sample case (garbage rejection is covered above via the
-    // shared container logic).
 
     [TestMethod]
     public async Task Dxf_BinarySentinel_Succeeds()

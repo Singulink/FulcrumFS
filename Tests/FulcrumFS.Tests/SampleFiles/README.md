@@ -32,6 +32,7 @@ This directory contains small sample files used by `FileFormatValidationProcesso
 | --- | --- |
 | `sample.sldprt` | Real SolidWorks part document (modern SolidWorks container) |
 | `sample.sldasm` | Real SolidWorks assembly document (modern SolidWorks container) |
+| `sample.slddrw` | Real SolidWorks drawing document (modern SolidWorks container) |
 | `sample.easm`   | Real eDrawings assembly document (ZIP container with `eModel` entry) |
 
 ### Sourced from third-party projects

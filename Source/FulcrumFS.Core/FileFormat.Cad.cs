@@ -35,13 +35,14 @@ public abstract partial class FileFormat
     }
 
     // SolidWorks documents come in two container formats: legacy documents use OLE Compound Documents, while modern documents use a ZIP-like container with
-    // a proprietary 20-byte prefix (bytes 4-7 are 00 00 00 04) and nibble-swapped entry names, with the characteristic nibble-swapped 'swXmlContents' entry
-    // name appearing near the start of the file (verified against real SolidWorks part and assembly files). Part and assembly documents cannot be reliably
-    // distinguished from each other at the container level, so both accept either container type.
+    // a proprietary variable-length prefix (bytes 4-7 are 00 00 00 04) and nibble-swapped entry names. The first entry names differ by document type
+    // ('swXmlContents/...' in parts, 'Contents/Config-...' in assemblies and drawings), but all contain a nibble-swapped 'Contents' near the start of the
+    // file (verified against real SolidWorks part, assembly and drawing files). The document types cannot be reliably distinguished from each other at the
+    // container level, so they all accept either container type.
     private sealed class SolidWorksFileFormat(string name, string extension) : FileFormat
     {
-        // 'swXmlContents' in ASCII with the high/low nibbles of each byte swapped.
-        private static readonly byte[] _nibbleSwappedSwXmlContents = [0x37, 0x77, 0x85, 0xD6, 0xC6, 0x34, 0xF6, 0xE6, 0x47, 0x56, 0xE6, 0x47, 0x37];
+        // 'Contents' in ASCII with the high/low nibbles of each byte swapped.
+        private static readonly byte[] _nibbleSwappedContents = [0x34, 0xF6, 0xE6, 0x47, 0x56, 0xE6, 0x47, 0x37];
 
         public override string Name { get; } = name;
 
@@ -51,9 +52,9 @@ public abstract partial class FileFormat
         {
             byte[] header = await StreamSignatureUtils.ReadHeaderAsync(stream, 4096, cancellationToken).ConfigureAwait(false);
 
-            // Modern container: bytes 4-7 are 00 00 00 04 and a nibble-swapped 'swXmlContents' entry name appears near the start of the file.
+            // Modern container: bytes 4-7 are 00 00 00 04 and a nibble-swapped 'Contents' entry name appears near the start of the file.
             if (header.Length >= 8 && header.AsSpan(4, 4).SequenceEqual((ReadOnlySpan<byte>)[0x00, 0x00, 0x00, 0x04]) &&
-                header.AsSpan().IndexOf(_nibbleSwappedSwXmlContents) >= 0)
+                header.AsSpan().IndexOf(_nibbleSwappedContents) >= 0)
             {
                 return FileFormatValidationResult.Success;
             }
