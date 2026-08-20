@@ -10,12 +10,12 @@ Details of each component are provided below:
 
 | Library | Status | Package |
 | --- | --- | --- |
-| **Singulink.FulcrumFS** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
-| **Singulink.FulcrumFS.Core** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
-| **Singulink.FulcrumFS.Documents** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Documents.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Documents/) |
-| **Singulink.FulcrumFS.Images** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
-| **Singulink.FulcrumFS.Pdf** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
-| **Singulink.FulcrumFS.Videos** | Preview | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
+| **Singulink.FulcrumFS** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
+| **Singulink.FulcrumFS.Core** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
+| **Singulink.FulcrumFS.Documents** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Documents.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Documents/) |
+| **Singulink.FulcrumFS.Images** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| **Singulink.FulcrumFS.Pdf** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
+| **Singulink.FulcrumFS.Videos** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
 **Supported Runtimes**: .NET 10.0+
 
@@ -25,8 +25,6 @@ Libraries may be in the following states:
 - Public: Library is intended for public use with a fully documented and stable API surface.
 
 You are welcome to use any libraries or code in this repository that you find useful and feedback/contributions are appreciated regardless of library state.
-
-API documentation and additional information is coming soon.
 
 ### About Singulink
 
