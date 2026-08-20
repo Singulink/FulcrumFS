@@ -196,5 +196,35 @@ public abstract partial class FileFormat
     /// <c>eModel</c> entry.</summary>
     public static FileFormat EDrawingsAssembly { get; } = new EDrawingsFileFormat("EASM", ".easm");
 
+    /// <summary>Gets the SolidWorks drawing (SLDDRW) file format. Extension: <c>.slddrw</c>. Validates the modern SolidWorks document container signature,
+    /// or for legacy documents, validates the OLE Compound Document container signature and rejects files whose contents identify them as one of the other
+    /// known OLE document types.</summary>
+    public static FileFormat SolidWorksDrawing { get; } = new SolidWorksFileFormat("SLDDRW", ".slddrw");
+
+    /// <summary>Gets the AutoCAD DXF drawing exchange file format. Extension: <c>.dxf</c>. Validates the ASCII section header or binary DXF
+    /// sentinel.</summary>
+    public static FileFormat Dxf { get; } = new DxfFileFormat();
+
+    /// <summary>Gets the AutoCAD DWG drawing file format. Extension: <c>.dwg</c>. Validates the DWG version signature.</summary>
+    public static FileFormat Dwg { get; } = new DwgFileFormat();
+
+    /// <summary>Gets the IGES CAD model file format. Extensions: <c>.igs</c> (primary), <c>.iges</c>. Validates the fixed-column start section
+    /// record.</summary>
+    public static FileFormat Iges { get; } = new IgesFileFormat();
+
+    #endregion
+
+    #region PCB
+
+    /// <summary>Gets the Gerber (RS-274X) PCB layer file format. Extension: <c>.gbr</c>. Validates the mandatory format specification and unit mode
+    /// commands.</summary>
+    public static FileFormat Gerber { get; } = new GerberFileFormat();
+
+    /// <summary>Gets the Gerber job file format. Extension: <c>.gbrjob</c>. Validates the JSON structure with its mandatory <c>Header</c> section.</summary>
+    public static FileFormat GerberJob { get; } = new GerberJobFileFormat();
+
+    /// <summary>Gets the Excellon drill file format. Extension: <c>.drl</c>. Validates the <c>M48</c> header command.</summary>
+    public static FileFormat ExcellonDrill { get; } = new ExcellonFileFormat();
+
     #endregion
 }

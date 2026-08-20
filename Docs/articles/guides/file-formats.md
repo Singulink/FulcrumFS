@@ -43,7 +43,8 @@ When the content matches none of the allowed formats, the processor fails the ad
 - **Video and audio:** <xref:FulcrumFS.FileFormat.Mp4>, <xref:FulcrumFS.FileFormat.Mov>, <xref:FulcrumFS.FileFormat.Mkv>, <xref:FulcrumFS.FileFormat.WebM>, <xref:FulcrumFS.FileFormat.M4a>, plus the 3GPP family (<xref:FulcrumFS.FileFormat.Tgp>, <xref:FulcrumFS.FileFormat.Tg2>) and <xref:FulcrumFS.FileFormat.Mj2>.
 - **Documents:** <xref:FulcrumFS.FileFormat.Pdf>, the OOXML family (<xref:FulcrumFS.FileFormat.Docx>, <xref:FulcrumFS.FileFormat.Xlsx>, <xref:FulcrumFS.FileFormat.Pptx>), the OpenDocument family (<xref:FulcrumFS.FileFormat.Odt>, <xref:FulcrumFS.FileFormat.Ods>), and the legacy <xref:FulcrumFS.FileFormat.Doc> binary format.
 - **Archives:** <xref:FulcrumFS.FileFormat.Zip>.
-- **CAD:** <xref:FulcrumFS.FileFormat.Step>, <xref:FulcrumFS.FileFormat.SolidWorksPart>, <xref:FulcrumFS.FileFormat.SolidWorksAssembly>, <xref:FulcrumFS.FileFormat.EDrawingsAssembly>.
+- **CAD:** <xref:FulcrumFS.FileFormat.Step>, <xref:FulcrumFS.FileFormat.Iges>, <xref:FulcrumFS.FileFormat.Dxf>, <xref:FulcrumFS.FileFormat.Dwg>, <xref:FulcrumFS.FileFormat.SolidWorksPart>, <xref:FulcrumFS.FileFormat.SolidWorksAssembly>, <xref:FulcrumFS.FileFormat.SolidWorksDrawing>, <xref:FulcrumFS.FileFormat.EDrawingsAssembly>.
+- **PCB manufacturing:** <xref:FulcrumFS.FileFormat.Gerber>, <xref:FulcrumFS.FileFormat.GerberJob>, <xref:FulcrumFS.FileFormat.ExcellonDrill>.
 
 Each declares its <xref:FulcrumFS.FileFormat.Name>, its <xref:FulcrumFS.FileFormat.Extensions>, and a <xref:FulcrumFS.FileFormat.PrimaryExtension>, which is useful when you want to normalize the stored extension to a canonical form regardless of how the uploader spelled it (for example, accepting both `.jpg` and `.jpeg` and storing as `.jpg`).
 

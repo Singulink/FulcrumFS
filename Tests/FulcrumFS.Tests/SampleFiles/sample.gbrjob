@@ -1,0 +1,57 @@
+{
+  "Header": {
+    "GenerationSoftware": {
+      "Vendor": "FulcrumFS",
+      "Application": "SampleFiles",
+      "Version": "1.0"
+    },
+    "CreationDate": "2026-08-20T00:00:00+00:00"
+  },
+  "GeneralSpecs": {
+    "ProjectId": {
+      "Name": "sample",
+      "GUID": "73616d70-6c65-4669-6c65-73616d706c65",
+      "Revision": "rev1"
+    },
+    "Size": {
+      "X": 25.4,
+      "Y": 25.4
+    },
+    "LayerNumber": 2,
+    "BoardThickness": 1.6
+  },
+  "FilesAttributes": [
+    {
+      "Path": "sample-F_Cu.gbr",
+      "FileFunction": "Copper,L1,Top",
+      "FilePolarity": "Positive"
+    },
+    {
+      "Path": "sample-B_Cu.gbr",
+      "FileFunction": "Copper,L2,Bot",
+      "FilePolarity": "Positive"
+    }
+  ],
+  "MaterialStackup": [
+    {
+      "Type": "Legend",
+      "Name": "Top Silk Screen"
+    },
+    {
+      "Type": "Copper",
+      "Thickness": 0.035,
+      "Name": "F.Cu"
+    },
+    {
+      "Type": "Dielectric",
+      "Thickness": 1.53,
+      "Material": "FR4",
+      "Name": "F.Cu/B.Cu"
+    },
+    {
+      "Type": "Copper",
+      "Thickness": 0.035,
+      "Name": "B.Cu"
+    }
+  ]
+}
