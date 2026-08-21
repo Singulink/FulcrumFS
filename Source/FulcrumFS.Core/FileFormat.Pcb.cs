@@ -40,13 +40,7 @@ public abstract partial class FileFormat
         public override async ValueTask<FileFormatValidationResult> ValidateAsync(Stream stream, CancellationToken cancellationToken)
         {
             byte[] header = await StreamSignatureUtils.ReadHeaderAsync(stream, 4096, cancellationToken).ConfigureAwait(false);
-            var content = header.AsSpan();
-
-            if (StreamSignatureUtils.StartsWith(content, [0xEF, 0xBB, 0xBF]))
-                content = content[3..];
-
-            while (content.Length > 0 && content[0] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
-                content = content[1..];
+            var content = StreamSignatureUtils.SkipBomAndWhitespace(header);
 
             // Gerber job files are JSON objects with a mandatory top-level "Header" object.
             if (content.Length is 0 || content[0] is not (byte)'{' || !Encoding.Latin1.GetString(content).Contains("\"Header\"", StringComparison.Ordinal))

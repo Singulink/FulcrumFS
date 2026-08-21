@@ -18,14 +18,9 @@ public abstract partial class FileFormat
         public override async ValueTask<FileFormatValidationResult> ValidateAsync(Stream stream, CancellationToken cancellationToken)
         {
             byte[] header = await StreamSignatureUtils.ReadHeaderAsync(stream, 64, cancellationToken).ConfigureAwait(false);
-            var content = header.AsSpan();
 
             // Tolerate an optional UTF-8 BOM and leading whitespace before the ISO 10303-21 header keyword.
-            if (StreamSignatureUtils.StartsWith(content, [0xEF, 0xBB, 0xBF]))
-                content = content[3..];
-
-            while (content.Length > 0 && content[0] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
-                content = content[1..];
+            var content = StreamSignatureUtils.SkipBomAndWhitespace(header);
 
             if (!StreamSignatureUtils.StartsWith(content, "ISO-10303-21"u8))
                 return FileFormatValidationResult.Invalid("File does not have a valid STEP (ISO 10303-21) header.");
@@ -90,10 +85,7 @@ public abstract partial class FileFormat
 
             // ASCII DXF files are group code / value line pairs. The first pair is "0" / "SECTION", optionally
             // preceded by "999" comment pairs. Group codes may be padded with leading whitespace.
-            var content = header.AsSpan();
-
-            if (StreamSignatureUtils.StartsWith(content, [0xEF, 0xBB, 0xBF]))
-                content = content[3..];
+            var content = StreamSignatureUtils.SkipBom(header);
 
             string[] lines = System.Text.Encoding.Latin1.GetString(content).Split('\n');
 

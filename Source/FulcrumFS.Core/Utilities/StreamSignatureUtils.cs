@@ -36,4 +36,23 @@ internal static class StreamSignatureUtils
     /// </summary>
     public static bool StartsWith(ReadOnlySpan<byte> header, ReadOnlySpan<byte> signature) =>
         header.Length >= signature.Length && header[..signature.Length].SequenceEqual(signature);
+
+    /// <summary>
+    /// Returns the header bytes with an optional leading UTF-8 BOM removed.
+    /// </summary>
+    public static ReadOnlySpan<byte> SkipBom(ReadOnlySpan<byte> header) =>
+        StartsWith(header, [0xEF, 0xBB, 0xBF]) ? header[3..] : header;
+
+    /// <summary>
+    /// Returns the header bytes with an optional leading UTF-8 BOM and any leading ASCII whitespace removed.
+    /// </summary>
+    public static ReadOnlySpan<byte> SkipBomAndWhitespace(ReadOnlySpan<byte> header)
+    {
+        header = SkipBom(header);
+
+        while (header.Length > 0 && header[0] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
+            header = header[1..];
+
+        return header;
+    }
 }
