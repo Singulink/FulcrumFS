@@ -340,10 +340,8 @@ public sealed record VideoProcessingOptions
     }
 
     /// <summary>
-    /// <para>
-    /// Gets or initializes the options for validating audio streams in the source video before processing.</para>
-    /// <para>
-    /// Default is <see cref="AudioStreamValidationOptions.None" />.</para>
+    /// Gets or initializes the options for validating audio streams in the source video before processing. Default is <see
+    /// cref="AudioStreamValidationOptions.None" />.
     /// </summary>
     public AudioStreamValidationOptions AudioSourceValidation
     {
@@ -434,7 +432,7 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes the behavior for re-encoding video streams.</para>
     /// </summary>
-    public StreamReencodeMode VideoReencodeMode
+    public required StreamReencodeMode VideoReencodeMode
     {
         get;
         init
@@ -448,7 +446,7 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes the behavior for re-encoding audio streams.</para>
     /// </summary>
-    public StreamReencodeMode AudioReencodeMode
+    public required StreamReencodeMode AudioReencodeMode
     {
         get;
         init
@@ -459,10 +457,7 @@ public sealed record VideoProcessingOptions
     }
 
     /// <summary>
-    /// <para>
-    /// Gets or initializes the quality to use for video encoding.</para>
-    /// <para>
-    /// Default is <see cref="VideoQuality.Medium" />.</para>
+    /// Gets or initializes the quality to use for video encoding. Default is <see cref="VideoQuality.Medium" />.
     /// </summary>
     public VideoQuality VideoQuality
     {
@@ -472,13 +467,10 @@ public sealed record VideoProcessingOptions
             value.ThrowIfNotDefined();
             field = value;
         }
-    }
+    } = VideoQuality.Medium;
 
     /// <summary>
-    /// <para>
-    /// Gets or initializes the quality to use for audio encoding.</para>
-    /// <para>
-    /// Default is <see cref="AudioQuality.Medium" />.</para>
+    /// Gets or initializes the quality to use for audio encoding. Default is <see cref="AudioQuality.Medium" />.
     /// </summary>
     public AudioQuality AudioQuality
     {
@@ -488,15 +480,25 @@ public sealed record VideoProcessingOptions
             value.ThrowIfNotDefined();
             field = value;
         }
+    } = AudioQuality.Medium;
+
+    /// <summary>
+    /// Gets or initializes the maximum bits per channel to use for video encoding.
+    /// </summary>
+    public required BitsPerChannel MaximumBitsPerChannel
+    {
+        get;
+        init
+        {
+            value.ThrowIfNotDefined();
+            field = value;
+        }
     }
 
     /// <summary>
-    /// <para>
-    /// Gets or initializes the maximum bits per channel to use for video encoding.</para>
-    /// <para>
-    /// Default is <see cref="BitsPerChannel.Bits8" />.</para>
+    /// Gets or initializes the maximum chroma subsampling to use for video encoding.
     /// </summary>
-    public BitsPerChannel MaximumBitsPerChannel
+    public required ChromaSubsampling MaximumChromaSubsampling
     {
         get;
         init
@@ -508,27 +510,9 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes the maximum chroma subsampling to use for video encoding.</para>
-    /// <para>
-    /// Default is <see cref="ChromaSubsampling.Subsampling420" />.</para>
-    /// </summary>
-    public ChromaSubsampling MaximumChromaSubsampling
-    {
-        get;
-        init
-        {
-            value.ThrowIfNotDefined();
-            field = value;
-        }
-    }
-
-    /// <summary>
-    /// <para>
-    /// Gets or initializes the compression level to use for video encoding.</para>
+    /// Gets or initializes the compression level to use for video encoding. Default is <see cref="VideoCompressionLevel.Medium" />.</para>
     /// <para>
     /// Note: does not affect quality, only affects file size and encoding speed trade-off.</para>
-    /// <para>
-    /// Default is <see cref="VideoCompressionLevel.Medium" />.</para>
     /// </summary>
     public VideoCompressionLevel VideoCompressionLevel
     {
@@ -538,7 +522,7 @@ public sealed record VideoProcessingOptions
             value.ThrowIfNotDefined();
             field = value;
         }
-    }
+    } = VideoCompressionLevel.Medium;
 
     /// <summary>
     /// <para>
