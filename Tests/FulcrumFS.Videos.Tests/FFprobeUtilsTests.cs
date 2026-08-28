@@ -8981,5 +8981,46 @@ public sealed class FFprobeUtilsTests
                     ChannelLayout: "stereo"),
             ])
         ],
+        [
+            "video206.3gp",
+            new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, 4.963333,
+            [
+                new FFprobeUtils.AudioStreamInfo(
+                    CodecName: AudioCodec.AmrNb.Name,
+                    ProfileName: AudioCodec.AmrNb.Profile,
+                    Language: "und",
+                    Duration: 4.96,
+                    Channels: 1,
+                    SampleRate: 8000,
+                    ChannelLayout: "mono"),
+                new FFprobeUtils.VideoStreamInfo(
+                    CodecName: VideoCodec.H264.Name,
+                    CodecTagString: "avc1",
+                    ProfileName: "Baseline",
+                    Language: "und",
+                    IsAttachedPic: false,
+                    IsTimedThumbnails: false,
+                    IsStillImage: false,
+                    IsDefaultStream: true,
+                    IsBadCandidateForThumbnail: false,
+                    Width: 320,
+                    Height: 240,
+                    Duration: 4.963333,
+                    FpsNum: 15,
+                    FpsDen: 1,
+                    SarNum: 1,
+                    SarDen: 1,
+                    PixelFormat: "yuv420p",
+                    ColorRange: "tv",
+                    ColorSpace: "bt709",
+                    ColorTransfer: "bt709",
+                    ColorPrimaries: "bt709",
+                    FieldOrder: "progressive",
+                    BitsPerSample: 8,
+                    AlphaMode: false,
+                    Rotation: 0,
+                    HasNonStandardDisplayMatrix: false),
+            ])
+        ],
     ];
 }

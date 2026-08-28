@@ -76,6 +76,28 @@ public abstract class AudioCodec
         hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsOpusDecoder);
 
     /// <summary>
+    /// Gets the AMR-NB (Adaptive Multi-Rate NarrowBand) audio codec, common in 3GP phone recordings. Does not support encoding.
+    /// </summary>
+    public static AudioCodec AmrNb { get; } = new Impl(
+        name: "amr_nb",
+        profile: null,
+        writableFileExtension: ".3gp",
+        supportsMP4Muxing: false, // ffmpeg's mp4 muxer has no tag for AMR (only the 3gp muxer does), so it must be re-encoded for MP4 output
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsAmrNbDecoder);
+
+    /// <summary>
+    /// Gets the AMR-WB (Adaptive Multi-Rate WideBand) audio codec, common in 3GP phone recordings. Does not support encoding.
+    /// </summary>
+    public static AudioCodec AmrWb { get; } = new Impl(
+        name: "amr_wb",
+        profile: null,
+        writableFileExtension: ".3gp",
+        supportsMP4Muxing: false, // ffmpeg's mp4 muxer has no tag for AMR (only the 3gp muxer does), so it must be re-encoded for MP4 output
+        supportsEncoding: false,
+        hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsAmrWbDecoder);
+
+    /// <summary>
     /// Gets a list of all supported audio codecs (with encodable ones first).
     /// </summary>
     public static IReadOnlyList<AudioCodec> AllSourceCodecs { get; } =
@@ -86,6 +108,8 @@ public abstract class AudioCodec
         MP3,
         Vorbis,
         Opus,
+        AmrNb,
+        AmrWb,
     ];
 
     /// <summary>

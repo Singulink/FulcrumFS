@@ -1155,4 +1155,24 @@ partial class Tests
             exceptionMessage: "An error occurred while validating the source video streams.",
             expectedChanges: null);
     }
+
+    [TestMethod]
+    public async Task TestAmrNbAudioRejectedWhenNotInSourceCodecs()
+    {
+        // AMR-NB is accepted by default (AudioCodec.AllSourceCodecs) but must still be rejected when a narrower
+        // SourceAudioCodecs list excludes it. Uses video206.3gp (AMR-NB audio) with an AAC-only source constraint.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                SourceAudioCodecs = [AudioCodec.AAC],
+            },
+            "video206.3gp",
+            exceptionMessage: "One or more streams use a codec that is not supported by this processor.",
+            expectedChanges: null);
+    }
 }

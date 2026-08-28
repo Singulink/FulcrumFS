@@ -372,4 +372,28 @@ partial class Tests
                 });
         }
     }
+
+    [TestMethod]
+    public async Task TestAmrNbAudioSourceReencodesToAAC()
+    {
+        // Tests that AMR-NB audio (a real-world 3GP phone recording: AMR-NB mono 8kHz + H.264 baseline video) is accepted as a
+        // source codec and re-encoded to AAC, while the H.264 video stream is preserved.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                ResultAudioCodecs = [AudioCodec.AAC],
+            },
+            "video206.3gp",
+            exceptionMessage: null,
+            expectedChanges: (NewStreamCount: 2, StreamMapping:
+            [
+                (From: 0, To: 0, ExtensionToCheckWith: ".mkv", Equal: false), // Audio stream (AMR-NB -> AAC; Matroska holds both, and AMR packets cannot be remuxed into 3gp/mp4)
+                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // Video stream (H.264, copied)
+            ]));
+    }
 }

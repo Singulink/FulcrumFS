@@ -7,7 +7,7 @@ To figure out what each file is meant to be, view `FFprobeUtilsTests.cs`, as it 
 Currently the following sets of cases test the following functionality of our ffprobe code:
 - Media container formats: 1-8
 - Video codecs: 1, 4, 6-12, 15
-- Audio codecs: 1, 4, 6-7, 13-14
+- Audio codecs: 1, 4, 6-7, 13-14, 206
 - Subtitle codecs: 16-20, 169-170
 - Subtitle language / title: 21-29
 - Pixel format / color range combinations: 1, 30-52
@@ -242,3 +242,4 @@ Commands to generate the synthetic videos:
 203. `ffmpeg -i video1.mp4 -filter:v "fps=fps=3,scale=w=16384:h=8706:force_original_aspect_ratio=disable,setsar=1" -c:a copy -c:v libx264 -y video203.mp4`
 204. `ffmpeg -display_vflip -i video1.mp4 -c copy -y video204.mp4`
 205. `ffmpeg -display_hflip -i video1.mp4 -c copy -y video205.mp4`
+206. Real-world 3GP phone recording (AMR-NB mono 8kHz audio + H.264 baseline 320x240 15fps video, ~5s, 73 KB), contributed under the repository's license; used to test AMR-NB source audio support (accepted by default and re-encoded to AAC).
