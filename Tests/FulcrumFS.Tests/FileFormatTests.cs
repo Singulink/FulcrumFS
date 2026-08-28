@@ -264,6 +264,24 @@ public sealed class FileFormatTests
     }
 
     [TestMethod]
+    public async Task EDrawingsAssembly_HsfBytes_Succeeds()
+    {
+        // Legacy eDrawings documents (and SolidWorks Simulation analysis exports) are raw HOOPS Stream Format files, which open with a version comment.
+        await using var stream = new MemoryStream([.. ";; HSF V19.10 \n"u8, 0x49, 0x0C, 0x90, 0x03, 0x00, 0x42, 0x00]);
+        var result = await FileFormat.EDrawingsAssembly.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task EDrawingsAssembly_UnknownBytes_Fails()
+    {
+        await using var stream = new MemoryStream("This is neither a HOOPS Stream Format file nor a ZIP archive."u8.ToArray());
+        var result = await FileFormat.EDrawingsAssembly.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+        result.ErrorMessage.ShouldContain("HOOPS");
+    }
+
+    [TestMethod]
     public async Task SolidWorksPart_SldAsmBytes_Succeeds()
     {
         // Part and assembly documents cannot be reliably distinguished from each other at the container level, so either accepts the other's content.

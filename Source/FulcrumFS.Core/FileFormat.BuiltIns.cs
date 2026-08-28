@@ -192,8 +192,9 @@ public abstract partial class FileFormat
     /// known OLE document types.</summary>
     public static FileFormat SolidWorksAssembly { get; } = new SolidWorksFileFormat("SLDASM", ".sldasm");
 
-    /// <summary>Gets the eDrawings assembly (EASM) file format. Extension: <c>.easm</c>. Validates that the file is a ZIP archive containing the required
-    /// <c>eModel</c> entry.</summary>
+    /// <summary>Gets the eDrawings assembly (EASM) file format. Extension: <c>.easm</c>. Validates that the file is either a ZIP archive containing the
+    /// required <c>eModel</c> entry (modern documents) or a HOOPS Stream Format file (legacy documents and SolidWorks Simulation analysis
+    /// exports).</summary>
     public static FileFormat EDrawingsAssembly { get; } = new EDrawingsFileFormat("EASM", ".easm");
 
     /// <summary>Gets the SolidWorks drawing (SLDDRW) file format. Extension: <c>.slddrw</c>. Validates the modern SolidWorks document container signature,

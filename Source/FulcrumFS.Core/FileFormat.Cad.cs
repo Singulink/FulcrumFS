@@ -152,7 +152,9 @@ public abstract partial class FileFormat
         }
     }
 
-    // Modern eDrawings documents are ZIP archives containing an 'eModel' entry (verified against real eDrawings assembly files).
+    // eDrawings documents come in two container formats: modern documents are ZIP archives containing an 'eModel' entry, while legacy documents (and
+    // some current exports, e.g. SolidWorks Simulation '.analysis.easm' results) are raw HOOPS Stream Format files, which open with a ';; HSF V<version>'
+    // version comment. Both verified against real eDrawings assembly files.
     private sealed class EDrawingsFileFormat(string name, string extension) : FileFormat
     {
         public override string Name { get; } = name;
@@ -161,6 +163,15 @@ public abstract partial class FileFormat
 
         public override async ValueTask<FileFormatValidationResult> ValidateAsync(Stream stream, CancellationToken cancellationToken)
         {
+            byte[] header = await StreamSignatureUtils.ReadHeaderAsync(stream, 9, cancellationToken).ConfigureAwait(false);
+
+            // Legacy container: a HOOPS Stream Format file, which starts with its version comment.
+            if (StreamSignatureUtils.StartsWith(header, ";; HSF V"u8) && header.Length > 8 && char.IsAsciiDigit((char)header[8]))
+                return FileFormatValidationResult.Success;
+
+            if (!StreamSignatureUtils.StartsWith(header, _zipLocalHeaderSig) && !StreamSignatureUtils.StartsWith(header, _zipEmptySig))
+                return FileFormatValidationResult.Invalid($"File does not have a valid {Name} signature (expected a HOOPS Stream Format header or a ZIP container).");
+
             var (archive, result) = await TryOpenZipAsync(stream, Name, cancellationToken).ConfigureAwait(false);
             if (archive is null)
                 return result;
