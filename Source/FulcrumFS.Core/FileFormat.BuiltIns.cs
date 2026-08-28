@@ -182,14 +182,14 @@ public abstract partial class FileFormat
     /// file header.</summary>
     public static FileFormat Step { get; } = new StepFileFormat();
 
-    /// <summary>Gets the SolidWorks part (SLDPRT) file format. Extension: <c>.sldprt</c>. Validates the modern SolidWorks document container signature, or
-    /// for legacy documents, validates the OLE Compound Document container signature and rejects files whose contents identify them as one of the other
-    /// known OLE document types.</summary>
+    /// <summary>Gets the SolidWorks part (SLDPRT) file format. Extension: <c>.sldprt</c>. Validates the modern SolidWorks document container signature
+    /// (prefix plus a <c>Contents</c> entry), or for legacy documents, validates the OLE Compound Document container signature and rejects files whose
+    /// contents identify them as one of the other known OLE document types.</summary>
     public static FileFormat SolidWorksPart { get; } = new SolidWorksFileFormat("SLDPRT", ".sldprt");
 
-    /// <summary>Gets the SolidWorks assembly (SLDASM) file format. Extension: <c>.sldasm</c>. Validates the modern SolidWorks document container signature,
-    /// or for legacy documents, validates the OLE Compound Document container signature and rejects files whose contents identify them as one of the other
-    /// known OLE document types.</summary>
+    /// <summary>Gets the SolidWorks assembly (SLDASM) file format. Extension: <c>.sldasm</c>. Validates the modern SolidWorks document container signature
+    /// (prefix plus a <c>Contents</c> entry), or for legacy documents, validates the OLE Compound Document container signature and rejects files whose
+    /// contents identify them as one of the other known OLE document types.</summary>
     public static FileFormat SolidWorksAssembly { get; } = new SolidWorksFileFormat("SLDASM", ".sldasm");
 
     /// <summary>Gets the eDrawings assembly (EASM) file format. Extension: <c>.easm</c>. Validates that the file is either a ZIP archive containing the
@@ -197,9 +197,9 @@ public abstract partial class FileFormat
     /// exports).</summary>
     public static FileFormat EDrawingsAssembly { get; } = new EDrawingsFileFormat("EASM", ".easm");
 
-    /// <summary>Gets the SolidWorks drawing (SLDDRW) file format. Extension: <c>.slddrw</c>. Validates the modern SolidWorks document container signature,
-    /// or for legacy documents, validates the OLE Compound Document container signature and rejects files whose contents identify them as one of the other
-    /// known OLE document types.</summary>
+    /// <summary>Gets the SolidWorks drawing (SLDDRW) file format. Extension: <c>.slddrw</c>. Validates the modern SolidWorks document container signature
+    /// (prefix plus a <c>Contents</c> entry), or for legacy documents, validates the OLE Compound Document container signature and rejects files whose
+    /// contents identify them as one of the other known OLE document types.</summary>
     public static FileFormat SolidWorksDrawing { get; } = new SolidWorksFileFormat("SLDDRW", ".slddrw");
 
     /// <summary>Gets the AutoCAD DXF drawing exchange file format. Extension: <c>.dxf</c>. Validates the ASCII section header or binary DXF

@@ -1,3 +1,4 @@
+using System.Buffers;
 using FulcrumFS.Utilities;
 
 namespace FulcrumFS;
@@ -30,12 +31,16 @@ public abstract partial class FileFormat
     }
 
     // SolidWorks documents come in two container formats: legacy documents use OLE Compound Documents, while modern documents use a ZIP-like container with
-    // a proprietary variable-length prefix (bytes 4-7 are 00 00 00 04) and nibble-swapped entry names. The first entry names differ by document type
-    // ('swXmlContents/...' in parts, 'Contents/Config-...' in assemblies and drawings), but all contain a nibble-swapped 'Contents' near the start of the
-    // file (verified against real SolidWorks part, assembly and drawing files). The document types cannot be reliably distinguished from each other at the
-    // container level, so they all accept either container type.
+    // a proprietary variable-length prefix (bytes 4-7 are 00 00 00 04), nibble-swapped entry names and obfuscated entry sizes (so the entry chain cannot be
+    // walked). The leading entries vary by document type and version ('swXmlContents/...', 'Contents/Config-...', 'Preview'/'PreviewPNG'), but every
+    // document carries 'Contents/...' entries, which can sit behind the embedded preview images (tens of KB observed), so a nibble-swapped 'Contents' is
+    // searched for within the first few MB of the file (verified against real SolidWorks part, assembly and drawing files). The document types cannot be
+    // reliably distinguished from each other at the container level, so they all accept either container type.
     private sealed class SolidWorksFileFormat(string name, string extension) : FileFormat
     {
+        // Comfortably beyond the preview images that precede the first 'Contents' entry in real documents.
+        private const int ModernContentsSearchLimit = 4 * 1024 * 1024;
+
         // 'Contents' in ASCII with the high/low nibbles of each byte swapped.
         private static readonly byte[] _nibbleSwappedContents = [0x34, 0xF6, 0xE6, 0x47, 0x56, 0xE6, 0x47, 0x37];
 
@@ -45,13 +50,15 @@ public abstract partial class FileFormat
 
         public override async ValueTask<FileFormatValidationResult> ValidateAsync(Stream stream, CancellationToken cancellationToken)
         {
-            byte[] header = await StreamSignatureUtils.ReadHeaderAsync(stream, 4096, cancellationToken).ConfigureAwait(false);
+            byte[] header = await StreamSignatureUtils.ReadHeaderAsync(stream, 8, cancellationToken).ConfigureAwait(false);
 
-            // Modern container: bytes 4-7 are 00 00 00 04 and a nibble-swapped 'Contents' entry name appears near the start of the file.
-            if (header.Length >= 8 && header.AsSpan(4, 4).SequenceEqual((ReadOnlySpan<byte>)[0x00, 0x00, 0x00, 0x04]) &&
-                header.AsSpan().IndexOf(_nibbleSwappedContents) >= 0)
+            // Modern container: bytes 4-7 are 00 00 00 04 and a nibble-swapped 'Contents' entry name appears within the search limit.
+            if (header.Length >= 8 && header.AsSpan(4, 4).SequenceEqual((ReadOnlySpan<byte>)[0x00, 0x00, 0x00, 0x04]))
             {
-                return FileFormatValidationResult.Success;
+                if (await ContainsAsync(stream, _nibbleSwappedContents, ModernContentsSearchLimit, cancellationToken).ConfigureAwait(false))
+                    return FileFormatValidationResult.Success;
+
+                return FileFormatValidationResult.Invalid($"File has a modern SolidWorks container prefix but no 'Contents' entry was found (required for {Name}).");
             }
 
             // Legacy container: an OLE Compound Document whose contents do not identify it as one of the other known OLE document types.
@@ -66,6 +73,42 @@ public abstract partial class FileFormat
             }
 
             return FileFormatValidationResult.Invalid($"File does not have a valid {Name} (SolidWorks document) signature.");
+        }
+
+        // Streams the search window through a pooled buffer, carrying the tail of each read over so a pattern straddling two reads is still found.
+        private static async ValueTask<bool> ContainsAsync(Stream stream, byte[] pattern, int searchLimit, CancellationToken cancellationToken)
+        {
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+
+            try
+            {
+                stream.Position = 0;
+                int carried = 0;
+                int remaining = searchLimit;
+
+                while (remaining > 0)
+                {
+                    int read = await stream.ReadAsync(buffer.AsMemory(carried, Math.Min(buffer.Length - carried, remaining)), cancellationToken).ConfigureAwait(false);
+
+                    if (read is 0)
+                        return false;
+
+                    int filled = carried + read;
+
+                    if (buffer.AsSpan(0, filled).IndexOf(pattern) >= 0)
+                        return true;
+
+                    remaining -= read;
+                    carried = Math.Min(pattern.Length - 1, filled);
+                    buffer.AsSpan(filled - carried, carried).CopyTo(buffer);
+                }
+
+                return false;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
     }
 

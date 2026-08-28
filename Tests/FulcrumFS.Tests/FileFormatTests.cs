@@ -281,6 +281,39 @@ public sealed class FileFormatTests
         result.ErrorMessage.ShouldContain("HOOPS");
     }
 
+    // 'Contents' in ASCII with the high/low nibbles of each byte swapped (the modern SolidWorks container's entry-name encoding).
+    private static readonly byte[] NibbleSwappedContents = [0x34, 0xF6, 0xE6, 0x47, 0x56, 0xE6, 0x47, 0x37];
+
+    [TestMethod]
+    public async Task SolidWorksPart_ContentsEntryBehindLargePreview_Succeeds()
+    {
+        // Real documents can carry tens of KB of preview images before the first 'Contents' entry, so the search must not stop after the first few KB.
+        byte[] bytes = [0x84, 0xB6, 0x22, 0x08, 0x00, 0x00, 0x00, 0x04, .. new byte[300_000], .. NibbleSwappedContents, .. new byte[64]];
+        await using var stream = new MemoryStream(bytes);
+        var result = await FileFormat.SolidWorksPart.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task SolidWorksPart_ContentsEntryAcrossReadBoundary_Succeeds()
+    {
+        // The 'Contents' name straddles the 64 KB read boundary of the search, which carries the tail of each read over.
+        byte[] bytes = [0x84, 0xB6, 0x22, 0x08, 0x00, 0x00, 0x00, 0x04, .. new byte[65536 - 8 - 4], .. NibbleSwappedContents, .. new byte[1000]];
+        await using var stream = new MemoryStream(bytes);
+        var result = await FileFormat.SolidWorksPart.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task SolidWorksPart_ModernPrefixWithoutContentsEntry_Fails()
+    {
+        byte[] bytes = [0x84, 0xB6, 0x22, 0x08, 0x00, 0x00, 0x00, 0x04, .. new byte[300_000]];
+        await using var stream = new MemoryStream(bytes);
+        var result = await FileFormat.SolidWorksPart.ValidateAsync(stream, TestContext.CancellationToken);
+        result.IsValid.ShouldBeFalse();
+        result.ErrorMessage.ShouldContain("Contents");
+    }
+
     [TestMethod]
     public async Task SolidWorksPart_SldAsmBytes_Succeeds()
     {
