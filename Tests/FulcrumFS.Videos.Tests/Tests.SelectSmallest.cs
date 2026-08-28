@@ -266,6 +266,11 @@ partial class Tests
                 AudioReencodeMode = audioReencodeMode,
                 ResultFormats = forceRemux ? [MediaContainerFormat.MP4] : [MediaContainerFormat.MP4, MediaContainerFormat.Mkv],
                 MaxSampleRate = limitTo44100Hz ? AudioSampleRate.Hz44100 : AudioSampleRate.Preserve,
+
+                // The trial re-encode must come out smaller than video193's (tiny, crf 50) video stream so that SelectSmallest picks it and the
+                // MP4 resize interaction is exercised; at the default Medium quality the original wins and the file is simply preserved (which
+                // TestSelectSmallestReencodesOversizedStreams already covers).
+                VideoQuality = VideoQuality.Lowest,
             },
             fileName,
             exceptionMessage: null,
