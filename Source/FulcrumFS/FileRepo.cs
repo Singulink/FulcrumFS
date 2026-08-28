@@ -18,8 +18,16 @@ public sealed partial class FileRepo : IDisposable
 
     private readonly IAbsoluteFilePath _infoFile;
     private readonly IAbsoluteFilePath _lockFile;
-    private FileStream? _lockStream;
-    private int _lockStreamSize;
+    private volatile FileStream? _lockStream;
+
+    // Health checks run on a timer while the repository is being accessed (so a slow volume never blocks operations) and stop once it has been idle
+    // for the interval (so an idle repository uses no IOPS); the first access after that probes inline and re-arms the timer. _probeSync serializes probe
+    // writes on the lock stream.
+    private readonly Lock _probeSync = new();
+    private Timer? _healthCheckTimer;
+    private volatile bool _healthChecksActive;
+    private long _lastAccessTimestamp; // Accessed via Volatile.Read/Write, which are atomic for 64-bit values on all platforms (Interlocked-based on 32-bit).
+    private byte _probeValue;
 
     private readonly RepoFileSystem _fs;
     private readonly IAbsoluteDirectoryPath _tempDirectory;
@@ -29,13 +37,18 @@ public sealed partial class FileRepo : IDisposable
 
     private FileRepoCleaner? _cleaner;
 
-    private long _lastSuccessfulHealthCheck = long.MinValue;
     private volatile bool _isDisposed;
 
     /// <summary>
     /// Gets the configuration options for the file repository. The returned instance is frozen and cannot be modified.
     /// </summary>
     public FileRepoOptions Options { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether background health checks are currently running (test-only). They run while the repository is being accessed and
+    /// stop once it has been idle for <see cref="FileRepoOptions.HealthCheckInterval"/>.
+    /// </summary>
+    internal bool HealthChecksActive => _healthChecksActive;
 
     /// <summary>
     /// Gets the directory where files are stored.
@@ -195,42 +208,134 @@ public sealed partial class FileRepo : IDisposable
         cancellationToken.ThrowIfCancellationRequested();
 
         long initStartTimestamp = Stopwatch.GetTimestamp();
+        Volatile.Write(ref _lastAccessTimestamp, initStartTimestamp);
+
+        // Fast path: initialized and being health-checked in the background.
+        if (!forceHealthCheck && _lockStream is not null && _healthChecksActive)
+            return;
 
         using (await _stateSync.LockAsync(Options.MaxAccessWaitOrRetryTime, cancellationToken))
         {
-            if (_lockStream is null || forceHealthCheck || Stopwatch.GetElapsedTime(_lastSuccessfulHealthCheck) >= Options.HealthCheckInterval)
+            // First access after an idle period (or a forced check): probe inline so a failure that happened while idle is caught before the operation
+            // proceeds, then resume background checks. Concurrent first accesses wait here for the single probe rather than each probing.
+            if (_lockStream is { } lockStream && (forceHealthCheck || !_healthChecksActive))
             {
-                var elc = new ExceptionListCapture(ex => ex is IOException);
-
-                void CheckHealth()
-                {
-                    // Use a field to store our size rather than querying it, as querying it is an extra syscall - we use SetLength rather than just reading
-                    // Length as a "write" API could be more likely to fail if the file system is in a bad state than a "read" API.
-
-                    _lockStreamSize = (_lockStreamSize + 1) % 10;
-                    _lockStream.SetLength(_lockStreamSize);
-                    _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
-                }
-
-                if (_lockStream is not null && !elc.TryRun(CheckHealth))
-                {
-                    _lockStream.Dispose();
-                    _lockStream = null;
-                }
-
-                while (true)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    if (elc.TryRun(InitializeCore))
-                        return;
-
-                    if (Stopwatch.GetElapsedTime(initStartTimestamp) > Options.MaxAccessWaitOrRetryTime)
-                        throw new TimeoutException("The operation timed out attempting to get I/O access to the repository.", elc.ResultException);
-
-                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-                }
+                if (TryProbeVolume(lockStream))
+                    ArmHealthCheckTimer();
+                else
+                    DropLockStream(lockStream);
             }
+
+            if (_lockStream is not null)
+                return;
+
+            var elc = new ExceptionListCapture(ex => ex is IOException);
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (elc.TryRun(InitializeCore))
+                    return;
+
+                if (Stopwatch.GetElapsedTime(initStartTimestamp) > Options.MaxAccessWaitOrRetryTime)
+                    throw new TimeoutException("The operation timed out attempting to get I/O access to the repository.", elc.ResultException);
+
+                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Timer callback: probes the repository volume and, on failure, releases the lock stream so that the next repository operation re-initializes the
+    /// repository (waiting up to <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/>). The probe runs outside the state lock so a slow volume never
+    /// blocks operations, and the timer is re-armed only once the probe has finished so probes never overlap. Once the repository has been idle for the
+    /// interval the timer stops instead; the next access probes inline and re-arms it.
+    /// </summary>
+    private void RunHealthCheck(object? state)
+    {
+        var lockStream = _lockStream;
+
+        if (lockStream is null)
+            return; // Not initialized (or disposed): re-initialization arms the timer again.
+
+        if (Stopwatch.GetElapsedTime(Volatile.Read(ref _lastAccessTimestamp)) >= Options.HealthCheckInterval)
+        {
+            _healthChecksActive = false;
+            return;
+        }
+
+        if (!TryProbeVolume(lockStream))
+        {
+            using (_stateSync.Lock())
+                DropLockStream(lockStream);
+
+            return;
+        }
+
+        try
+        {
+            _healthCheckTimer?.Change(Options.HealthCheckInterval, Timeout.InfiniteTimeSpan);
+            _healthChecksActive = true;
+        }
+        catch (ObjectDisposedException)
+        {
+            // The repository was disposed while the probe ran.
+        }
+    }
+
+    /// <summary>
+    /// MUST BE CALLED WITHIN A STATE SYNC LOCK. Starts (or resumes) background health checks one interval from now.
+    /// </summary>
+    private void ArmHealthCheckTimer()
+    {
+        if (_healthCheckTimer is null)
+            _healthCheckTimer = new Timer(RunHealthCheck, null, Options.HealthCheckInterval, Timeout.InfiniteTimeSpan);
+        else
+            _healthCheckTimer.Change(Options.HealthCheckInterval, Timeout.InfiniteTimeSpan);
+
+        _healthChecksActive = true;
+    }
+
+    /// <summary>
+    /// Probes the repository volume by overwriting the first byte of the exclusively held lock file in place. An in-place data write exercises the write
+    /// path (which fails immediately on a dismounted or disconnected volume) without changing any file metadata, so unlike a length change it never forces
+    /// a journal commit or a device cache flush - on storage without a write-back cache those stall for seconds behind buffered application data.
+    /// </summary>
+    private bool TryProbeVolume(FileStream lockStream)
+    {
+        lock (_probeSync)
+        {
+            try
+            {
+                DebugStepHook?.Invoke(DebugStep.HealthCheckProbe);
+
+                _probeValue ^= 1;
+                lockStream.Position = 0;
+                lockStream.WriteByte(_probeValue);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// MUST BE CALLED WITHIN A STATE SYNC LOCK. Releases the given lock stream if it is still the current one, so the next operation re-initializes the
+    /// repository.
+    /// </summary>
+    private void DropLockStream(FileStream lockStream)
+    {
+        if (!ReferenceEquals(_lockStream, lockStream))
+            return;
+
+        lock (_probeSync)
+        {
+            _lockStream = null;
+            _healthChecksActive = false;
+            lockStream.Dispose();
         }
     }
 
@@ -265,7 +370,9 @@ public sealed partial class FileRepo : IDisposable
             }
 
             _lockStream = lockStream;
-            _lastSuccessfulHealthCheck = Stopwatch.GetTimestamp();
+            Volatile.Write(ref _lastAccessTimestamp, Stopwatch.GetTimestamp());
+            DebugStepHook?.Invoke(DebugStep.RepoInitialized);
+            ArmHealthCheckTimer();
         }
 
         void VerifyRepoStructure()
@@ -347,8 +454,13 @@ public sealed partial class FileRepo : IDisposable
     {
         using (_stateSync.Lock())
         {
-            _lockStream?.Dispose();
-            _lockStream = null;
+            _healthCheckTimer?.Dispose();
+            _healthCheckTimer = null;
+            _healthChecksActive = false;
+
+            if (_lockStream is { } lockStream)
+                DropLockStream(lockStream);
+
             _isDisposed = true;
         }
     }

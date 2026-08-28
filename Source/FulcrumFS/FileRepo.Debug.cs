@@ -1,8 +1,8 @@
 namespace FulcrumFS;
 
 /// <summary>
-/// Identifies a checkpoint in the delete/rebase flow at which a test may observe progress or inject a simulated crash by throwing from
-/// <see cref="FileRepo.DebugStepHook"/>. The hook is <see langword="internal"/> and is never set in production use; it is exercised only by the test assembly
+/// Identifies a checkpoint in the delete/rebase flow (or in repository initialization and health checking) at which a test may observe progress or
+/// inject a simulated crash by throwing from <see cref="FileRepo.DebugStepHook"/>. The hook is <see langword="internal"/> and is never set in production use; it is exercised only by the test assembly
 /// via <c>InternalsVisibleTo</c>. Because the delete/rebase flow is strictly forward-only (every step persists a marker and never compensates on failure),
 /// throwing from the hook at a checkpoint leaves exactly the on-disk state a real crash would, which lets recovery (cleaner rollforward, or the add/delete
 /// optimistic rollforward) be tested faithfully.
@@ -26,6 +26,12 @@ internal enum DebugStep
 
     /// <summary>Materialization of all rebases has completed and the retired physical residue (data files, markers, delete markers) is about to be deleted.</summary>
     DeleteResidueAboutToDelete,
+
+    /// <summary>The repository lock has been acquired and per-session state prepared (initially, or again after a failed health check).</summary>
+    RepoInitialized,
+
+    /// <summary>A health check is about to probe the repository volume; throwing an <see cref="IOException"/> from the hook simulates a failed probe.</summary>
+    HealthCheckProbe,
 }
 
 /// <content>
@@ -35,7 +41,7 @@ internal enum DebugStep
 partial class FileRepo
 {
     /// <summary>
-    /// Gets or sets a test-only hook invoked at each <see cref="DebugStep"/> checkpoint in the delete/rebase flow. <see langword="null"/> in all production
+    /// Gets or sets a test-only hook invoked at each <see cref="DebugStep"/> checkpoint. <see langword="null"/> in all production
     /// use. A test may throw from the hook to simulate a crash at a precise point, or use it purely to observe step ordering. Read through
     /// <see cref="RepoFileSystem.DebugStepHook"/> at each callsite so changes are observed immediately.
     /// </summary>

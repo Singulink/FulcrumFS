@@ -95,9 +95,11 @@ public class FileRepoOptions
     /// </summary>
     /// <remarks>
     /// A relatively short health check interval is recommended to ensure that the repository can recover quickly from any issues that may arise, such as
-    /// disconnected storage volumes, network issues, or other I/O problems. Health checks run at the start of the next repository operation if the interval has
-    /// passed since the last successful check, and require only one extra I/O sys-call. The repository automatically attempts to re-initialize itself if the
-    /// health check fails, with each repository operation waiting up to <see cref="MaxAccessWaitOrRetryTime"/> for re-initialization before timing out.
+    /// disconnected storage volumes, network issues, or other I/O problems. While the repository is being accessed, health checks run in the background
+    /// and never block repository operations; once the repository has been idle for the interval they stop, so an idle repository performs no I/O, and the
+    /// first operation after an idle period performs the check before proceeding. Health checks are lightweight (a single I/O sys-call). If a check fails,
+    /// the repository automatically attempts to re-initialize itself, with each repository operation waiting up to <see cref="MaxAccessWaitOrRetryTime"/>
+    /// for re-initialization before timing out.
     /// </remarks>
     public TimeSpan HealthCheckInterval {
         get;
