@@ -7,7 +7,7 @@ To figure out what each file is meant to be, view `FFprobeUtilsTests.cs`, as it 
 Currently the following sets of cases test the following functionality of our ffprobe code:
 - Media container formats: 1-8
 - Video codecs: 1, 4, 6-12, 15
-- Audio codecs: 1, 4, 6-7, 13-14, 206
+- Audio codecs: 1, 4, 6-7, 13-14, 206-208
 - Subtitle codecs: 16-20, 169-170
 - Subtitle language / title: 21-29
 - Pixel format / color range combinations: 1, 30-52
@@ -243,3 +243,5 @@ Commands to generate the synthetic videos:
 204. `ffmpeg -display_vflip -i video1.mp4 -c copy -y video204.mp4`
 205. `ffmpeg -display_hflip -i video1.mp4 -c copy -y video205.mp4`
 206. Real-world 3GP phone recording (AMR-NB mono 8kHz audio + H.264 baseline 320x240 15fps video, ~5s, 73 KB), contributed under the repository's license; used to test AMR-NB source audio support (accepted by default and re-encoded to AAC).
+207. Generated from video1.mp4: H.264 video + AAC audio (default) + a second ALAC audio track (`ffmpeg -i video1.mp4 -map 0:v:0 -map 0:a:0 -map 0:a:0 -c:v copy -c:a:0 copy -c:a:1 alac -disposition:a:0 default -disposition:a:1 0 video207.mov`); used to test that an unsupported secondary audio stream is dropped when a supported one exists.
+208. Generated from video1.mp4: H.264 video + ALAC audio only (`ffmpeg -i video1.mp4 -map 0:v:0 -map 0:a:0 -c:v copy -c:a alac video208.mov`); used to test that a file whose only audio stream is unsupported is still rejected, unless audio streams are being removed.

@@ -396,4 +396,50 @@ partial class Tests
                 (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // Video stream (H.264, copied)
             ]));
     }
+
+    [TestMethod]
+    public async Task TestUnsupportedSecondaryAudioStreamIsDropped()
+    {
+        // An audio stream with an unsupported codec is dropped instead of failing the file when a supported audio stream exists (e.g. the
+        // spatial-audio track iPhones record alongside the standard AAC track). Uses video207.mov: H.264 + AAC (default) + ALAC (unsupported).
+
+        using var repoCtx = GetRepo(out var repo);
+
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                ResultAudioCodecs = [AudioCodec.AAC],
+            },
+            "video207.mov",
+            exceptionMessage: null,
+            expectedChanges: (NewStreamCount: 2, StreamMapping:
+            [
+                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: true), // Video stream (copied)
+                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // AAC audio stream (copied); the ALAC stream is dropped
+            ]));
+    }
+
+    [TestMethod]
+    public async Task TestUnsupportedAudioStreamsIgnoredWhenRemovingAudio()
+    {
+        // Audio streams that are removed anyway are not codec-checked (nor decoded for validation). Uses video208.mov: H.264 + ALAC only.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                RemoveAudioStreams = true,
+            },
+            "video208.mov",
+            exceptionMessage: null,
+            expectedChanges: (NewStreamCount: 1, StreamMapping:
+            [
+                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: true), // Video stream (copied)
+            ]));
+    }
 }

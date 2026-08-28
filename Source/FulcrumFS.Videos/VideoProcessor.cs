@@ -342,9 +342,19 @@ public sealed class VideoProcessor : FileProcessor
         int numVideoStreams = 0;
         int numAudioStreams = 0;
         bool anyInvalidCodecs = false;
+
+        // Audio streams with an unsupported codec are dropped instead of failing the file when a supported audio stream exists (e.g. the spatial-audio
+        // track iPhones record alongside the standard AAC track) or when audio streams are being removed anyway. Dropped streams are excluded from
+        // validation, compatibility testing and the output entirely (they may not even be decodable). Indexed by overall stream index.
+        bool[] droppedStreams = new bool[sourceInfo.Streams.Length];
+        List<int> unsupportedAudioStreams = [];
+        int validationStreamIndex = -1;
+
         foreach (var stream in sourceInfo.Streams)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
+            validationStreamIndex++;
+
             if (stream is FFprobeUtils.VideoStreamInfo videoStream)
             {
                 // Skip thumbnails
@@ -445,6 +455,13 @@ public sealed class VideoProcessor : FileProcessor
             }
             else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
             {
+                // Check codec first: an unsupported stream is a candidate for dropping and is not validated further.
+                if (MatchAudioCodecByName(Options.SourceAudioCodecs, audioStream.CodecName, audioStream.ProfileName) is null)
+                {
+                    unsupportedAudioStreams.Add(validationStreamIndex);
+                    continue;
+                }
+
                 int idx = numAudioStreams++;
 
                 double? duration = audioStream.Duration ?? sourceInfo.Duration;
@@ -460,15 +477,24 @@ public sealed class VideoProcessor : FileProcessor
                 {
                     throw new FileProcessingException($"Audio stream {idx} has unknown duration, cannot validate.");
                 }
-
-                // Check codec:
-                if (MatchAudioCodecByName(Options.SourceAudioCodecs, audioStream.CodecName, audioStream.ProfileName) is null)
-                {
-                    anyInvalidCodecs = true;
-                    continue;
-                }
             }
         }
+
+        if (unsupportedAudioStreams.Count > 0)
+        {
+            if (numAudioStreams is 0 && !Options.RemoveAudioStreams)
+            {
+                anyInvalidCodecs = true;
+            }
+            else
+            {
+                foreach (int idx in unsupportedAudioStreams)
+                    droppedStreams[idx] = true;
+            }
+        }
+
+        if (anyInvalidCodecs)
+            throw new FileProcessingException("One or more streams use a codec that is not supported by this processor.");
 
         if (Options.VideoSourceValidation.MaxStreams.HasValue && numVideoStreams > Options.VideoSourceValidation.MaxStreams.Value)
             throw new FileProcessingException("The number of video streams exceeds the maximum allowed.");
@@ -488,9 +514,6 @@ public sealed class VideoProcessor : FileProcessor
         if (numAudioStreams == 0 && numVideoStreams == 0)
             throw new FileProcessingException("The source video contains no audio or video streams.");
 
-        if (anyInvalidCodecs)
-            throw new FileProcessingException("One or more streams use a codec that is not supported by this processor.");
-
         // Values used for validation:
         double? maxMeasuredDuration = null;
         double maxDuration = ((IEnumerable<double>)[
@@ -501,8 +524,9 @@ public sealed class VideoProcessor : FileProcessor
                 .Where((x) => !x.IsAttachedPic && !x.IsTimedThumbnails)
                 .Select((x) => x.Duration ?? 0.0),
             .. sourceInfo.Streams
-                .OfType<FFprobeUtils.AudioStreamInfo>()
-                .Select((x) => x.Duration ?? 0.0),
+                .Select((x, i) => (Stream: x, Index: i))
+                .Where((x) => x.Stream is FFprobeUtils.AudioStreamInfo && !droppedStreams[x.Index])
+                .Select((x) => ((FFprobeUtils.AudioStreamInfo)x.Stream).Duration ?? 0.0),
         ]).Max();
 
         var progressTempFile = (progressCallback != null && Options.ForceValidateAllStreams && maxDuration != 0.0) ? context.GetNewWorkFile(".txt") : null;
@@ -648,19 +672,29 @@ public sealed class VideoProcessor : FileProcessor
             [
                 .. sourceInfo.Streams
                     .Select((x, i) => (Value: x, Index: i))
-                    .Where((t) => t.Value is FFprobeUtils.AudioStreamInfo)
+                    .Where((t) => t.Value is FFprobeUtils.AudioStreamInfo && !droppedStreams[t.Index])
                     .Select((t) => t.Index)
             ];
 
             // If at least 1 stream to check:
             if (streams.Length > 0)
             {
-                // Get the actual duration:
+                // Get the actual duration (dropped audio streams are excluded from the mapping):
                 var (exceeded, measuredDuration) = await ValidateStreamsAsync(
                     Options.AudioSourceValidation.MaxLength?.TotalSeconds,
                     maxDuration,
                     streams,
-                    [new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: 'a', streamIndexWithinKind: -1, mapToOutput: true)],
+                    [
+                        new FFmpegUtils.PerStreamMapOverride(fileIndex: 0, streamKind: 'a', streamIndexWithinKind: -1, mapToOutput: true),
+                        .. sourceInfo.Streams
+                            .Select((x, i) => (Value: x, Index: i))
+                            .Where((t) => t.Value is FFprobeUtils.AudioStreamInfo && droppedStreams[t.Index])
+                            .Select((t) => new FFmpegUtils.PerStreamMapOverride(
+                                fileIndex: 0,
+                                streamKind: '\0',
+                                streamIndexWithinKind: t.Index,
+                                mapToOutput: false)),
+                    ],
                     countDuration: !Options.RemoveAudioStreams)
                 .ConfigureAwait(false);
 
@@ -686,10 +720,13 @@ public sealed class VideoProcessor : FileProcessor
             Options.ForceProgressiveDownload;
         bool remuxGuaranteedRequired = remuxRequired; // Keep track of if remuxing is definitely required, vs maybe required (e.g., to compare size only).
         bool guaranteedFullyCompatibleWithMP4Container = true; // Keep track of if we know for sure all streams are compatible with mp4 container.
+        int remuxCheckStreamIndex = -1;
 
         foreach (var stream in sourceInfo.Streams)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
+            remuxCheckStreamIndex++;
+
             if (stream is FFprobeUtils.VideoStreamInfo videoStream)
             {
                 bool isThumbnail = IsThumbnailStream(videoStream);
@@ -891,7 +928,7 @@ public sealed class VideoProcessor : FileProcessor
             }
             else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
             {
-                if (Options.RemoveAudioStreams)
+                if (Options.RemoveAudioStreams || droppedStreams[remuxCheckStreamIndex])
                 {
                     remuxRequired = true;
                     remuxGuaranteedRequired = true;
@@ -1032,7 +1069,7 @@ public sealed class VideoProcessor : FileProcessor
                 else if (stream is FFprobeUtils.AudioStreamInfo audioStream)
                 {
                     if (MatchAudioCodecByName(Options.SourceAudioCodecs, audioStream.CodecName, audioStream.ProfileName) is { SupportsMP4Muxing: true } ||
-                        Options.RemoveAudioStreams)
+                        Options.RemoveAudioStreams || droppedStreams[i])
                     {
                         isCompatibleStream[i] = true;
                         goto reportProgress;
@@ -1192,6 +1229,22 @@ public sealed class VideoProcessor : FileProcessor
                     streamKind: 'a',
                     streamIndexWithinKind: -1,
                     mapToOutput: false));
+        }
+        else
+        {
+            // Exclude dropped (unsupported) audio streams individually:
+            for (int i = 0; i < sourceInfo.Streams.Length; i++)
+            {
+                if (droppedStreams[i])
+                {
+                    perInputStreamOverrides.Add(
+                        new FFmpegUtils.PerStreamMapOverride(
+                            fileIndex: 0,
+                            streamKind: '\0',
+                            streamIndexWithinKind: i,
+                            mapToOutput: false));
+                }
+            }
         }
 
         if (!Options.TryPreserveUnrecognizedStreams)
@@ -1852,6 +1905,18 @@ public sealed class VideoProcessor : FileProcessor
                 // If we're removing audio streams, exclude it now:
 
                 inputAudioStreamIndex++;
+
+                // A dropped (unsupported) stream is excluded from validation too (it may not even be decodable); it only needs accounting for.
+                if (droppedStreams[inputStreamIndex])
+                {
+                    if (Options.ForceValidateAllStreams && !validatedStreams[inputStreamIndex])
+                    {
+                        validatedStreams[inputStreamIndex] = true;
+                        streamsValidated++;
+                    }
+
+                    continue;
+                }
 
                 if (Options.RemoveAudioStreams)
                 {

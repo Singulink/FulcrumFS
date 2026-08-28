@@ -134,7 +134,10 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets the source audio codecs for this mapping (it matches any of these, but all streams must match).</para>
+    /// Gets the source audio codecs for this mapping (it matches any of these).</para>
+    /// <para>
+    /// Audio streams that do not match are dropped when at least one audio stream matches (e.g. the spatial-audio track iPhones record alongside the
+    /// standard AAC track) or when <see cref="RemoveAudioStreams" /> is set; otherwise the file is rejected.</para>
     /// <para>
     /// Default is <see cref="AudioCodec.AllSourceCodecs" />.</para>
     /// </summary>

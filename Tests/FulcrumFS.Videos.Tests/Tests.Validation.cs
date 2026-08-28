@@ -1175,4 +1175,23 @@ partial class Tests
             exceptionMessage: "One or more streams use a codec that is not supported by this processor.",
             expectedChanges: null);
     }
+
+    [TestMethod]
+    public async Task TestOnlyUnsupportedAudioStreamsStillRejected()
+    {
+        // Dropping unsupported audio streams requires a supported one to remain: a file whose only audio stream is unsupported is still rejected.
+        // Uses video208.mov: H.264 + ALAC only.
+
+        using var repoCtx = GetRepo(out var repo);
+
+        await CheckProcessing(
+            repo,
+            VideoProcessingOptions.Preserve with
+            {
+                ForceValidateAllStreams = DefaultForceValidateAllStreams,
+            },
+            "video208.mov",
+            exceptionMessage: "One or more streams use a codec that is not supported by this processor.",
+            expectedChanges: null);
+    }
 }
