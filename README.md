@@ -1,3 +1,5 @@
+<!-- NOTE: A simplified copy of this file (no logo/images, which do not render on nuget.org) is packaged into the NuGet packages from Source/README.md. Keep the content of the two files in sync when editing. -->
+
 <div align="center">
 <picture>
     <source media="(prefers-color-scheme: dark)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Dark.png">
@@ -51,8 +53,8 @@ Main library that enables transactional file storage and processing, providing a
 
 **Features**:
 
-✔️ **Commit-then-cleanup coordination** with transactional databases - orphaned files from failed commits are reclaimed automatically  
-✔️ **No distributed transactions required** - avoids 2PC coordinator overhead and indeterminate post-crash database states that block reopening  
+✔️ **Commit-then-cleanup coordination** with transactional databases  
+✔️ **No distributed transactions required**  
 ✔️ Validate, pre-process, and post-process files during storage and retrieval  
 ✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)  
 ✔️ Operates reliably on any file system, including local disks, NAS, and network file systems  

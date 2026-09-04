@@ -1,3 +1,5 @@
+<!-- NOTE: This is the NuGet package README, a simplified copy of the repository root README.md without the logo/images (which do not render on nuget.org). Keep the content of the two files in sync when editing. -->
+
 # FulcrumFS
 
 [![Chat on Discord](https://img.shields.io/discord/906246067773923490)](https://discord.gg/EkQhJFsBu6)
@@ -40,8 +42,8 @@ Main library that enables transactional file storage and processing, providing a
 
 **Features**:
 
-✔️ **Commit-then-cleanup coordination** with transactional databases - orphaned files from failed commits are reclaimed automatically  
-✔️ **No distributed transactions required** - avoids 2PC coordinator overhead and indeterminate post-crash database states that block reopening  
+✔️ **Commit-then-cleanup coordination** with transactional databases  
+✔️ **No distributed transactions required**  
 ✔️ Validate, pre-process, and post-process files during storage and retrieval  
 ✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)  
 ✔️ Operates reliably on any file system, including local disks, NAS, and network file systems  
