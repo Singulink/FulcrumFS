@@ -357,3 +357,6 @@ MigrationBackup/
 
 # FulcrumFS.Documents.Tests project environment variables file
 /Tests/FulcrumFS.Documents.Tests/libreoffice_path.txt
+
+# Local tool binaries (custom FFmpeg build; not distributable)
+Binaries/

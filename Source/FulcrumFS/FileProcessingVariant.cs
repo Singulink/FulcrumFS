@@ -3,7 +3,7 @@ namespace FulcrumFS;
 /// <summary>
 /// Represents an auto-variant that is produced from the output of a <see cref="FileProcessingPipeline"/>.
 /// </summary>
-public sealed record FileProcessingVariant
+public sealed class FileProcessingVariant
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="FileProcessingVariant"/> class.

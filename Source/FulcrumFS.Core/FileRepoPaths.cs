@@ -54,6 +54,20 @@ public static class FileRepoPaths
     public const string IndeterminateMarkerExtension = ".ind";
 
     /// <summary>
+    /// The file extension used for staged delete journals, which go in the cleanup directory. A staged journal, named <c>{journalId}.staged</c>, lists the
+    /// files a staged transaction is about to delete; the transaction holds it open until it commits or rolls back, and a staged journal nobody holds is
+    /// indeterminate for its files. An ordinary transaction that commits several deletions writes its journal under this name too, holding it open until it
+    /// has been renamed to committed.
+    /// </summary>
+    public const string StagedJournalExtension = ".staged";
+
+    /// <summary>
+    /// The file extension used for committed delete journals, which go in the cleanup directory. A staged journal is renamed to <c>{journalId}.journal</c>
+    /// when its transaction commits and is then the delete record of every file it lists.
+    /// </summary>
+    public const string CommittedJournalExtension = ".journal";
+
+    /// <summary>
     /// The file extension used for alias markers in the repository, which go in a file group's directory alongside data files. An alias marker stands in for a
     /// variant whose pipeline produced no changes (see <c>FileProcessingPipeline.SkipWhenSourceUnchanged</c>); the marker filename encodes a pointer to the
     /// resolved source data file in the form <c>{variantId}.{sourceVariantId}.{sourceExt}.alias</c>, where <c>sourceVariantId</c> is either

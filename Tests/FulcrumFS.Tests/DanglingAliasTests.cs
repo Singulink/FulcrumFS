@@ -202,7 +202,7 @@ public sealed class DanglingAliasTests
 
     private static async Task<byte[]> ReadAllAsync(RepoFileInfo info)
     {
-        await using var stream = info.Open();
+        await using var stream = info.Open(FileAccessPattern.Sequential);
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms);
         return ms.ToArray();
@@ -226,7 +226,7 @@ public sealed class DanglingAliasTests
 
         dir.Create();
 
-        var repo = new FileRepo(dir, options => {
+        var repo = new FileRepo(dir, RepoFormatVersion.Latest, options => {
             options.DeleteMode = DeleteMode.Immediate;
             options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });

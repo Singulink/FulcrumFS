@@ -20,16 +20,27 @@ Fetch methods return a <xref:FulcrumFS.RepoFileInfo> whose <xref:FulcrumFS.RepoF
 var doc = await dbContext.Documents.FindAsync(id);
 var info = await repo.GetAsync(doc.FileId);
 
-return Results.File(info.Open(), contentType: doc.ContentType, fileDownloadName: doc.Name);
+return Results.File(info.Open(FileAccessPattern.Sequential), contentType: doc.ContentType, fileDownloadName: doc.Name);
 ```
 
 For a direct stream without the intermediate info object, use <xref:FulcrumFS.FileRepo.OpenAsync*>:
 
 ```csharp
-await using var stream = await repo.OpenAsync(fileId);
+await using var stream = await repo.OpenAsync(fileId, FileAccessPattern.Sequential);
 ```
 
 If the file does not exist, these throw <xref:FulcrumFS.RepoFileNotFoundException>. See [Exception Handling](exception-handling.md) for the recommended catch pattern.
+
+#### Choosing the access pattern
+
+Every open method takes a <xref:FulcrumFS.FileAccessPattern> that says how you are going to read the stream. Pass <xref:FulcrumFS.FileAccessPattern.Sequential> when the content is read from start to end, as in a download, a copy or a single processing pass. Pass <xref:FulcrumFS.FileAccessPattern.Random> when you seek within it, for example to serve byte ranges to a video player or to read an archive whose directory is at the end of the file. The pattern only tunes caching and read-ahead: the stream is seekable and returns the same content either way, so a wrong choice only affects performance.
+
+```csharp
+// Handler for "GET /api/videos/{id}". Players request byte ranges as they seek.
+var info = await repo.GetAsync(video.FileId);
+
+return Results.File(info.Open(FileAccessPattern.Random), contentType: "video/mp4", enableRangeProcessing: true);
+```
 
 ## Fetching Variants
 
@@ -39,7 +50,7 @@ A specific variant is fetched with <xref:FulcrumFS.FileRepo.GetVariantAsync*>, o
 // Handler for "GET /api/photos/{id}/thumb".
 var thumb = await repo.GetVariantAsync(photo.FileId, "thumbnail");
 
-return Results.File(thumb.Open(), contentType: "image/jpeg");
+return Results.File(thumb.Open(FileAccessPattern.Sequential), contentType: "image/jpeg");
 ```
 
 If the variant is an alias (because the thumbnail pipeline reported no changes against an image that was already small enough), it resolves transparently to its source's data, so the caller never has to know whether a real file or an alias is on disk. See [Variant Aliasing](../concepts/variant-aliasing.md).

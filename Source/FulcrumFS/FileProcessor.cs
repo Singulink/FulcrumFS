@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Microsoft.IO;
 
 namespace FulcrumFS;
 
@@ -22,6 +23,12 @@ public abstract class FileProcessor : IFileProcessingPipelineProvider, IFileProc
     /// allowed.
     /// </summary>
     public abstract IReadOnlyList<string> AllowedFileExtensions { get; }
+
+    /// <summary>
+    /// Gets the <see cref="RecyclableMemoryStreamManager"/> shared by all processors for in-memory work and result streams, so that every processing
+    /// pipeline in the process draws its memory streams from a single pool.
+    /// </summary>
+    protected internal static RecyclableMemoryStreamManager MemoryStreamManager { get; } = new();
 
     /// <summary>
     /// Creates a <see cref="FileProcessingPipeline"/> that contains this processor.

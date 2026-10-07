@@ -80,13 +80,31 @@ public sealed class FileProcessingContext : IAsyncDisposable
 
     internal bool IsSourceInMemoryOrFile => _source is IAbsoluteFilePath or MemoryStream or FileStream;
 
-    internal FileProcessingContext(
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileProcessingContext"/> class whose source is the specified file.
+    /// </summary>
+    /// <param name="fileId">The ID of the file group the processed file belongs to.</param>
+    /// <param name="variantId">The normalized ID of the variant being processed, or <see langword="null"/> if the main file is being processed.</param>
+    /// <param name="tempWorkingDir">A directory reserved for this context. It does not need to exist: work files and directories are created inside it, and it
+    /// is deleted with everything in it when the context is disposed.</param>
+    /// <param name="sourceFile">The source file. The context reads it but does not take ownership of it.</param>
+    /// <param name="cancellationToken">A token that cancels the processing.</param>
+    /// <remarks>
+    /// This constructor exists for <see cref="IFileRepo"/> implementations and is not meant for application code. The implementation runs a pipeline on the
+    /// context with <see cref="FileProcessingPipeline.ExecuteAsync"/>, reads the result as the context's source and disposes the context when it no longer
+    /// needs the result.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="variantId"/> is not <see langword="null"/> or a valid normalized variant ID.</exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public FileProcessingContext(
         FileId fileId,
         string? variantId,
         IAbsoluteDirectoryPath tempWorkingDir,
         IAbsoluteFilePath sourceFile,
         CancellationToken cancellationToken)
     {
+        ThrowIfInvalidVariantId(variantId);
+
         FileId = fileId;
         VariantId = variantId;
         _tempWorkingDir = tempWorkingDir;
@@ -96,7 +114,27 @@ public sealed class FileProcessingContext : IAsyncDisposable
         CancellationToken = cancellationToken;
     }
 
-    internal FileProcessingContext(
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileProcessingContext"/> class whose source is the specified stream.
+    /// </summary>
+    /// <param name="fileId">The ID of the file group the processed file belongs to.</param>
+    /// <param name="variantId">The normalized ID of the variant being processed, or <see langword="null"/> if the main file is being processed.</param>
+    /// <param name="tempWorkingDir">A directory reserved for this context. It does not need to exist: work files and directories are created inside it, and it
+    /// is deleted with everything in it when the context is disposed.</param>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="extension">The file extension of the source, including the leading dot, or empty if it has none.</param>
+    /// <param name="leaveOpen"><see langword="true"/> to leave <paramref name="stream"/> open when the context no longer needs it; <see langword="false"/> to
+    /// let the context dispose it.</param>
+    /// <param name="cancellationToken">A token that cancels the processing.</param>
+    /// <remarks>
+    /// This constructor exists for <see cref="IFileRepo"/> implementations and is not meant for application code. The implementation runs a pipeline on the
+    /// context with <see cref="FileProcessingPipeline.ExecuteAsync"/>, reads the result as the context's source and disposes the context when it no longer
+    /// needs the result.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="variantId"/> is not <see langword="null"/> or a valid normalized variant ID, or
+    /// <paramref name="extension"/> is not a valid file extension.</exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public FileProcessingContext(
         FileId fileId,
         string? variantId,
         IAbsoluteDirectoryPath tempWorkingDir,
@@ -105,6 +143,8 @@ public sealed class FileProcessingContext : IAsyncDisposable
         bool leaveOpen,
         CancellationToken cancellationToken)
     {
+        ThrowIfInvalidVariantId(variantId);
+
         FileId = fileId;
         VariantId = variantId;
         _tempWorkingDir = tempWorkingDir;
@@ -146,9 +186,15 @@ public sealed class FileProcessingContext : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
 
-        return file.PathDisplay.Length > _tempWorkingDir.PathDisplay.Length &&
-            file.PathDisplay.StartsWith(_tempWorkingDir.PathDisplay, StringComparison.Ordinal) &&
-            file.PathDisplay[_tempWorkingDir.PathDisplay.Length] == file.PathFormat.Separator;
+        // A directory's display path may or may not end with a separator depending on the path library's formatting, so the comparison is made against the
+        // directory path with exactly one trailing separator (which also keeps "work" from matching "work2").
+        string directory = _tempWorkingDir.PathDisplay;
+        char separator = _tempWorkingDir.PathFormat.Separator;
+
+        if (directory.Length is 0 || directory[^1] != separator)
+            directory += separator;
+
+        return file.PathDisplay.Length > directory.Length && file.PathDisplay.StartsWith(directory, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -238,6 +284,24 @@ public sealed class FileProcessingContext : IAsyncDisposable
         _tempWorkingDir.TryDelete(recursive: true, out _);
     }
 
+    /// <summary>
+    /// Disposes the source (if owned) but keeps the temporary working directory until <see cref="DisposeAsync"/>. After this call the context can only be
+    /// disposed.
+    /// </summary>
+    /// <remarks>
+    /// This method exists for <see cref="IFileRepo"/> implementations and is not meant for application code. It is used when the context's result is not a
+    /// data file but its working directory must outlive the pipeline: a source stream a processor left open on another file shares only reading and deletion,
+    /// which would stop that file from being opened for the write access its flush to disk needs on Windows.
+    /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public async ValueTask ReleaseSourceAsync()
+    {
+        if (!_leaveOpen && _source is IAsyncDisposable disposable)
+            await disposable.DisposeAsync().ConfigureAwait(false);
+
+        _source = null;
+    }
+
     internal async Task SetResultAsync(FileProcessingResult result, bool oneStepLeft)
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
@@ -283,4 +347,10 @@ public sealed class FileProcessingContext : IAsyncDisposable
     }
 
     private int GetNextWorkId() => Interlocked.Increment(ref _lastWorkEntryId);
+
+    private static void ThrowIfInvalidVariantId(string? variantId)
+    {
+        if (variantId is not null && !Utilities.VariantId.IsValidAndNormalized(variantId))
+            throw new ArgumentException("Variant ID must be a valid normalized variant ID.", nameof(variantId));
+    }
 }

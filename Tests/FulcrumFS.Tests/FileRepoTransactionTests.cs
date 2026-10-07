@@ -7,7 +7,7 @@ public sealed class FileRepoTransactionTests
     private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot_FileRepoTransaction");
     private static readonly IAbsoluteDirectoryPath _sampleDir = _appDir.CombineDirectory("SampleFiles");
 
-    private static readonly FileRepo _repo = new(_repoDir, options => {
+    private static readonly FileRepo _repo = new(_repoDir, RepoFormatVersion.Latest, options => {
         options.DeleteMode = DeleteMode.Immediate;
         options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
     });

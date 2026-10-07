@@ -8,6 +8,7 @@
     <Project Path="Source/FulcrumFS.Core/FulcrumFS.Core.csproj" />
     <Project Path="Source/FulcrumFS.Documents/FulcrumFS.Documents.csproj" />
     <Project Path="Source/FulcrumFS.Images/FulcrumFS.Images.csproj" />
+    <Project Path="Source/FulcrumFS.Local/FulcrumFS.Local.csproj" />
     <Project Path="Source/FulcrumFS.Pdf/FulcrumFS.Pdf.csproj" />
     <Project Path="Source/FulcrumFS.Videos/FulcrumFS.Videos.csproj" />
     <Project Path="Source/FulcrumFS/FulcrumFS.csproj" />

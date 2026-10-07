@@ -289,6 +289,81 @@ public sealed class VariantCrashRecoveryTests
         await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "x"));
     }
 
+    [TestMethod]
+    public async Task RebaseIOFailure_InTheForeground_KeepsTheRetiredSourceForTheCleaner()
+    {
+        using var repo = CreateRepo(DeleteMode.Immediate);
+        var (fileId, originalData) = await AddRealWithTwoAliasesAsync(repo);
+        var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
+
+        // An I/O failure (unlike a crash) is captured by the retirement: the call returns, and the survivors still alias the retired source.
+        repo.DebugStepHook = step =>
+        {
+            if (step is DebugStep.RebaseMarkerWritten)
+                throw new IOException("Simulated I/O failure.");
+        };
+
+        await repo.DeleteVariantsAsync(fileId, "a");
+        repo.DebugStepHook = null;
+
+        // The retired source's data must not be deleted while the survivors depend on it, even in immediate mode.
+        DataFiles(groupDir, "a").ShouldHaveSingleItem();
+        await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
+
+        await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+        await AssertSurvivorsResolvedAsync(repo, fileId, originalData, groupDir);
+    }
+
+    [TestMethod]
+    public async Task RebaseIOFailure_InTheCleaner_KeepsTheRetiredSourceForTheNextPass()
+    {
+        using var repo = CreateRepo(DeleteMode.Immediate);
+        var (fileId, originalData) = await AddRealWithTwoAliasesAsync(repo);
+        var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
+
+        // Crash after the commit point and before the rebase started, so the cleaner performs the whole rebase.
+        repo.DebugStepHook = step =>
+        {
+            if (step is DebugStep.DeleteMarkersWritten)
+                throw new SimulatedCrashException();
+        };
+
+        await Should.ThrowAsync<SimulatedCrashException>(async () => await repo.DeleteVariantsAsync(fileId, "a"));
+        repo.DebugStepHook = null;
+
+        // A directory in place of the rebase marker makes the cleaner's rebase fail with an I/O error before it changes anything. Either survivor could be
+        // the chosen one, so both possible markers are blocked.
+        IAbsoluteDirectoryPath[] blockers =
+        [
+            groupDir.CombineDirectory("a.b" + FileRepoPaths.RebaseMarkerExtension, PathOptions.None),
+            groupDir.CombineDirectory("a.c" + FileRepoPaths.RebaseMarkerExtension, PathOptions.None),
+        ];
+
+        foreach (var blocker in blockers)
+            blocker.Create();
+
+        // The failure is handled inside the variant deletion (logged to its hint, which is kept), so the pass completes without throwing.
+        await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+        // The retired source's data must not be deleted while the survivors depend on it.
+        DataFiles(groupDir, "a").ShouldHaveSingleItem();
+
+        foreach (var blocker in blockers)
+            blocker.Delete();
+
+        // The next pass retries from the kept hint and finishes the retirement.
+        await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+        await AssertSurvivorsResolvedAsync(repo, fileId, originalData, groupDir);
+        DataFiles(groupDir, "a").ShouldBeEmpty();
+    }
+
+    // The data files of a variant: {variantId}.{ext}, which excludes its delete marker ({variantId}.del) and the alias and rebase markers that start with
+    // its ID (they have more than one dot in their names).
+    private static IAbsoluteFilePath[] DataFiles(IAbsoluteDirectoryPath groupDir, string variantId) =>
+        [.. groupDir.GetChildFiles(variantId + ".*").Where(f => f.NameWithoutExtension == variantId && f.Extension is not FileRepoPaths.DeleteMarkerExtension)];
+
     private static async Task AssertSurvivorsResolvedAsync(FileRepo repo, FileId fileId, byte[] originalData, IAbsoluteDirectoryPath groupDir)
     {
         var b = await repo.GetVariantAsync(fileId, "b");
@@ -318,7 +393,7 @@ public sealed class VariantCrashRecoveryTests
 
     private static async Task<byte[]> ReadAllAsync(RepoFileInfo info)
     {
-        await using var stream = info.Open();
+        await using var stream = info.Open(FileAccessPattern.Sequential);
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms);
         return ms.ToArray();
@@ -342,7 +417,7 @@ public sealed class VariantCrashRecoveryTests
 
         dir.Create();
 
-        var repo = new FileRepo(dir, options => {
+        var repo = new FileRepo(dir, RepoFormatVersion.Latest, options => {
             options.DeleteMode = deleteMode;
             options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });

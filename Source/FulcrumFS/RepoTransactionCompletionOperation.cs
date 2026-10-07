@@ -2,7 +2,7 @@ namespace FulcrumFS;
 
 /// <summary>
 /// Identifies which transaction-completion step (commit or rollback) was in progress when the failure surfaced via the
-/// <see cref="FileRepo.TransactionCompletionFailed"/> event occurred.
+/// <see cref="IFileRepo.TransactionCompletionFailed"/> event occurred.
 /// </summary>
 public enum RepoTransactionCompletionOperation
 {

@@ -79,7 +79,7 @@ var thumb = await repo.GetOrAddVariantAsync(
     sourceVariantId: null,                                // Source = the main file.
     new ImageProcessor(thumbnailOptions));
 
-return Results.File(thumb.Open(), contentType: "image/jpeg");
+return Results.File(thumb[0].Open(FileAccessPattern.Sequential), contentType: "image/jpeg");
 ```
 
 Passing `null` for the source variant ID uses the main file as the source. Passing an existing variant ID uses that variant (resolving through aliases to its underlying data), which is useful for chaining: a small thumbnail can be generated from a larger thumbnail rather than re-decoding the full-resolution original.
@@ -90,19 +90,24 @@ Retire one or more variants from a file group with <xref:FulcrumFS.FileRepo.Dele
 
 ```csharp
 // The front-end no longer uses the 128px thumbnail; drop it from every photo.
-await repo.DeleteVariantsAsync(photo.FileId, ["thumbnail-128"]);
+var retired = await repo.DeleteVariantsAsync(photo.FileId, ["thumbnail-128"]);
 ```
 
 The call has a few properties worth relying on:
 
 - **Unlisted dependents are preserved.** If a variant you did *not* name was internally aliased against one you did, the system promotes a survivor to a real data file and re-points the surviving siblings at it. Nothing observable is lost: a `"thumbnail-small"` aliased against a now-retired `"thumbnail-medium"` keeps working, transparently backed by its own data file afterward.
 - **Order independence.** The input is deduplicated and sorted internally, so the outcome does not depend on the order of the IDs. IDs that were never added or are already retired are silent no-ops, as is an empty list.
+- **It reports what it retired.** The call returns the IDs of the variants it actually retired, normalized and in ordinal order. The silently skipped IDs are not in the list, and neither are the unlisted dependents that were preserved, so an empty list means there was nothing to retire.
 - **Deterministic survivor selection.** When a promotion is required, the chosen survivor is the earliest by `(CreationTimeUtc, VariantId)`. The variant ID is a stable tiebreaker so that a cleaner finishing an interrupted retirement picks exactly the same survivor the foreground would have.
 
 > [!IMPORTANT]
 > The preserve-unlisted-dependents rule is what makes retirement safe to invoke from a migration script or feature-toggle cleanup. If you only know the variant IDs *you* want to drop and not which ones internally point at them, just pass yours; anything that still depends on what you dropped quietly gets promoted to a real data file behind the scenes.
 
 Retirement only removes the listed variants. To remove the main file along with all of its variants, use the transactional <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> instead (see [Deleting Files and Variants](deleting-files.md)).
+
+#### Retirement is not transactional
+
+Retirement commits on its own as it runs, like the variant add methods, so it cannot be ordered with a database commit the way a main file's deletion can. An application that records variant IDs in its database must therefore tolerate a recorded variant being gone, for example by treating a <xref:FulcrumFS.RepoFileNotFoundException> from <xref:FulcrumFS.FileRepo.GetVariantAsync*> as a missing variant and regenerating it on demand with <xref:FulcrumFS.FileRepo.GetOrAddVariantAsync*>, rather than expect the retirement and its database update to commit together.
 
 ## Fetching Variants
 

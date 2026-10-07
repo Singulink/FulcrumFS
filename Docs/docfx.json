@@ -11,6 +11,7 @@
             "FulcrumFS/FulcrumFS.csproj",
             "FulcrumFS.Documents/FulcrumFS.Documents.csproj",
             "FulcrumFS.Images/FulcrumFS.Images.csproj",
+            "FulcrumFS.Local/FulcrumFS.Local.csproj",
             "FulcrumFS.Pdf/FulcrumFS.Pdf.csproj",
             "FulcrumFS.Videos/FulcrumFS.Videos.csproj"
           ],

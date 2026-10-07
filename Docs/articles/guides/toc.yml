@@ -31,5 +31,8 @@
 - name: Repository Cleanup
   href: cleanup.md
 
+- name: Read-Only Repositories
+  href: read-only-repositories.md
+
 - name: Exception Handling
   href: exception-handling.md

@@ -13,7 +13,7 @@ public sealed class Tests
     private static readonly IAbsoluteDirectoryPath _samplesDir = _appDir.CombineDirectory("SampleFiles");
     private static readonly IAbsoluteDirectoryPath _repoDir = _appDir.CombineDirectory("RepoRoot");
 
-    private static readonly FileRepo _repo = new(_repoDir, options => {
+    private static readonly FileRepo _repo = new(_repoDir, RepoFormatVersion.Latest, options => {
         options.DeleteMode = DeleteMode.Immediate;
         options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
     });

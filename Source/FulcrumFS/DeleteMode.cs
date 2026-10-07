@@ -13,7 +13,7 @@ public enum DeleteMode
 
     /// <summary>
     /// File deletions are deferred: a delete marker is written when the operation completes (or when a transaction containing the deletion commits), and the
-    /// physical deletion happens later when a <see cref="FileRepoCleaner"/> clean operation removes markers older than the configured delete delay. This is
+    /// physical deletion happens later when a <see cref="IFileRepoCleaner"/> clean operation removes markers older than the configured delete delay. This is
     /// the default mode and is recommended to allow concurrent transactions to access deleted files, support recovery, and let scheduled backups run before
     /// files are physically removed.
     /// </summary>
@@ -26,7 +26,7 @@ public enum DeleteMode
     /// <list type="bullet">
     /// <item><description>
     /// Backups exclude variants entirely, for example because variants are always (re)materialized on demand via
-    /// <see cref="FileRepo.GetOrAddVariantAsync(FileId, string, IFileProcessingPipelineSelector, CancellationToken)"/>, or are regenerated from main files as
+    /// <see cref="IFileRepo.GetOrAddVariantAsync(FileId, string, IFileProcessingPipelineSelector, CancellationToken)"/>, or are regenerated from main files as
     /// part of a backup restoration procedure.</description></item>
     /// <item><description>
     /// The repository is offline and already backed up, and the operator wants to "force delete" variants immediately to remediate a problem with previously

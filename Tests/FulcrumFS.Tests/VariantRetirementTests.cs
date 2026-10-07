@@ -110,18 +110,75 @@ public sealed class VariantRetirementTests
         await repo.AddVariantAsync(fileId, "a", VariantPipelines.RealData(), TestContext.CancellationToken);
 
         // Empty list is a no-op.
-        await repo.DeleteVariantsAsync(fileId);
+        (await repo.DeleteVariantsAsync(fileId)).ShouldBeEmpty();
         (await repo.GetVariantAsync(fileId, "a")).ShouldNotBeNull();
 
         // Never-existed variant id is silently skipped.
-        await repo.DeleteVariantsAsync(fileId, "does-not-exist");
+        (await repo.DeleteVariantsAsync(fileId, "does-not-exist")).ShouldBeEmpty();
         (await repo.GetVariantAsync(fileId, "a")).ShouldNotBeNull();
 
         // First real delete retires it; a second delete of the same id is a no-op.
-        await repo.DeleteVariantsAsync(fileId, "a");
-        await repo.DeleteVariantsAsync(fileId, "a");
+        (await repo.DeleteVariantsAsync(fileId, "a")).ShouldBe(["a"]);
+        (await repo.DeleteVariantsAsync(fileId, "a")).ShouldBeEmpty();
 
         await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
+    }
+
+    [TestMethod]
+    public async Task DeleteVariants_ReturnsTheRetiredVariants_NormalizedInOrdinalOrder_ThenNothingWhenRepeated()
+    {
+        using var repo = CreateRepo(DeleteMode.DeferredUntilClean);
+        var fileId = await AddBaseFileAsync(repo);
+
+        await repo.AddVariantAsync(fileId, "a", VariantPipelines.RealData([1]), TestContext.CancellationToken);
+        await repo.AddVariantAsync(fileId, "b", VariantPipelines.RealData([2]), TestContext.CancellationToken);
+
+        // Variant IDs are case-insensitive: the list holds them normalized and sorted, whatever the order and case they were passed in.
+        (await repo.DeleteVariantsAsync(fileId, "B", "a", "b")).ShouldBe(["a", "b"]);
+
+        await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
+        await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "b"));
+
+        // Retired and pending cleanup, then cleaned up: nothing is retired again either way.
+        (await repo.DeleteVariantsAsync(fileId, "a", "b")).ShouldBeEmpty();
+
+        await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+        (await repo.DeleteVariantsAsync(fileId, "a", "b")).ShouldBeEmpty();
+    }
+
+    [TestMethod]
+    [DataRow(DeleteMode.Immediate)]
+    [DataRow(DeleteMode.DeferredUntilClean)]
+    public async Task DeleteVariants_RetiredNeverExistedAndLiveIds_ReturnsOnlyTheLiveVariant(DeleteMode deleteMode)
+    {
+        // In immediate mode the retired variant is gone from disk; deferred, it is pending cleanup.
+        using var repo = CreateRepo(deleteMode);
+        var fileId = await AddBaseFileAsync(repo);
+
+        await repo.AddVariantAsync(fileId, "retired", VariantPipelines.RealData([1]), TestContext.CancellationToken);
+        await repo.AddVariantAsync(fileId, "live", VariantPipelines.RealData([2]), TestContext.CancellationToken);
+        (await repo.DeleteVariantsAsync(fileId, "retired")).ShouldBe(["retired"]);
+
+        (await repo.DeleteVariantsAsync(fileId, "retired", "never", "live")).ShouldBe(["live"]);
+
+        await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "live"));
+    }
+
+    [TestMethod]
+    public async Task DeleteVariants_SourceWithUnlistedDependent_ReturnsOnlyTheSource()
+    {
+        using var repo = CreateRepo(DeleteMode.Immediate);
+        var fileId = await AddBaseFileAsync(repo);
+
+        // a = real data; b = alias -> a.
+        var pipeline = VariantPipelines.RealData().WithVariant("b", VariantPipelines.Alias());
+        await repo.AddVariantAsync(fileId, "a", pipeline, TestContext.CancellationToken);
+
+        // 'b' is promoted to a data file of its own to preserve it; it is not retired.
+        (await repo.DeleteVariantsAsync(fileId, "a")).ShouldBe(["a"]);
+
+        await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
+        (await repo.GetVariantAsync(fileId, "b")).Extension.ShouldNotBe(FileRepoPaths.AliasMarkerExtension);
     }
 
     [TestMethod]
@@ -173,7 +230,7 @@ public sealed class VariantRetirementTests
 
     private static async Task<byte[]> ReadAllAsync(RepoFileInfo info)
     {
-        await using var stream = info.Open();
+        await using var stream = info.Open(FileAccessPattern.Sequential);
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms);
         return ms.ToArray();
@@ -197,7 +254,7 @@ public sealed class VariantRetirementTests
 
         dir.Create();
 
-        var repo = new FileRepo(dir, options => {
+        var repo = new FileRepo(dir, RepoFormatVersion.Latest, options => {
             options.DeleteMode = deleteMode;
             options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });

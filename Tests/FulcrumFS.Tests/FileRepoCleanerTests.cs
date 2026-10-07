@@ -33,7 +33,7 @@ public sealed class FileRepoCleanerTests
     {
         // Set up a repo with default DeferredUntilClean mode and add+delete a file in a transaction.
         var repoDir = NewRepoDir();
-        var repo = new FileRepo(repoDir, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
+        var repo = new FileRepo(repoDir, RepoFormatVersion.Latest, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
         repo.EnsureCreated();
         FileId fileId;
 
@@ -66,7 +66,7 @@ public sealed class FileRepoCleanerTests
     public async Task ConcurrentCleans_SecondThrowsInvalidOperation()
     {
         var repoDir = NewRepoDir();
-        var repo = new FileRepo(repoDir, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
+        var repo = new FileRepo(repoDir, RepoFormatVersion.Latest, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
         repo.EnsureCreated();
 
         try
@@ -92,7 +92,7 @@ public sealed class FileRepoCleanerTests
     public async Task IndeterminateResolveDelete_WithPositiveDelay_WritesDeleteMarkerAndKeepsFile()
     {
         var repoDir = NewRepoDir();
-        var repo = new FileRepo(repoDir, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
+        var repo = new FileRepo(repoDir, RepoFormatVersion.Latest, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
         repo.EnsureCreated();
 
         try
@@ -132,7 +132,7 @@ public sealed class FileRepoCleanerTests
     public async Task IndeterminateResolveDelete_WithZeroDelay_DeletesImmediately()
     {
         var repoDir = NewRepoDir();
-        var repo = new FileRepo(repoDir, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
+        var repo = new FileRepo(repoDir, RepoFormatVersion.Latest, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
         repo.EnsureCreated();
 
         try
@@ -159,7 +159,7 @@ public sealed class FileRepoCleanerTests
     public async Task DeleteMode_Immediate_TxnCommitDeleteWritesNoMarker()
     {
         var repoDir = NewRepoDir();
-        var repo = new FileRepo(repoDir, o => {
+        var repo = new FileRepo(repoDir, RepoFormatVersion.Latest, o => {
             o.DeleteMode = DeleteMode.Immediate;
             o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });
@@ -185,6 +185,64 @@ public sealed class FileRepoCleanerTests
         finally
         {
             repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    public async Task MarkersNamedWithUppercaseFileIds_AreIgnored()
+    {
+        // The repository names its markers with lowercase file IDs, so a marker whose name is an existing file's ID in uppercase is not one of them.
+        var repoDir = NewRepoDir();
+        var repo = new FileRepo(repoDir, RepoFormatVersion.Latest, o => o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60));
+        repo.EnsureCreated();
+
+        try
+        {
+            var indeterminateId = await AddSampleFileAsync(repo);
+            var deletedId = await AddSampleFileAsync(repo);
+            var cleanupDir = repoDir.CombineDirectory(FileRepoPaths.CleanupDirectoryName, PathOptions.None);
+
+            IAbsoluteFilePath[] markers =
+            [
+                cleanupDir.CombineFile(ToUpperCase(indeterminateId) + FileRepoPaths.IndeterminateMarkerExtension, PathOptions.None),
+                cleanupDir.CombineFile(ToUpperCase(deletedId) + FileRepoPaths.DeleteMarkerExtension, PathOptions.None),
+            ];
+
+            foreach (var marker in markers)
+            {
+                using (marker.OpenStream(FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+            }
+
+            int callbackCount = 0;
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                _ =>
+                {
+                    callbackCount++;
+                    return IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            callbackCount.ShouldBe(0);
+
+            foreach (var marker in markers)
+                marker.State.ShouldBe(EntryState.Exists);
+
+            var filesDir = repoDir.CombineDirectory(FileRepoPaths.FilesDirectoryName, PathOptions.None);
+            filesDir.Combine(indeterminateId.RelativeDirectory).State.ShouldBe(EntryState.Exists);
+            filesDir.Combine(deletedId.RelativeDirectory).State.ShouldBe(EntryState.Exists);
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+
+        static string ToUpperCase(FileId fileId)
+        {
+            string upper = fileId.ToString().ToUpperInvariant();
+            upper.ShouldNotBe(fileId.ToString(), "The file ID has no hex letter to uppercase.");
+            return upper;
         }
     }
 

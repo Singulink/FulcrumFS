@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
+    <ProjectReference Include="..\..\Source\FulcrumFS.Local\FulcrumFS.Local.csproj" />
   </ItemGroup>
 
   <ItemGroup>

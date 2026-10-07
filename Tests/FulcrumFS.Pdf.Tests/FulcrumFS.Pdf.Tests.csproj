@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Source\FulcrumFS.Pdf\FulcrumFS.Pdf.csproj" />
-    <ProjectReference Include="..\..\Source\FulcrumFS\FulcrumFS.csproj" />
+    <ProjectReference Include="..\..\Source\FulcrumFS.Local\FulcrumFS.Local.csproj" />
   </ItemGroup>
 
   <ItemGroup>

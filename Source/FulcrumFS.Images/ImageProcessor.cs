@@ -152,7 +152,7 @@ public sealed class ImageProcessor : FileProcessor
         {
             // Estimate output size based on (result pixels / source pixels) and a 20% compression factor.
             long estimatedOutputLength = stream.Length * image.Width / info.Width * image.Height / info.Height * 4 / 5;
-            var outputStream = new RecyclableMemoryStream(FileRepo.MemoryStreamManager, "FulcrumFS.Images", estimatedOutputLength);
+            var outputStream = new RecyclableMemoryStream(MemoryStreamManager, "FulcrumFS.Images", estimatedOutputLength);
 
             try
             {

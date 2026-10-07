@@ -8,7 +8,7 @@ While it serves as a key component of the upcoming **FulcrumDB** database engine
 
 When your application commits its database transaction before the repository transaction, FulcrumFS guarantees that:
 
-- Every file the database references is accessible in the repository, even after a crash.
+- Every file the database references is accessible in the repository, even after a crash or power loss.
 - Every file the database no longer references is eventually deleted, so storage never leaks.
 
 See the [Transactional Commit Model](articles/concepts/commit-model.md) for how these guarantees are achieved without distributed transactions.
@@ -19,7 +19,8 @@ See the [Transactional Commit Model](articles/concepts/commit-model.md) for how 
 
 The libraries are available on NuGet. Install the packages that match your needs:
 
-- `Singulink.FulcrumFS` - the main transactional storage and processing engine.
+- `Singulink.FulcrumFS` - the interfaces, processing pipeline and shared types.
+- `Singulink.FulcrumFS.Local` - the local file system repository implementation.
 - `Singulink.FulcrumFS.Core` - the lightweight `FileId`, repository paths, and `FileFormat` validation API (usable standalone, including in client apps).
 - `Singulink.FulcrumFS.Images` - image processing pipeline steps (powered by ImageSharp).
 - `Singulink.FulcrumFS.Pdf` - PDF image extraction pipeline steps (powered by PDFium / PDFtoImage).
@@ -35,6 +36,7 @@ Here are some additional links to get you started:
 - [Getting Started](articles/guides/getting-started.md) - Visit here first for a quick walkthrough and entry point to additional guides.
 - [Guides](articles/guides/toc.yml) - In-depth articles on every aspect of the libraries.
 - [Concepts](articles/concepts/toc.yml) - How the repository, pipelines, variants and crash recovery work under the hood.
+- [Coding Against the Repository Interface](articles/concepts/repository-abstraction.md) - Depend on the repository interface so that another implementation can replace the local one.
 - [API Documentation](api/index.md) - Browse the fully documented API here.
 - [Chat on Discord](https://discord.gg/EkQhJFsBu6) - Have questions or want to discuss the library? This is the place for all Singulink project discussions.
 - [Github Repo](https://github.com/Singulink/FulcrumFS) - File issues, contribute pull requests or check out the code for yourself!

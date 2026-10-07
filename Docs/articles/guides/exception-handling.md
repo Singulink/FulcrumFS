@@ -17,7 +17,7 @@ Fetching a file or variant that does not exist throws <xref:FulcrumFS.RepoFileNo
 try
 {
     var info = await repo.GetAsync(doc.FileId);
-    return Results.File(info.Open(), contentType: doc.ContentType);
+    return Results.File(info.Open(FileAccessPattern.Sequential), contentType: doc.ContentType);
 }
 catch (RepoFileNotFoundException)
 {
@@ -71,6 +71,8 @@ Commit and rollback do not throw on failure. Instead, the affected files are mar
 - <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> fires when either a <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> or a rollback (explicit or via disposal) cannot fully complete. The handler receives a <xref:FulcrumFS.RepoTransactionCompletionFailureInfo> exposing the failed <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> (a <xref:FulcrumFS.RepoTransactionCompletionOperation> value of `Commit` or `Rollback`) and the underlying <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Exception> (an <xref:System.AggregateException> if multiple errors occurred during the step).
 
 Subscribe to log or alert. If you want throwing behavior at the call site, the handler can raise an exception itself - handler exceptions are not caught and will propagate out of the completion call.
+
+A [staged transaction](../concepts/commit-model.md#staged-transactions) reports failures of individual files the same way, with two failures that are thrown because the caller still has to act on them. <xref:FulcrumFS.FileRepoStagedTransaction.StageAsync*> throws if it cannot write the transaction's journal: nothing has been staged, so the database must not commit. <xref:FulcrumFS.FileRepoStage.CommitAsync*> throws if it cannot commit the journal: nothing has been committed yet, and the call can be retried.
 
 ```csharp
 repo.TransactionCompletionFailed += failure =>

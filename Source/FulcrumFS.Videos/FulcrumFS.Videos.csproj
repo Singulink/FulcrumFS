@@ -27,6 +27,8 @@
   <ItemGroup>
     <ProjectReference Include="..\FulcrumFS\FulcrumFS.csproj" />
 
+    <PackageReference Include="Singulink.Collections" />
+
     <!-- Analyzers -->
     <PackageReference Include="hamarb123.Analyzers" PrivateAssets="All" />
   </ItemGroup>

@@ -9,3 +9,6 @@
 
 - name: Crash Recovery and Invariants
   href: crash-recovery.md
+
+- name: Coding Against the Repository Interface
+  href: repository-abstraction.md

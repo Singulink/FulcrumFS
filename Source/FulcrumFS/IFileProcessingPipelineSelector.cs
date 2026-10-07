@@ -2,7 +2,7 @@ namespace FulcrumFS;
 
 /// <summary>
 /// Selects a <see cref="FileProcessingPipeline"/> to use for processing a file based on its source extension. This is the interface accepted by every
-/// public add API on <see cref="FileRepoTransaction"/> and <see cref="FileRepo"/>.
+/// public add API on <see cref="IFileRepoTransaction"/>, <see cref="IFileRepoStagedTransaction"/> and <see cref="IFileRepo"/>.
 /// </summary>
 /// <remarks>
 /// <para>Implemented by every type that can supply a concrete pipeline at call time: <see cref="FileProcessingPipeline"/> and <see cref="FileProcessor"/>

@@ -138,7 +138,7 @@ public sealed class PdfImageExtractionProcessor : FileProcessor
         // Estimate output length from the output pixel dimensions with a ~1 byte/pixel PNG compression factor.
         long estimatedOutputLength = estimatedWidth * estimatedHeight;
 
-        var outputStream = new RecyclableMemoryStream(FileRepo.MemoryStreamManager, "FulcrumFS.Pdf", estimatedOutputLength);
+        var outputStream = new RecyclableMemoryStream(MemoryStreamManager, "FulcrumFS.Pdf", estimatedOutputLength);
 
         try
         {

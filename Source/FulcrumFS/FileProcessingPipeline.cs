@@ -37,8 +37,8 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     /// changes to the source file. Default value is <see langword="false"/>.
     /// </summary>
     /// <remarks>
-    /// <para>This property only applies to variant pipelines (the top-level pipeline passed to a variant-add method on <see cref="FileRepo"/>, or any nested
-    /// entry in <see cref="Variants"/>). It has no effect on the main pipeline of a <see cref="FileRepoTransaction"/> add call; use
+    /// <para>This property only applies to variant pipelines (the top-level pipeline passed to a variant-add method on <see cref="IFileRepo"/>, or any nested
+    /// entry in <see cref="Variants"/>). It has no effect on the main pipeline of a transaction add call; use
     /// <see cref="ThrowWhenMainSourceUnchanged"/> for that scenario.</para>
     /// <para>When this property is <see langword="true"/> and no processor in the pipeline reports changes, no data file is stored for the variant. Instead, a
     /// zero-byte alias marker is written that transparently resolves to the variant's source on fetch operations. Nested variants of the aliased variant
@@ -49,7 +49,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     public bool AliasWhenVariantSourceUnchanged { get; init; }
 
     /// <summary>
-    /// Gets or initializes a value indicating whether the main pipeline of a <see cref="FileRepoTransaction"/> add call should throw a
+    /// Gets or initializes a value indicating whether the main pipeline of a transaction add call should throw a
     /// <see cref="FileSourceUnchangedException"/> when running the pipeline results in no changes to the source file. Default value is
     /// <see langword="false"/>.
     /// </summary>
@@ -95,7 +95,13 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     /// entry for the pipeline itself). The list is computed and validated lazily on first access; an <see cref="ArgumentException"/> is thrown at that time
     /// if any two variant IDs anywhere in the tree collide.
     /// </summary>
-    internal IReadOnlyList<FileProcessingVariant> AllVariants => field ??= BuildAllVariants(this);
+    /// <remarks>
+    /// This property exists for <see cref="IFileRepo"/> implementations and is not meant for application code. An implementation reads it to learn every
+    /// variant ID the pipeline declares before it runs any of them.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Two variants anywhere in the tree have the same variant ID.</exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public IReadOnlyList<FileProcessingVariant> AllVariants => field ??= BuildAllVariants(this);
 
     private static List<FileProcessingVariant> BuildAllVariants(FileProcessingPipeline root)
     {
@@ -152,7 +158,25 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
     /// <inheritdoc/>
     FileProcessingPipeline IFileProcessingPipelineSelector.GetPipeline(string extension) => this;
 
-    internal async Task ExecuteAsync(FileProcessingContext context, Func<ProgressValue, ValueTask>? progressCallback, bool knownRepoFileSource, bool isMainPipeline)
+    /// <summary>
+    /// Runs the processors of this pipeline on the source of the specified context, leaving the result as the context's source. The pipelines in
+    /// <see cref="Variants"/> are not run.
+    /// </summary>
+    /// <param name="context">The context to process. Each run needs a new context.</param>
+    /// <param name="progressCallback">A callback that receives the progress of each processor, or <see langword="null"/> to not report progress.</param>
+    /// <param name="knownRepoFileSource"><see langword="true"/> if the source of the context is a file already stored in the repository, which
+    /// <see cref="SourceBufferingMode.ForceTempCopy"/> then does not copy; otherwise <see langword="false"/>.</param>
+    /// <param name="isMainPipeline"><see langword="true"/> if this is the main pipeline of a transactional add, to which
+    /// <see cref="ThrowWhenMainSourceUnchanged"/> applies; <see langword="false"/> if it is a variant pipeline, to which
+    /// <see cref="AliasWhenVariantSourceUnchanged"/> applies.</param>
+    /// <remarks>
+    /// This method exists for <see cref="IFileRepo"/> implementations and is not meant for application code. When it returns, the implementation reads the
+    /// result with <see cref="FileProcessingContext.GetSourceAsFileAsync"/> or <see cref="FileProcessingContext.GetSourceAsSeekableStreamAsync"/>.
+    /// </remarks>
+    /// <exception cref="FileSourceUnchangedException">No processor changed the source and the property that applies to the pipeline, as selected by
+    /// <paramref name="isMainPipeline"/>, is <see langword="true"/>.</exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public async Task ExecuteAsync(FileProcessingContext context, Func<ProgressValue, ValueTask>? progressCallback, bool knownRepoFileSource, bool isMainPipeline)
     {
         if ((SourceBufferingMode is SourceBufferingMode.ForceTempCopy && !knownRepoFileSource) ||
             (SourceBufferingMode is SourceBufferingMode.Auto && !context.IsSourceInMemoryOrFile))

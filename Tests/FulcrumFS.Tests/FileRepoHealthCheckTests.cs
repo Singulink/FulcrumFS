@@ -17,13 +17,15 @@ public sealed class FileRepoHealthCheckTests
     {
         var repoDir = NewRepoDir();
 
-        var repo = new FileRepo(repoDir, o =>
+        // Another instance creates the repository, since EnsureCreated would initialize this one before the hook below counts initializations.
+        using (var creator = new FileRepo(repoDir, RepoFormatVersion.Latest))
+            creator.EnsureCreated();
+
+        var repo = new FileRepo(repoDir, RepoFormatVersion.Latest, o =>
         {
             o.HealthCheckInterval = _interval;
             o.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });
-
-        repo.EnsureCreated();
 
         try
         {

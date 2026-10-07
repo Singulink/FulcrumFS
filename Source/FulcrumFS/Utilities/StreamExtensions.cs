@@ -24,7 +24,7 @@ internal static class StreamExtensions
         }
 
         byte[] buffer = ArrayPool<byte>.Shared.Rent(CopySeekableBufferSize);
-        var memoryStream = new RecyclableMemoryStream(FileRepo.MemoryStreamManager, "FulcrumFS", requestedMemoryStreamSize);
+        var memoryStream = new RecyclableMemoryStream(FileProcessor.MemoryStreamManager, "FulcrumFS", requestedMemoryStreamSize);
         long totalBytesRead = 0;
 
         try

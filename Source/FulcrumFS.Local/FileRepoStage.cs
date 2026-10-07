@@ -1,0 +1,46 @@
+namespace FulcrumFS;
+
+/// <summary>
+/// Represents a staged <see cref="FileRepoStagedTransaction"/>, returned by <see cref="FileRepoStagedTransaction.StageAsync(CancellationToken)"/>. Committing
+/// the stage commits the transaction.
+/// </summary>
+/// <remarks>
+/// A stage belongs to its transaction and is not disposable on its own: disposing the transaction before the stage has been committed rolls the transaction
+/// back.
+/// </remarks>
+public sealed class FileRepoStage : IFileRepoStage
+{
+    private readonly FileRepoStagedTransaction _transaction;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileRepoStage"/> class for the specified staged transaction.
+    /// </summary>
+    internal FileRepoStage(FileRepoStagedTransaction transaction)
+    {
+        _transaction = transaction;
+    }
+
+    /// <summary>
+    /// Commits the staged transaction, making the files it added and deleted permanent in the repository. Call this after the application's database has
+    /// committed.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
+    /// <remarks>
+    /// <para>
+    /// The transaction's journal is committed first, by renaming it, which is a single atomic operation however many files it lists. The added files are
+    /// committed next, and then the deletions are applied according to <see cref="FileRepoOptions.DeleteMode"/>: in <see cref="DeleteMode.Immediate"/> mode
+    /// the files are deleted now and the journal is removed; in the deferred modes the committed journal stays as the delete record of its files, and a
+    /// cleanup pass deletes them once it is older than the delete delay.</para>
+    /// <para>
+    /// A failure to commit the journal is thrown; nothing else has been committed in that case and the call can be retried. Failures to commit or delete
+    /// individual files are not thrown: they are reported through <see cref="FileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, and the
+    /// affected files are left for the cleaner. Calling this method again after it succeeded does nothing.</para>
+    /// <para>
+    /// On a version 1 repository, which has no journal (see <see cref="FileRepoStagedTransaction"/>), the added files are committed first and then each
+    /// deletion is committed as by <see cref="FileRepoTransaction.CommitAsync(CancellationToken)"/>; every failure is reported rather than thrown.</para>
+    /// </remarks>
+    /// <exception cref="IOException">The journal could not be committed.</exception>
+    /// <exception cref="InvalidOperationException">The transaction has been rolled back.</exception>
+    /// <exception cref="ObjectDisposedException">The transaction was disposed before the stage was committed.</exception>
+    public Task CommitAsync(CancellationToken cancellationToken = default) => _transaction.CommitStageAsync(cancellationToken);
+}

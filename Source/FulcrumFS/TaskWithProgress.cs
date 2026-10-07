@@ -49,15 +49,32 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
     /// <summary>
     /// A delegate that represents a factory method for the task based on an optional progress callback.
     /// </summary>
-    internal delegate ValueTask<T> TaskFactory(CancellationToken cancellationToken, Func<ProgressValue, ValueTask>? progressCallback);
+    /// <param name="cancellationToken">The token passed to the <see cref="TaskWithProgress{T}" /> constructor.</param>
+    /// <param name="progressCallback">The callback to report progress to, or <see langword="null"/> if the caller does not observe progress.</param>
+    /// <returns>The result of the operation.</returns>
+    /// <remarks>
+    /// This delegate exists for <see cref="IFileRepo"/> implementations and is not meant for application code.
+    /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public delegate ValueTask<T> TaskFactory(CancellationToken cancellationToken, Func<ProgressValue, ValueTask>? progressCallback);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskWithProgress{T}" /> class with the specified task factory.
     /// </summary>
+    /// <param name="cancellationToken">A token that cancels the operation. It is checked before the operation starts and passed to
+    /// <paramref name="taskFactory"/>.</param>
+    /// <param name="taskFactory">The factory that runs the operation. It is called once, when the task is first awaited or its progress first enumerated,
+    /// and its result becomes the result of the task.</param>
     /// <remarks>
+    /// <para>
+    /// This constructor exists for <see cref="IFileRepo"/> implementations and is not meant for application code.
+    /// </para>
+    /// <para>
     /// Callers cannot call the progress callback concurrently - it is expected that only one call occurs at a time.
+    /// </para>
     /// </remarks>
-    internal TaskWithProgress(CancellationToken cancellationToken, TaskFactory taskFactory)
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TaskWithProgress(CancellationToken cancellationToken, TaskFactory taskFactory)
     {
         _cancellationToken = cancellationToken;
         _taskFactory = taskFactory;
@@ -625,27 +642,10 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
     /// </remarks>
     public TaskWithProgress<TNew> CastTo<TNew>(Func<T, ValueTask<TNew>> converter, bool continueOnCapturedContext = true)
     {
-        // See if we can still take ownership of the task (if not, throw an exception):
-        if (!_isTaskStarted.TrySet())
-           throw new InvalidOperationException("Cannot cast the task after it has already begun.");
-
-        // Ensure anyone waiting on this task will see an exception instead:
-        _callbackTask = Task.FromException(new InvalidOperationException("This task has been consumed by a CastTo operation and cannot be awaited directly."));
-        ObserveException(_callbackTask);
-
-        // Read the fields:
+        // Take ownership of the task and read the fields:
+        ConsumeForCast(out var preTasks, out var postTasks);
         TaskFactory taskFactory = _taskFactory;
         CancellationToken cancellationToken = _cancellationToken;
-
-        // Get all the tasks (and disable any further tasks from being added):
-        List<Func<bool, ValueTask>>? preTasks;
-        List<Func<bool, T?, ValueTask>>? postTasks;
-        lock (_prePostTasksLock)
-        {
-            preTasks = _preTasks;
-            postTasks = _postTasks;
-            _disablePrePostTasks = true;
-        }
 
         // State that holds our T result:
         T? outerResult = default;
@@ -677,6 +677,83 @@ public sealed class TaskWithProgress<T> : IAsyncEnumerable<ProgressValue>
             _postTasks = newPostTasks,
             _preTasks = preTasks,
         };
+    }
+
+    /// <summary>
+    /// Converts a task whose result type derives from or implements <typeparamref name="T"/> into a task with result type <typeparamref name="T"/> that
+    /// passes the result through unchanged.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Like <see cref="CastTo{TNew}(Func{T, ValueTask{TNew}}, bool)"/>, this is only valid if the task has not begun yet, and consumes it. Unlike
+    /// <c>CastTo</c>, it calls no converter, keeps no state for the post-tasks to read the original result from, and never resumes on the captured context.
+    /// Work that completes asynchronously is still awaited once more, because a <see cref="ValueTask{TResult}"/> of the derived type cannot be reinterpreted
+    /// as one of <typeparamref name="T"/>.</para>
+    /// <para>
+    /// It is a static method of the target type rather than an instance method of the source task because C# cannot constrain a type parameter of the
+    /// containing type to derive from a type parameter of the method.</para>
+    /// <para>
+    /// This method exists for <see cref="IFileRepo"/> implementations and is not meant for application code.</para>
+    /// </remarks>
+    /// <typeparam name="TDerived">The result type of <paramref name="task"/>.</typeparam>
+    /// <param name="task">The task to convert. It must not have begun, and it cannot be awaited directly afterwards.</param>
+    /// <returns>A task that runs <paramref name="task"/>, including its pre-tasks and post-tasks, and returns its result as <typeparamref name="T"/>.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="task"/> has already begun or been converted.</exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static TaskWithProgress<T> Upcast<TDerived>(TaskWithProgress<TDerived> task)
+        where TDerived : T
+    {
+        // Take ownership of the task and read the fields:
+        task.ConsumeForCast(out var preTasks, out var postTasks);
+        TaskWithProgress<TDerived>.TaskFactory taskFactory = task._taskFactory;
+
+        // The post-tasks receive the result as T, which is the same object as the original TDerived result (or the default when the task failed):
+        List<Func<bool, T?, ValueTask>>? newPostTasks = null;
+        if (postTasks is not null)
+        {
+            newPostTasks = new(postTasks.Count);
+            foreach (var original in postTasks)
+            {
+                newPostTasks.Add((success, result) => original(success, result is TDerived derived ? derived : default));
+            }
+        }
+
+        // The pre-tasks do not depend on the result type, so they carry over as they are:
+        return new(task._cancellationToken, (ct, progressCallback) =>
+        {
+            var inner = taskFactory(ct, progressCallback);
+            return inner.IsCompletedSuccessfully ? new ValueTask<T>(inner.Result) : AwaitAsync(inner);
+        })
+        {
+            _postTasks = newPostTasks,
+            _preTasks = preTasks,
+        };
+
+        // The caller's ConfigureAwait choice applies where the converted task is awaited, so this inner await never needs the captured context:
+        static async ValueTask<T> AwaitAsync(ValueTask<TDerived> inner) => await inner.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Takes ownership of the task for a cast, so that it can no longer be started or awaited directly, and returns its pre-tasks and post-tasks (disabling
+    /// any further ones from being added).
+    /// </summary>
+    private void ConsumeForCast(out List<Func<bool, ValueTask>>? preTasks, out List<Func<bool, T?, ValueTask>>? postTasks)
+    {
+        // See if we can still take ownership of the task (if not, throw an exception):
+        if (!_isTaskStarted.TrySet())
+           throw new InvalidOperationException("Cannot cast the task after it has already begun.");
+
+        // Ensure anyone waiting on this task will see an exception instead:
+        _callbackTask = Task.FromException(new InvalidOperationException("This task has been consumed by a CastTo operation and cannot be awaited directly."));
+        ObserveException(_callbackTask);
+
+        // Get all the tasks (and disable any further tasks from being added):
+        lock (_prePostTasksLock)
+        {
+            preTasks = _preTasks;
+            postTasks = _postTasks;
+            _disablePrePostTasks = true;
+        }
     }
 
     /// <summary>

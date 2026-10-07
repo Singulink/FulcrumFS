@@ -207,7 +207,7 @@ public sealed class PipelineProviderTests
         if (_repoDir.Exists)
             _repoDir.Delete(recursive: true);
 
-        var repo = new FileRepo(_repoDir, options => {
+        var repo = new FileRepo(_repoDir, RepoFormatVersion.Latest, options => {
             options.DeleteMode = DeleteMode.Immediate;
             options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });

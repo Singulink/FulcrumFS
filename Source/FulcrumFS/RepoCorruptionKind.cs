@@ -1,11 +1,11 @@
 namespace FulcrumFS;
 
 /// <summary>
-/// Identifies the kind of repository corruption surfaced via the <see cref="FileRepo.CorruptionDetected"/> event.
+/// Identifies the kind of repository corruption surfaced via the <see cref="IFileRepo.CorruptionDetected"/> event.
 /// </summary>
 /// <remarks>
 /// Convention: every code path that throws because of detected repository corruption MUST fire the
-/// <see cref="FileRepo.CorruptionDetected"/> event (with the appropriate <see cref="RepoCorruptionKind"/>) before throwing, so consumers can observe and
+/// <see cref="IFileRepo.CorruptionDetected"/> event (with the appropriate <see cref="RepoCorruptionKind"/>) before throwing, so consumers can observe and
 /// repair corruption regardless of which entry point happened to detect it. The corresponding exception types are
 /// <see cref="DanglingAliasException"/> (for <see cref="DanglingAlias"/>) and <see cref="RepoCorruptedException"/> (the umbrella for hard-fail kinds such
 /// as <see cref="DuplicateVariantEntry"/> and <see cref="RebaseInconsistency"/>).

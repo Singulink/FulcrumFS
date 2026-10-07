@@ -12,7 +12,7 @@ FulcrumFS solves the problem differently: a strict commit ordering plus a cleanu
 
 ## Guarantees
 
-When your application follows the commit ordering rule (commit the database first, then the repository), FulcrumFS guarantees two things, even across process crashes and unreliable file systems:
+When your application follows the commit ordering rule (commit the database first, then the repository), FulcrumFS guarantees two things, even across process crashes, power loss and unreliable file systems:
 
 1. **Every file the database references is accessible in the repository.** A committed database row can always open its file, including one whose repository commit had not finished when a crash occurred.
 2. **Every file the database no longer references is eventually deleted.** Orphaned and deleted files are reclaimed by a cleanup pass, so storage does not leak.
@@ -32,6 +32,40 @@ await txn.CommitAsync();
 ```
 
 If <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> is never called, disposing the transaction rolls it back: tentatively added files are discarded and pending deletions are abandoned. You can also roll back explicitly with <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*>.
+
+## Staged Transactions
+
+An ordinary transaction writes a marker for every file it deletes, flushes it to disk and holds it open until the transaction commits. (When it commits two or more deletions in a deferred delete mode on a repository of [format version](repository-layout.md#format-version) 2 or later, it records them in one delete journal, but by then it has already written, flushed and held a marker per file.) That suits the usual handful of files, but an application transaction that deletes thousands of files (closing an account, removing a large album) would hold that many file handles and pay that many flushes while its database transaction is open. A staged transaction, created with <xref:FulcrumFS.FileRepo.BeginStagedTransactionAsync*> and represented by <xref:FulcrumFS.FileRepoStagedTransaction>, records its deletions in memory instead and writes them all to a single journal file, flushed once and held open for the whole set. On a repository of [format version](repository-layout.md#format-version) 1, which has no journals, staging writes, flushes and holds a marker per deleted file instead, as an ordinary transaction does: the behavior is identical, and only the cost of staging grows with the number of files again.
+
+A staged transaction commits in three calls instead of one:
+
+1. <xref:FulcrumFS.FileRepoStagedTransaction.StageAsync*> writes the journal, flushes it to disk and returns a <xref:FulcrumFS.FileRepoStage>.
+2. The application commits its database.
+3. <xref:FulcrumFS.FileRepoStage.CommitAsync*> commits the stage, which commits the transaction.
+
+```csharp
+await using var txn = await repo.BeginStagedTransactionAsync();
+await using var dbTxn = await dbContext.Database.BeginTransactionAsync();
+
+foreach (var photo in album.Photos)
+    await txn.DeleteAsync(photo.FileId);
+
+dbContext.Albums.Remove(album);
+await dbContext.SaveChangesAsync();
+
+var stage = await txn.StageAsync();   // Write the journal.
+await dbTxn.CommitAsync();            // Database first.
+await stage.CommitAsync();            // Repository second.
+```
+
+The [commit ordering rule](#the-commit-ordering-rule) is the same as for an ordinary transaction: the database commits first and the repository second. Staging only prepares the repository commit, so it comes before the database commit, and a failure to write the journal surfaces from <xref:FulcrumFS.FileRepoStagedTransaction.StageAsync*> while the database transaction can still be rolled back. A staged transaction has no commit method of its own; only the stage can commit it, so committing without staging cannot be written by mistake. When there is no database step between the two, <xref:FulcrumFS.FileRepoStagedTransaction.StageAndCommitAsync*> does both in one call.
+
+Committing the stage renames the journal from staged to committed, a single atomic operation however many files it lists. If that rename fails, <xref:FulcrumFS.FileRepoStage.CommitAsync*> throws, nothing has been committed and the call can be retried. Everything after the rename behaves like an ordinary commit: failures of individual files are reported through <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> and left for the cleaner. Once <xref:FulcrumFS.FileRepoStage.CommitAsync*> has been called the transaction is never rolled back, because the database has committed by then: if the commit failed and is not retried, disposing the transaction leaves its files [indeterminate](#the-indeterminate-state) for the cleaner to resolve.
+
+Files added in a staged transaction are tracked per file exactly as in an ordinary transaction and are committed or rolled back together with the deletions. Disposing the transaction before its stage commits rolls everything back. If the process ends between staging and committing, the cleaner treats the files listed in the journal like indeterminate files and resolves them through the resolution callback. See [Crash Recovery and Invariants](crash-recovery.md#delete-journals) for each state a journal can be in.
+
+> [!NOTE]
+> Other operations do not consult journals, except <xref:FulcrumFS.FileRepo.EnumerateFilesAsync*>: it reports a file whose deletion is staged as indeterminate, and a file listed in a committed journal as pending deletion. Another transaction can still delete such a file, as it can any file pending deletion, and the two deletions converge. Like any deleted main file, it stays readable until the cleaner removes it.
 
 ## The Commit Ordering Rule
 

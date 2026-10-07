@@ -16,6 +16,7 @@ Details of each component are provided below:
 | **Singulink.FulcrumFS.Core** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | **Singulink.FulcrumFS.Documents** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Documents.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Documents/) |
 | **Singulink.FulcrumFS.Images** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| **Singulink.FulcrumFS.Local** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Local.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Local/) |
 | **Singulink.FulcrumFS.Pdf** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
 | **Singulink.FulcrumFS.Videos** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
@@ -38,7 +39,7 @@ This package is part of our **Singulink Libraries** collection. Visit https://gi
 
 ### FulcrumFS
 
-Main library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system.
+Main library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system. The `FulcrumFS` package contains the interfaces, processing pipeline and shared types; the local file system repository implementation is in `FulcrumFS.Local`.
 
 **Features**:
 
@@ -46,13 +47,15 @@ Main library that enables transactional file storage and processing, providing a
 ✔️ **No distributed transactions required**  
 ✔️ Validate, pre-process, and post-process files during storage and retrieval  
 ✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)  
-✔️ Operates reliably on any file system, including local disks, NAS, and network file systems  
-✔️ Recovers gracefully from crashes, power failures and disconnected storage volumes  
+✔️ Durable, with graceful recovery from crashes, power failures and disconnected storage volumes  
+✔️ Runs on local file systems; shared and highly available storage coming soon  
 ✔️ Scales to **millions of files** per repository while maintaining good file system performance characteristics  
 ✔️ Provides **direct `FileStream` access** for efficient, low-overhead file I/O  
 ✔️ Stored files remain browsable in standard file managers (e.g. File Explorer, Finder)  
 ✔️ Fully compatible with file system features like encryption and compression  
 ✔️ Designed to work seamlessly with existing backup, redundancy, replication, and storage tools  
+
+Application code works against the `IFileRepo` interface rather than the local `FileRepo` directly. The local implementation in `FulcrumFS.Local` stores files in a directory tree; a repository server, with a primary and a synchronously replicated secondary reached over HTTP, is planned as a second implementation, so an application can move from a single machine to shared, highly available storage without changing how it uses the repository. See the [Repository Abstraction](https://www.singulink.com/Docs/FulcrumFS/articles/concepts/repository-abstraction.html) article.
 
 #### FulcrumFS.Core
 
@@ -73,6 +76,10 @@ Document conversion is provided by [LibreOffice](https://www.libreoffice.org/).
 Optional extension that adds customizable image processing capabilities, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
 Image processing is provided by [`ImageSharp`](https://github.com/SixLabors/ImageSharp).
+
+#### FulcrumFS.Local
+
+The local file system repository implementation: `FileRepo` stores a repository in a directory tree and implements `IFileRepo`. Applications that store their files on a local file system install this package, which brings in the main `FulcrumFS` library.
 
 #### FulcrumFS.Pdf
 

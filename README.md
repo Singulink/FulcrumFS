@@ -17,7 +17,7 @@
 
 While it serves as a key component of our upcoming **FulcrumDB** database engine, it is also designed to function independently, bringing robust file handling to any application or database. FulcrumFS is especially well-suited for managing user-uploaded content such as documents, images and videos, offering strong guarantees around consistency and integrity.
 
-When your application commits its database transaction before the repository transaction, FulcrumFS guarantees that every file the database references stays accessible in the repository (even after a crash), and every file the database no longer references is eventually deleted so storage never leaks.
+When your application commits its database transaction before the repository transaction, FulcrumFS guarantees that every file the database references stays accessible in the repository (even after a crash or power loss), and every file the database no longer references is eventually deleted so storage never leaks.
 
 Details of each component are provided below:
 
@@ -27,6 +27,7 @@ Details of each component are provided below:
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Core** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Documents** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Documents.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Documents/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Local** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Local.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Local/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Pdf** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
 | <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Videos** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
@@ -49,7 +50,7 @@ This package is part of our **Singulink Libraries** collection. Visit https://gi
 
 ### FulcrumFS
 
-Main library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system.
+Main library that enables transactional file storage and processing, providing a foundation for building reliable file repositories on top of any file system. The `FulcrumFS` package contains the interfaces, processing pipeline and shared types; the local file system repository implementation is in `FulcrumFS.Local`.
 
 **Features**:
 
@@ -57,13 +58,15 @@ Main library that enables transactional file storage and processing, providing a
 ✔️ **No distributed transactions required**  
 ✔️ Validate, pre-process, and post-process files during storage and retrieval  
 ✔️ Generate and manage file variants (e.g. alternate formats, resolutions, thumbnails)  
-✔️ Operates reliably on any file system, including local disks, NAS, and network file systems  
-✔️ Recovers gracefully from crashes, power failures and disconnected storage volumes  
+✔️ Durable, with graceful recovery from crashes, power failures and disconnected storage volumes  
+✔️ Runs on local file systems; shared and highly available storage coming soon  
 ✔️ Scales to **millions of files** per repository while maintaining good file system performance characteristics  
 ✔️ Provides **direct `FileStream` access** for efficient, low-overhead file I/O  
 ✔️ Stored files remain browsable in standard file managers (e.g. File Explorer, Finder)  
 ✔️ Fully compatible with file system features like encryption and compression  
 ✔️ Designed to work seamlessly with existing backup, redundancy, replication, and storage tools  
+
+Application code works against the `IFileRepo` interface rather than the local `FileRepo` directly. The local implementation in `FulcrumFS.Local` stores files in a directory tree; a repository server, with a primary and a synchronously replicated secondary reached over HTTP, is planned as a second implementation, so an application can move from a single machine to shared, highly available storage without changing how it uses the repository. See the [Repository Abstraction](https://www.singulink.com/Docs/FulcrumFS/articles/concepts/repository-abstraction.html) article.
 
 #### FulcrumFS.Core
 
@@ -84,6 +87,10 @@ Document conversion is provided by [LibreOffice](https://www.libreoffice.org/).
 Extension package that adds customizable image processing capabilities to file processing pipelines, including validation, thumbnail generation, resizing, format conversion and metadata stripping.
 
 Image processing is provided by the fantastic [ImageSharp](https://github.com/SixLabors/ImageSharp) library.
+
+#### FulcrumFS.Local
+
+The local file system repository implementation: `FileRepo` stores a repository in a directory tree and implements `IFileRepo`. Applications that store their files on a local file system install this package, which brings in the main `FulcrumFS` library.
 
 #### FulcrumFS.Pdf
 
@@ -108,7 +115,7 @@ using FulcrumFS;
 using Singulink.IO;
 
 var baseDir = DirectoryPath.ParseAbsolute(@"C:\AppData\MyApp\Files");
-using var repo = new FileRepo(baseDir);
+using var repo = new FileRepo(baseDir, RepoFormatVersion.Version2);
 
 // PDFs: validate the content matches the extension.
 var pdfPipeline = new FileFormatValidationProcessor(new FileFormatValidationOptions(FileFormat.Pdf));
@@ -158,8 +165,8 @@ await dbTxn.CommitAsync();
 await fileTxn.CommitAsync();
 
 // Read the main file (and enumerate any auto-generated variants) at any time using the stored FileId.
-var info = await repo.GetAsync(added.FileId);
-using var readStream = info.MainFile.Open();
+var info = await repo.GetGroupAsync(added.FileId);
+using var readStream = info.MainFile.Open(FileAccessPattern.Sequential);
 // info.VariantFiles contains the "thumbnail" entry for images and videos.
 ```
 

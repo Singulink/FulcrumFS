@@ -102,6 +102,34 @@ public sealed class VariantAliasTests
     }
 
     [TestMethod]
+    public async Task TransactionalAdd_AliasVariants_AreReportedByTheDataFileTheyResolveTo()
+    {
+        using var repo = CreateRepo();
+
+        // 'same' aliases the main file and 'b' aliases the real variant 'a'.
+        var pipeline = FileProcessingPipeline.Empty
+            .WithVariant("same", VariantPipelines.Alias())
+            .WithVariant("a", VariantPipelines.RealData([1, 2, 3]).WithVariant("b", VariantPipelines.Alias()));
+
+        string samplePath = _sampleDir.CombineFile("sample.jpg").PathExport;
+
+        await using var source = File.OpenRead(samplePath);
+        await using var txn = await repo.BeginTransactionAsync();
+        var added = await txn.AddAsync(source, ".jpg", leaveOpen: true, pipeline, TestContext.CancellationToken);
+        await txn.CommitAsync(TestContext.CancellationToken);
+
+        var same = added.VariantFiles.Single(v => v.VariantId == "same");
+        var a = added.VariantFiles.Single(v => v.VariantId == "a");
+        var b = added.VariantFiles.Single(v => v.VariantId == "b");
+
+        same.Path.ShouldBe(added.MainFile.Path);
+        b.Path.ShouldBe(a.Path);
+
+        (await ReadAllAsync(same)).ShouldBe(await File.ReadAllBytesAsync(samplePath, TestContext.CancellationToken));
+        (await ReadAllAsync(b)).ShouldBe([1, 2, 3]);
+    }
+
+    [TestMethod]
     public async Task GetGroup_ListsAliasResolvedVariantsAlongsideRealData()
     {
         using var repo = CreateRepo();
@@ -341,7 +369,7 @@ public sealed class VariantAliasTests
 
     private static async Task<byte[]> ReadAllAsync(RepoFileInfo info)
     {
-        await using var stream = info.Open();
+        await using var stream = info.Open(FileAccessPattern.Sequential);
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms);
         return ms.ToArray();
@@ -365,7 +393,7 @@ public sealed class VariantAliasTests
 
         dir.Create();
 
-        var repo = new FileRepo(dir, options => {
+        var repo = new FileRepo(dir, RepoFormatVersion.Latest, options => {
             options.DeleteMode = DeleteMode.Immediate;
             options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);
         });

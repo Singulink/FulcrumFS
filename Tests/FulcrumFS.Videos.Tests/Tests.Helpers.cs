@@ -45,7 +45,7 @@ partial class Tests
     {
         // Creates a new repo in a unique temp directory and returns a disposer to clean it up.
         var repoDir = _appDir.CombineDirectory("RepoRoot" + Interlocked.Increment(ref _count).ToString(CultureInfo.InvariantCulture));
-        repo = new(repoDir, options =>
+        repo = new(repoDir, RepoFormatVersion.Latest, options =>
         {
             options.DeleteMode = DeleteMode.Immediate;
             options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);

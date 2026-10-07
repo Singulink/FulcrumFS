@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
@@ -8,8 +9,7 @@ namespace FulcrumFS;
 /// </summary>
 public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
 {
-    private static DateTimeOffset _lastTimeStamp = DateTimeOffset.MinValue;
-    private static readonly Lock _timeSync = new();
+    private static readonly long _maxTimestampMilliseconds = DateTimeOffset.MaxValue.ToUnixTimeMilliseconds();
 
     /// <summary>
     /// Implicitly converts a <see cref="FileId"/> instance to a <see cref="System.Guid"/>.
@@ -43,6 +43,33 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     /// </summary>
     public IRelativeDirectoryPath RelativeDirectory => field ??= GetRelativeDirectory();
 
+    /// <summary>
+    /// Gets the creation time embedded in a sequential (version 7) file ID, with millisecond precision and a zero offset, or <see langword="null"/> for a
+    /// secure (version 4) file ID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The value is the 48-bit big-endian count of milliseconds since the Unix epoch held in the first six bytes of the GUID in RFC 9562 byte order. For an ID
+    /// created by a <see cref="FileIdGenerator"/> it is the time the ID was created, or slightly later if a burst of IDs ran the generator's timestamps ahead
+    /// of the clock.</para>
+    /// <para>
+    /// A version 7 ID that was not created by this library can hold a timestamp later than <see cref="DateTimeOffset.MaxValue"/>; its value is also
+    /// <see langword="null"/>.</para>
+    /// </remarks>
+    public DateTimeOffset? Timestamp
+    {
+        get {
+            if (Guid.Version is not 7)
+                return null;
+
+            Span<byte> bytes = stackalloc byte[16];
+            Guid.TryWriteBytes(bytes, bigEndian: true, out _);
+            long milliseconds = (long)(BinaryPrimitives.ReadUInt64BigEndian(bytes) >> 16);
+
+            return milliseconds <= _maxTimestampMilliseconds ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds) : null;
+        }
+    }
+
     private string FileIdString => field ??= Guid.ToString("D");
 
     /// <summary>
@@ -68,23 +95,14 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     public static FileId Create(Guid guid) => new(guid);
 
     /// <summary>
-    /// Creates a new sequential file ID backed by a version 7 GUID.
+    /// Creates a new sequential file ID backed by a version 7 GUID using the process-wide <see cref="FileIdGenerator.Shared"/> generator.
     /// </summary>
-    public static FileId CreateSequential()
-    {
-        using (_timeSync.EnterScope())
-        {
-            var nextTimeStamp = _lastTimeStamp.AddMilliseconds(1);
-            var currentTimeStamp = DateTimeOffset.UtcNow;
-
-            if (currentTimeStamp < nextTimeStamp)
-                currentTimeStamp = nextTimeStamp;
-
-            _lastTimeStamp = currentTimeStamp;
-
-            return new(Guid.CreateVersion7(currentTimeStamp));
-        }
-    }
+    /// <remarks>
+    /// The shared generator's lock and its budget of 16 IDs per millisecond (beyond which timestamps run ahead of the clock) are shared by every caller in
+    /// the process. Code that creates many IDs should create a <see cref="FileIdGenerator"/> of its own and call <see cref="FileIdGenerator.CreateSequential"/>
+    /// on it instead.
+    /// </remarks>
+    public static FileId CreateSequential() => FileIdGenerator.Shared.CreateSequential();
 
     /// <summary>
     /// Creates a new cryptographically random file ID backed by a version 4 GUID.
@@ -133,14 +151,17 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     public static bool TryParse([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out FileId fileId) => TryParse(s.AsSpan(), out fileId);
 
     /// <summary>
-    /// NOTE!!! For internal use only - only validates the case, does not validate the string is of the correct format beyond D.
+    /// NOTE!!! For internal use only - accepts only the lowercase D format that file IDs have in repository file and directory names, rejecting any other
+    /// format or casing, and keeps the string as the file ID's string representation.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool TryParseUnsafe([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out FileId fileId)
     {
-        if (Guid.TryParseExact(s, "D", out var guid) && IsValidGuidForFileId(guid))
+        // The D format is exactly 36 characters, so the length check also rejects surrounding whitespace. An uppercase name is not one the repository wrote:
+        // on a case-sensitive file system it is a different entry from the lowercase one.
+        if (s?.Length is 36 && !s.AsSpan().ContainsAnyInRange('A', 'Z') && Guid.TryParseExact(s, "D", out var guid) && IsValidGuidForFileId(guid))
         {
-            fileId = new(guid, s.ToLowerInvariant());
+            fileId = new(guid, s);
             return true;
         }
 

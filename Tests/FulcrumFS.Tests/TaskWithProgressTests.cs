@@ -1605,4 +1605,116 @@ public sealed class TaskWithProgressTests
         await s;
         log.ShouldBe(["pre-after", "pre-before"]); // Pre-tasks run in reverse addition order across the cast boundary.
     }
+
+    // --- Upcast ---
+
+    [TestMethod]
+    public async Task Upcast_PassesTheSameResultThrough()
+    {
+        var list = new List<string> { "a" };
+        var t = new TaskWithProgress<List<string>>(default, async (ct, cb) => list);
+
+        // List<string> is an IReadOnlyList<object> through interface variance.
+        var s = TaskWithProgress<IReadOnlyList<object>>.Upcast(t);
+        (await s).ShouldBeSameAs(list);
+    }
+
+    [TestMethod]
+    public async Task Upcast_AsynchronousCompletion_PassesTheSameResultThrough()
+    {
+        object value = new();
+        var t = new TaskWithProgress<object>(default, async (ct, cb) =>
+        {
+            await Task.Delay(10, ct);
+            return value;
+        });
+
+        var s = TaskWithProgress<object?>.Upcast(t);
+        (await s).ShouldBeSameAs(value);
+    }
+
+    [TestMethod]
+    public async Task Upcast_NullResult_PassesThrough()
+    {
+        string? postResult = "not called";
+        var t = new TaskWithProgress<string?>(default, async (ct, cb) => null);
+        t.AddPostTask(async (success, result) => postResult = result);
+
+        var s = TaskWithProgress<object?>.Upcast(t);
+        (await s).ShouldBeNull();
+        postResult.ShouldBeNull();
+    }
+
+    [TestMethod]
+    public async Task Upcast_ForwardsProgress()
+    {
+        var t = Make([new(null, "A", 0.5)], result: 4);
+        var s = TaskWithProgress<IComparable>.Upcast(t);
+
+        var p = await CollectFullAsync(s, TestContext.CancellationToken);
+        p.ShouldBe([new(null, "A", 0.0), new(null, "A", 0.5), new(null, "A", 1.0)]);
+        (await s).ShouldBe(4);
+    }
+
+    [TestMethod]
+    public async Task Upcast_TasksAddedBeforeAndAfter_AllRunInOrder()
+    {
+        var log = new List<string>();
+        var t = new TaskWithProgress<string>(default, async (ct, cb) =>
+        {
+            log.Add("main");
+            return "x";
+        });
+        t.AddPreTask(async (succeeding) => log.Add($"pre1:{succeeding}")); // Before the upcast.
+        t.AddPostTask(async (success, result) => log.Add($"post1:{success}:{result}")); // Before the upcast - sees the result as a string.
+
+        var s = TaskWithProgress<object>.Upcast(t);
+        s.AddPreTask(async (succeeding) => log.Add($"pre2:{succeeding}")); // After the upcast.
+        s.AddPostTask(async (success, result) => log.Add($"post2:{success}:{result}")); // After the upcast - sees the same object.
+
+        (await s).ShouldBe("x");
+        log.ShouldBe(["pre2:True", "pre1:True", "main", "post1:True:x", "post2:True:x"]);
+    }
+
+    [TestMethod]
+    public async Task Upcast_MainFailure_RunsPostTasksWithDefault_Surfaces()
+    {
+        bool? postSuccess = null;
+        int? postResult = null;
+        var t = MakeThrows(new InvalidOperationException("main-fail"));
+        t.AddPostTask(async (success, result) =>
+        {
+            postSuccess = success;
+            postResult = result;
+        });
+
+        // The upcast target is a reference type, so the failed task's result reaches the int post-task as null and must come out as 0, not throw.
+        var s = TaskWithProgress<IComparable>.Upcast(t);
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(async () => await s);
+        ex.Message.ShouldBe("main-fail");
+        postSuccess.ShouldBe(false);
+        postResult.ShouldBe(0);
+    }
+
+    [TestMethod]
+    public async Task Upcast_OriginalCannotBeAwaited()
+    {
+        var t = Make([], result: 1);
+        _ = TaskWithProgress<object>.Upcast(t);
+
+        var ex = await Should.ThrowAsync<AggregateException>(async () => await t);
+        ex.InnerException.ShouldBeOfType<InvalidOperationException>();
+        ex.InnerException!.Message.ShouldBe("This task has been consumed by a CastTo operation and cannot be awaited directly.");
+    }
+
+    [TestMethod]
+    public async Task Upcast_AfterStarted_Throws()
+    {
+        var t = Make([], result: 1);
+        await t;
+
+        var ex = Should.Throw<InvalidOperationException>(() => TaskWithProgress<object>.Upcast(t));
+        ex.Message.ShouldBe("Cannot cast the task after it has already begun.");
+    }
 }
