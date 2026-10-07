@@ -7,6 +7,24 @@ public sealed class FileIdTests
     private const string LowercaseId = "0192a3b4-c5d6-7e8f-9abc-def012345678";
 
     [TestMethod]
+    public void EqualityOperators_AcceptNullOperands()
+    {
+        // Frameworks compare values generically (EF Core compares every reference-type property with null through the operator
+        // when it takes original values), so the operators must take null without throwing.
+
+        FileId? none = null;
+        var id = FileId.Parse(LowercaseId);
+
+        (none == null).ShouldBeTrue();
+        (none != null).ShouldBeFalse();
+        (id == null).ShouldBeFalse();
+        (none == id).ShouldBeFalse();
+        (id != null).ShouldBeTrue();
+        (id == FileId.Parse(LowercaseId)).ShouldBeTrue();
+        id.Equals(null).ShouldBeFalse();
+    }
+
+    [TestMethod]
     public void TryParseUnsafe_LowercaseD_IsAccepted()
     {
         FileId.TryParseUnsafe(LowercaseId, out var fileId).ShouldBeTrue();

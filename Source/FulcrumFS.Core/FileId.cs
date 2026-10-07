@@ -23,14 +23,21 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     public static explicit operator FileId(Guid fileIdGuid) => new(fileIdGuid);
 
     /// <summary>
-    /// Determines whether two <see cref="FileId"/> instances are equal.
+    /// Determines whether two <see cref="FileId"/> instances are equal. Either operand may be <see langword="null"/>; two
+    /// <see langword="null"/> operands are equal, and <see langword="null"/> equals no instance.
     /// </summary>
-    public static bool operator ==(FileId left, FileId right) => left.Guid == right.Guid;
+    /// <remarks>
+    /// The operators accept <see langword="null"/> because frameworks compare values generically: Entity Framework Core, for one,
+    /// compares every reference-type property with <see langword="null"/> through this operator when it takes original values, so
+    /// an operator that rejected <see langword="null"/> made the type impossible to map.
+    /// </remarks>
+    public static bool operator ==(FileId? left, FileId? right) =>
+        ReferenceEquals(left, right) || (left is not null && right is not null && left.Guid == right.Guid);
 
     /// <summary>
-    /// Determines whether two <see cref="FileId"/> instances are not equal.
+    /// Determines whether two <see cref="FileId"/> instances are not equal. Either operand may be <see langword="null"/>.
     /// </summary>
-    public static bool operator !=(FileId left, FileId right) => left.Guid != right.Guid;
+    public static bool operator !=(FileId? left, FileId? right) => !(left == right);
 
     /// <summary>
     /// Gets the underlying GUID representing the file ID.
