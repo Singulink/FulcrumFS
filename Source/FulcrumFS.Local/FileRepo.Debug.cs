@@ -33,6 +33,9 @@ internal enum DebugStep
     /// <summary>A health check is about to probe the repository volume; throwing an <see cref="IOException"/> from the hook simulates a failed probe.</summary>
     HealthCheckProbe,
 
+    /// <summary>A health check has written its probe to the lock file, so the probe has succeeded.</summary>
+    HealthCheckProbeWritten,
+
     /// <summary>
     /// The commit of a staged transaction has started (the application has committed its database) but nothing has been committed yet; throwing from the
     /// hook and then disposing the transaction leaves the on-disk state of a process that ended between staging and committing.

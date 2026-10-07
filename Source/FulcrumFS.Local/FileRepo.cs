@@ -434,6 +434,8 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
                 _probeValue ^= 1;
                 lockStream.Position = 0;
                 lockStream.WriteByte(_probeValue);
+
+                DebugStepHook?.Invoke(DebugStep.HealthCheckProbeWritten);
                 return true;
             }
             catch (Exception ex) when (ex is IOException or ObjectDisposedException or UnauthorizedAccessException)

@@ -30,6 +30,7 @@ public sealed class FileRepoHealthCheckTests
         try
         {
             int probes = 0;
+            int probesWritten = 0;
             int initializations = 0;
             int failuresToInject = 0;
 
@@ -45,6 +46,10 @@ public sealed class FileRepoHealthCheckTests
 
                     if (Interlocked.Exchange(ref failuresToInject, 0) > 0)
                         throw new IOException("Simulated volume failure.");
+                }
+                else if (step is DebugStep.HealthCheckProbeWritten)
+                {
+                    Interlocked.Increment(ref probesWritten);
                 }
             };
 
@@ -88,9 +93,10 @@ public sealed class FileRepoHealthCheckTests
             Volatile.Read(ref failuresToInject).ShouldBe(0);
             repo.HealthChecksActive.ShouldBeTrue();
 
-            // Re-initialization recreates the lock file (DeleteOnClose); once probed again it is back to its single byte.
-            int probesAfterReinit = Volatile.Read(ref probes);
-            await AccessRepeatedlyAsync(repo, until: () => Volatile.Read(ref probes) > probesAfterReinit, timeout: _interval * 15);
+            // Re-initialization recreates the lock file (DeleteOnClose); once a probe has written to it again it is back to its single byte. This waits for
+            // the write itself rather than the probe's start, since the background probe runs on a timer thread and may not have written yet.
+            int probesWrittenAfterReinit = Volatile.Read(ref probesWritten);
+            await AccessRepeatedlyAsync(repo, until: () => Volatile.Read(ref probesWritten) > probesWrittenAfterReinit, timeout: _interval * 15);
             lockFile.Refresh();
             lockFile.Length.ShouldBe(1);
         }
