@@ -1,3 +1,3 @@
 // Share internal types with unit tests.
 using System.Runtime.CompilerServices;
-[assembly: InternalsVisibleTo("FulcrumFS.Documents.Tests")]
+[assembly: InternalsVisibleTo("FulcrumFS.Documents.Tests, PublicKey=002400000480000094000000060200000024000052534131000400000100010071ea14a9c9f75f6259d4d6a2aae17fe8a2d742fcf413dc872447728b1e936187f6626d35ec9e7f7ca4cb47c507045aea377637e8addd35912810eb26bd1d4c7edb6c3c9a5685783a101233e7dceaeac81f6e4cc095c17b65eede1a885ff47e5479e46cac2ac0a52b88806cf38a77ba8533d4b0026a63cdb7bca9ed23ab5580c0")]

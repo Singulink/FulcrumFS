@@ -24,7 +24,9 @@ public sealed class ImplementationSpiTests
     public void SharedPackage_GrantsInternalsOnlyToItsTests()
     {
         // The local implementation must build against the public surface alone, like any other implementation.
-        var friends = typeof(IFileRepo).Assembly.GetCustomAttributes<InternalsVisibleToAttribute>().Select(a => a.AssemblyName);
+        // The assemblies are strong-named, so each friend declaration carries the public key after the name.
+        var friends = typeof(IFileRepo).Assembly.GetCustomAttributes<InternalsVisibleToAttribute>()
+            .Select(a => a.AssemblyName.Split(',', 2)[0].Trim());
         friends.ShouldBe(["FulcrumFS.Tests"]);
     }
 

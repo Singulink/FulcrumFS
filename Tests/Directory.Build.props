@@ -4,6 +4,10 @@
   <PropertyGroup>
     <NoWarn>CS1591</NoWarn>
     <IsPackable>false</IsPackable>
+
+    <!-- The libraries are strong-named and grant their internals to the test assemblies, which must then be signed with the same key. -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)..\Source\key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>
