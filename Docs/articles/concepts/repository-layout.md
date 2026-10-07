@@ -94,7 +94,16 @@ Every <xref:FulcrumFS.FileId> owns a *file group*: a directory holding the main 
 How file IDs are generated is controlled by <xref:FulcrumFS.FileRepoOptions.FileIdMode>. The <xref:FulcrumFS.FileId> type itself is a GUID wrapper that can be created sequentially with <xref:FulcrumFS.FileId.CreateSequential*> or securely with <xref:FulcrumFS.FileId.CreateSecure*>, and it round-trips to and from strings and <xref:System.Guid>. A sequential ID is a version 7 GUID holding its creation time in milliseconds (see <xref:FulcrumFS.FileId.Timestamp>), a 4-bit counter of the IDs created in that millisecond and random bits, so up to 16 IDs per millisecond carry the current time and the IDs from one <xref:FulcrumFS.FileIdGenerator> sort in the order they were created. Each repository has a generator of its own, while <xref:FulcrumFS.FileId.CreateSequential*> uses the process-wide <xref:FulcrumFS.FileIdGenerator.Shared?displayProperty=nameWithType>.
 
 > [!NOTE]
-> <xref:FulcrumFS.FileId.CreateSequential*> is the right default for files stored in a database, because the resulting IDs cluster well in B-tree indexes the same way sequential GUIDs do. Choose <xref:FulcrumFS.FileId.CreateSecure*> only when the ID is exposed in a URL that should not be guessable.
+> <xref:FulcrumFS.FileId.CreateSequential*> is the right default for files stored in a database, because the resulting IDs are created in increasing order and so append to a B-tree index instead of scattering across it, provided the column keeps that order: see [Storing file IDs in a database](#storing-file-ids-in-a-database) for the encoding to use (SQL Server's `uniqueidentifier` orders by the last six bytes and does not). Choose <xref:FulcrumFS.FileId.CreateSecure*> only when the ID is exposed in a URL that should not be guessable.
+
+#### Storing file IDs in a database
+
+Store file IDs in a fixed 16-byte binary column, written with <xref:FulcrumFS.FileId.ToOrderedBytes*> and read back with <xref:FulcrumFS.FileId.FromOrderedBytes*>: `binary(16)` on SQL Server, and `bytea` or `BLOB` on other databases. The ordered encoding puts the version nibble in front of the timestamp, so under the byte-by-byte comparison that databases apply to binary values, sequential IDs sort in the order they were created and after every secure ID. An index over the column then receives new sequential IDs at its end, where B-tree inserts append, instead of splitting pages throughout the index.
+
+The encoding matters most for a repository that switches its <xref:FulcrumFS.FileRepoOptions.FileIdMode> from <xref:FulcrumFS.FileIdMode.Secure> to <xref:FulcrumFS.FileIdMode.Sequential>. In the RFC 9562 byte order that <xref:System.Guid.ToByteArray(System.Boolean)?displayProperty=nameWithType> returns with `bigEndian: true`, a version 7 ID starts with the high byte of its timestamp, which is `0x01` from late 2004 to late 2039, while the first bytes of version 4 IDs are random: the new sequential IDs would all land in a narrow band in the middle of the old ones, where every insert splits a page. SQL Server's `uniqueidentifier` type is no alternative, because it orders values by their last six bytes first, which are random in both kinds of ID.
+
+> [!WARNING]
+> The ordered encoding is not RFC 9562 byte order. Do not mix the two in one column: the same ID has different bytes in each, so lookups miss and the order is inconsistent.
 
 ## Files and Markers
 

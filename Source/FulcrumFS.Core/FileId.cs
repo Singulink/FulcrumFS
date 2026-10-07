@@ -9,6 +9,8 @@ namespace FulcrumFS;
 /// </summary>
 public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
 {
+    private const int OrderedBytesLength = 16;
+
     private static readonly long _maxTimestampMilliseconds = DateTimeOffset.MaxValue.ToUnixTimeMilliseconds();
 
     /// <summary>
@@ -131,6 +133,37 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
     }
 
     /// <summary>
+    /// Creates a file ID from the 16-byte ordered encoding written by <see cref="ToOrderedBytes()"/>.
+    /// </summary>
+    /// <remarks>
+    /// The encoding is not RFC 9562 byte order; see <see cref="ToOrderedBytes()"/>. To create a file ID from bytes in RFC 9562 byte order, convert them
+    /// with <see cref="System.Guid.Guid(ReadOnlySpan{byte}, bool)"/> with <c>bigEndian</c> set to <see langword="true"/> and pass the GUID to
+    /// <see cref="Create(System.Guid)"/>.
+    /// </remarks>
+    /// <param name="source">The 16 bytes of the ordered encoding.</param>
+    /// <exception cref="ArgumentException"><paramref name="source"/> is not exactly 16 bytes long, or the bytes do not encode a valid file ID.</exception>
+    public static FileId FromOrderedBytes(ReadOnlySpan<byte> source)
+    {
+        if (source.Length is not OrderedBytesLength)
+            throw new ArgumentException($"The ordered encoding of a file ID must be exactly {OrderedBytesLength} bytes long.", nameof(source));
+
+        // The reverse of the nibble map in ToOrderedBytes(Span<byte>): the version nibble returns to the high nibble of byte 6, and the timestamp moves one
+        // nibble left into bytes 0-5.
+        Span<byte> bytes = stackalloc byte[16];
+
+        bytes[0] = (byte)(((source[0] & 0x0F) << 4) | (source[1] >> 4));
+        bytes[1] = (byte)(((source[1] & 0x0F) << 4) | (source[2] >> 4));
+        bytes[2] = (byte)(((source[2] & 0x0F) << 4) | (source[3] >> 4));
+        bytes[3] = (byte)(((source[3] & 0x0F) << 4) | (source[4] >> 4));
+        bytes[4] = (byte)(((source[4] & 0x0F) << 4) | (source[5] >> 4));
+        bytes[5] = (byte)(((source[5] & 0x0F) << 4) | (source[6] >> 4));
+        bytes[6] = (byte)((source[0] & 0xF0) | (source[6] & 0x0F));
+        source[7..].CopyTo(bytes[7..]);
+
+        return new FileId(new Guid(bytes, bigEndian: true));
+    }
+
+    /// <summary>
     /// Parses the specified string representation of a file identifier.
     /// </summary>
     public static FileId Parse(string s)
@@ -199,6 +232,66 @@ public sealed class FileId : ISpanParsable<FileId>, IEquatable<FileId>
         extension = FileExtension.Normalize(extension);
         string fileName = string.IsNullOrEmpty(variantId) ? FileRepoPaths.MainFileName : VariantId.Normalize(variantId);
         return GetRelativeDirectory().CombineFile(fileName + extension);
+    }
+
+    /// <summary>
+    /// Returns the 16-byte ordered encoding of the file ID, under which sequential (version 7) IDs sort in the order they were created and after every
+    /// secure (version 4) ID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The encoding is for storing file IDs in an ordered binary database column, so that an index over the column receives new sequential IDs at its end
+    /// instead of throughout it. Store it in a fixed 16-byte binary column: <c>binary(16)</c> on SQL Server, whose <c>uniqueidentifier</c> type orders values
+    /// by their last six bytes first, and <c>bytea</c> or <c>BLOB</c> on other databases.</para>
+    /// <para>
+    /// Under ordinal comparison of the bytes (unsigned, first byte first, as databases compare binary values), the encoding of every version 7 ID is greater
+    /// than the encoding of every version 4 ID, and version 7 IDs compare by their timestamp and then their counter, so the IDs from one
+    /// <see cref="FileIdGenerator"/> compare in the order they were created. A repository that switches its <c>FileIdMode</c> from secure to sequential IDs
+    /// therefore adds its new IDs after all of its old ones. In RFC 9562 byte order the same version 7 IDs would fall in a narrow band in the middle of the
+    /// version 4 IDs, whose bytes are random, because a version 7 ID starts with the high byte of its timestamp, which is <c>0x01</c> from late 2004 to late
+    /// 2039.</para>
+    /// <para>
+    /// The encoding is not RFC 9562 byte order: it moves the version nibble in front of the timestamp. Do not store values in this encoding and in RFC 9562
+    /// byte order in the same column; the same ID has different bytes in each, and the two orders disagree. Callers that want RFC 9562 byte order instead
+    /// can use <see cref="System.Guid.ToByteArray(bool)"/> on <see cref="Guid"/> with <c>bigEndian</c> set to <see langword="true"/>. Use
+    /// <see cref="FromOrderedBytes(ReadOnlySpan{byte})"/> to create a file ID from its ordered encoding.</para>
+    /// </remarks>
+    public byte[] ToOrderedBytes()
+    {
+        byte[] bytes = new byte[OrderedBytesLength];
+        ToOrderedBytes(bytes);
+        return bytes;
+    }
+
+    /// <summary>
+    /// Writes the 16-byte ordered encoding of the file ID to the specified span. See <see cref="ToOrderedBytes()"/> for the order and its use.
+    /// </summary>
+    /// <param name="destination">The span to write the 16 bytes to.</param>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than 16 bytes.</exception>
+    public void ToOrderedBytes(Span<byte> destination)
+    {
+        if (destination.Length < OrderedBytesLength)
+            throw new ArgumentException($"The destination must be at least {OrderedBytesLength} bytes long.", nameof(destination));
+
+        // The encoding permutes the 32 nibbles of the RFC 9562 bytes. With 0-b the twelve nibbles of the 48-bit timestamp from most to least significant,
+        // V the version nibble, C the counter nibble (random in a version 4 ID, as are the timestamp nibbles) and r the remaining random and variant nibbles:
+        //
+        //   byte       0  1  2  3  4  5  6  7  8 .. 15
+        //   RFC 9562   01 23 45 67 89 ab VC rr rr .. rr
+        //   ordered    V0 12 34 56 78 9a bC rr rr .. rr
+        //
+        // The version nibble moves to the front, the timestamp moves one nibble right to make room for it, and bytes 7-15 are unchanged.
+        Span<byte> bytes = stackalloc byte[16];
+        Guid.TryWriteBytes(bytes, bigEndian: true, out _);
+
+        destination[0] = (byte)((bytes[6] & 0xF0) | (bytes[0] >> 4));
+        destination[1] = (byte)(((bytes[0] & 0x0F) << 4) | (bytes[1] >> 4));
+        destination[2] = (byte)(((bytes[1] & 0x0F) << 4) | (bytes[2] >> 4));
+        destination[3] = (byte)(((bytes[2] & 0x0F) << 4) | (bytes[3] >> 4));
+        destination[4] = (byte)(((bytes[3] & 0x0F) << 4) | (bytes[4] >> 4));
+        destination[5] = (byte)(((bytes[4] & 0x0F) << 4) | (bytes[5] >> 4));
+        destination[6] = (byte)(((bytes[5] & 0x0F) << 4) | (bytes[6] & 0x0F));
+        bytes[7..].CopyTo(destination[7..]);
     }
 
     /// <summary>
