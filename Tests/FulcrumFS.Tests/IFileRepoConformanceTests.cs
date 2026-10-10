@@ -532,6 +532,32 @@ public sealed class IFileRepoConformanceTests
     }
 
     [TestMethod]
+    public async Task Transaction_CommitAfterDispose_ThrowsObjectDisposed_AndCommitsNothing()
+    {
+        var repo = CreateRepo(NewRepoDir(), DeleteMode.Immediate);
+
+        try
+        {
+            var existing = await AddSampleFileAsync(repo);
+
+            var txn = await repo.BeginTransactionAsync();
+            var added = await AddSampleFileAsync(txn);
+            await txn.DeleteAsync(existing, TestContext.CancellationToken);
+            await txn.DisposeAsync();
+
+            // Disposal rolled the transaction back. A commit that returned normally would say that the added file is in the repository.
+            await Should.ThrowAsync<ObjectDisposedException>(() => txn.CommitAsync(TestContext.CancellationToken));
+
+            await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(added));
+            (await repo.GetAsync(existing)).FileId.ShouldBe(existing);
+        }
+        finally
+        {
+            DisposeRepo(repo);
+        }
+    }
+
+    [TestMethod]
     [DataRow(RepoFormatVersion.Version1)]
     [DataRow(RepoFormatVersion.Version2)]
     public async Task StagedTransaction_StageCommitAndClean(RepoFormatVersion formatVersion)

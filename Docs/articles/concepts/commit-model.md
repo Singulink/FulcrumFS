@@ -132,10 +132,12 @@ Three things follow for an application:
 - **Do not let the commit be cancelled.** A cancellation is the one case in which nothing was committed and disposing the transaction rolls it back, which after the database commit would discard files the database references, or the journal of deletions it has committed. Pass <xref:System.Threading.CancellationToken.None?displayProperty=nameWithType> to <xref:FulcrumFS.FileRepoTransaction.CommitAsync*?displayProperty=nameWithType> and <xref:FulcrumFS.FileRepoStage.CommitAsync*?displayProperty=nameWithType>. A <xref:FulcrumFS.FileRepo> observes the token only while the call waits for another call on the same transaction, and never once the commit has started.
 - **A handler that throws does not undo anything.** It is the way to see a failure to commit a file as an exception at the call site, and what the caller must then assume is exactly what the event says: the affected files are indeterminate.
 
+Committing a transaction that has itself already been disposed is a mistake of the caller rather than a failed commit: it throws <xref:System.ObjectDisposedException> too, the call commits nothing, and a transaction that was disposed without having been committed was rolled back by its disposal.
+
 <xref:FulcrumFS.FileRepoStagedTransaction.StageAsync*> is different, because it comes before the database commit: when it throws, nothing has been staged, the database must not commit, and disposing the transaction rolls it back.
 
 > [!NOTE]
-> A <xref:FulcrumFS.FileRepo> leaves one failure unreported: if the indeterminate marker of an added file cannot be removed, which is what commits the add, the file is left indeterminate and the failure is only logged to the marker. In <xref:FulcrumFS.DeleteMode.Immediate> mode, a file that cannot be deleted at once is not reported, because it is not a failure: its deletion is committed all the same, with a delete marker that a cleanup pass carries out.
+> A <xref:FulcrumFS.FileRepo> tolerates two things without reporting them, because neither is a failure for the application. If the indeterminate marker of an added file cannot be removed when the add commits, because something else has the marker open, the file is accessible and stays indeterminate until the next cleanup pass resolves it through the resolution callback and removes the marker; the attempt is logged to the marker. In <xref:FulcrumFS.DeleteMode.Immediate> mode, a file that cannot be deleted at once has its deletion committed all the same, with a delete marker that a cleanup pass carries out.
 
 ## Orphan Reclamation
 

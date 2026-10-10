@@ -225,12 +225,7 @@ public sealed class CommitContractTests
     }
 
     [TestMethod]
-    [Ignore(
-        "Known gap, not fixed: this is the guarantee, and the test fails. FileRepo.TxnCommitAddAsync removes the marker with " +
-        "RepoFileSystem.TryClearIndeterminateStateAsync, which swallows the failure (logging it to the marker), so the commit neither throws nor raises " +
-        "TransactionCompletionFailed and the file is left indeterminate without the application being told. A deletion that is rolled back removes its " +
-        "marker the same way. See the remarks of FileRepoTransaction.CommitAsync.")]
-    public async Task Commit_AnAddWhoseMarkerCannotBeRemoved_IsReported()
+    public async Task Commit_AnAddWhoseMarkerIsInUse_IsToleratedNotReported_AndIsResolvedByTheCleaner()
     {
         var repoDir = NewRepoDir();
         var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
@@ -242,31 +237,112 @@ public sealed class CommitContractTests
             var added = await AddSampleFileAsync(txn);
             var marker = IndeterminateMarker(repoDir, added);
 
-            // Removing the marker is what commits the add. A directory in its place, put there once the transaction has released the marker, cannot be
-            // removed as a file on any platform.
-            var blocker = CleanupDir(repoDir).CombineDirectory(marker.Name, PathOptions.None);
+            // Removing the marker is what commits the add. Something else has it open when the commit gets there (somebody reading it, a backup, a virus
+            // scanner), without allowing its deletion, from the moment the transaction has released it.
+            FileStream? inUse = null;
 
             repo.DebugStepHook = step =>
             {
                 if (step is DebugStep.AddCommitStarted)
-                {
-                    marker.Delete();
-                    blocker.Create();
-                }
+                    inUse = marker.OpenStream(FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             };
 
             try
             {
                 await txn.CommitAsync(TestContext.CancellationToken);
+                repo.DebugStepHook = null;
+
+                // Not a failure: the commit returns, nothing is reported, and the file is in the repository.
+                inUse.ShouldNotBeNull();
+                failures.ShouldBeEmpty();
+                (await repo.GetAsync(added)).FileId.ShouldBe(added);
+
+                if (!OperatingSystem.IsWindows())
+                {
+                    // An open handle keeps nobody from removing a file here, so the marker went and the add is committed.
+                    ShouldBeCommitted(repoDir, added);
+                    return;
+                }
+
+                // The marker could not be removed, so the file is left indeterminate, as accessible as a committed one.
+                marker.State.ShouldBe(EntryState.Exists);
+                (await CollectAsync(repo)).Single(e => e.FileId == added).IsIndeterminate.ShouldBeTrue();
             }
             finally
             {
                 repo.DebugStepHook = null;
-                blocker.Delete();
+
+                if (inUse is not null)
+                    await inUse.DisposeAsync();
             }
 
-            (await repo.GetAsync(added)).FileId.ShouldBe(added);
-            failures.ShouldHaveSingleItem().Operation.ShouldBe(RepoTransactionCompletionOperation.Commit);
+            // The next cleanup pass asks the application about the file, as about any indeterminate file, and removes the marker.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return IndeterminateResolution.Keep;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([added]);
+            ShouldBeCommitted(repoDir, added);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Ordinary transactions: a transaction that has been disposed
+    // ---------------------------------------------------------------------------------------------------------------
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Commit_OfADisposedTransaction_ThrowsObjectDisposed_AndCommitsNothing(bool committedFirst)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var existing = await AddSampleFileAsync(repo);
+
+            var txn = await repo.BeginTransactionAsync();
+            var added = await AddSampleFileAsync(txn);
+            await txn.DeleteAsync(existing, TestContext.CancellationToken);
+
+            if (committedFirst)
+                await txn.CommitAsync(TestContext.CancellationToken);
+
+            await txn.DisposeAsync();
+
+            // A commit that returned normally here would tell the caller of a transaction that was rolled back that its files are in the repository.
+            var ex = await Should.ThrowAsync<ObjectDisposedException>(() => txn.CommitAsync(TestContext.CancellationToken));
+            ex.ObjectName.ShouldBe(typeof(FileRepoTransaction).FullName);
+
+            if (committedFirst)
+            {
+                ShouldBeCommitted(repoDir, added);
+                ShouldBeDeleted(repoDir, existing, DeleteMode.Immediate);
+            }
+            else
+            {
+                // Disposal rolled the transaction back, and the commit did not bring anything of it back.
+                FileDir(repoDir, added).State.ShouldNotBe(EntryState.Exists);
+                ShouldBeCommitted(repoDir, existing);
+            }
+
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
         }
         finally
         {

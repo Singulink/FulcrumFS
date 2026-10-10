@@ -142,10 +142,13 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// <see cref="IFileRepo.TransactionCompletionFailed"/> handler that threw, once every file had been attempted, or from the repository having been
     /// disposed. Neither means that the transaction was rolled back: every file is committed or left indeterminate as above, and disposing the transaction
     /// rolls nothing back.</para>
+    /// <para>
+    /// Committing a transaction that has itself been disposed is an error of the caller and throws an <see cref="ObjectDisposedException"/> as well: the
+    /// call commits nothing, and a transaction that was disposed without having been committed was rolled back by its disposal.</para>
     /// </remarks>
     /// <exception cref="OperationCanceledException">The token was cancelled before the commit had started. Nothing has been committed.</exception>
-    /// <exception cref="ObjectDisposedException">The repository has been disposed. The files that had not been committed yet are left
-    /// indeterminate.</exception>
+    /// <exception cref="ObjectDisposedException">The transaction has been disposed: nothing is committed. Or the repository has been disposed: the files that
+    /// had not been committed yet are left indeterminate.</exception>
     Task CommitAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

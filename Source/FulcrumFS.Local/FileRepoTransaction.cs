@@ -177,9 +177,11 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// <para>
     /// A failure to commit an individual file, or to write the journal, is not thrown: it is reported through
     /// <see cref="FileRepo.TransactionCompletionFailed"/>. If the journal cannot be written, each deletion is recorded with its own delete marker instead. A
-    /// file whose commit failed stays accessible in an indeterminate state for the next cleanup pass to resolve. One failure is not reported: an added
-    /// file whose indeterminate marker cannot be removed, which is what commits the add, is left indeterminate with the failure logged only to the marker
-    /// (see <see cref="FileRepoOptions.MarkerFileLogging"/>).</para>
+    /// file whose commit failed stays accessible in an indeterminate state for the next cleanup pass to resolve.</para>
+    /// <para>
+    /// An indeterminate marker that cannot be removed because something else has it open is tolerated, not reported: removing the marker is what commits
+    /// an added file, the file is accessible either way, and it stays indeterminate until the next cleanup pass resolves it and removes the marker. The
+    /// attempt is logged to the marker (see <see cref="FileRepoOptions.MarkerFileLogging"/>).</para>
     /// <para>
     /// The files are committed one by one, so the transaction has no single point at which it commits, and once the commit has started the method throws
     /// in two cases only: a <see cref="FileRepo.TransactionCompletionFailed"/> handler threw, which happens after every file has been attempted, or the
@@ -189,7 +191,8 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// has committed.</para>
     /// </remarks>
     /// <exception cref="OperationCanceledException">The token was cancelled before the commit had started. Nothing has been committed.</exception>
-    /// <exception cref="ObjectDisposedException">The repository has been disposed. The files that had not been committed yet are left
+    /// <exception cref="ObjectDisposedException">The transaction has been disposed: nothing is committed, and a transaction that was disposed without
+    /// having been committed was rolled back by its disposal. Or the repository has been disposed: the files that had not been committed yet are left
     /// indeterminate.</exception>
     public async Task CommitAsync(CancellationToken cancellationToken = default)
     {
@@ -198,6 +201,10 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
 
         using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
         {
+            // Disposal rolled the transaction back, so there is nothing left to commit: returning normally would tell the caller that its files are in the
+            // repository when they are gone.
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+
             foreach (var fileId in _adds.FileIds)
                 await elc.TryRunAsync(_adds.CommitAsync(fileId)).ConfigureAwait(false);
 
