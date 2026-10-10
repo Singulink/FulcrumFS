@@ -620,6 +620,232 @@ public sealed class IFileRepoConformanceTests
     }
 
     [TestMethod]
+    public async Task Commit_GivenACancelledToken_CommitsEverythingOrThrowsHavingCommittedNothing()
+    {
+        var repo = CreateRepo(NewRepoDir(), DeleteMode.Immediate);
+
+        try
+        {
+            var existing = await AddSampleFileAsync(repo);
+            FileId added;
+            bool wasCancelled = false;
+
+            await using (var txn = await repo.BeginTransactionAsync())
+            {
+                added = await AddSampleFileAsync(txn);
+                await txn.DeleteAsync(existing, TestContext.CancellationToken);
+
+                try
+                {
+                    await txn.CommitAsync(new CancellationToken(canceled: true));
+                }
+                catch (OperationCanceledException)
+                {
+                    wasCancelled = true;
+                }
+            }
+
+            // An implementation may honor the token or not, but only before it commits anything. A commit that was cancelled has committed nothing and left
+            // the transaction open, so disposing it rolled all of it back; one that was not is committed in full.
+            if (wasCancelled)
+            {
+                await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(added));
+                (await repo.GetAsync(existing)).FileId.ShouldBe(existing);
+            }
+            else
+            {
+                (await repo.GetAsync(added)).FileId.ShouldBe(added);
+                await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(existing));
+            }
+        }
+        finally
+        {
+            DisposeRepo(repo);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(RepoFormatVersion.Version1)]
+    [DataRow(RepoFormatVersion.Version2)]
+    public async Task StagedTransaction_GivenACancelledToken_StagesAndCommitsOrThrowsHavingDoneNeither(RepoFormatVersion formatVersion)
+    {
+        var repo = CreateRepo(NewRepoDir(), DeleteMode.Immediate, formatVersion: formatVersion);
+
+        try
+        {
+            var existing = await AddSampleFileAsync(repo);
+            var cancelled = new CancellationToken(canceled: true);
+            FileId added;
+
+            await using (var txn = await repo.BeginStagedTransactionAsync())
+            {
+                await using (var source = File.OpenRead(_sampleFile.PathExport))
+                    added = (await txn.AddAsync(source, leaveOpen: true, FileProcessingPipeline.Empty, TestContext.CancellationToken)).FileId;
+
+                await txn.DeleteAsync(existing, TestContext.CancellationToken);
+
+                // A call that was cancelled did nothing, so the transaction can still be staged, and the stage still committed.
+                IFileRepoStage stage;
+
+                try
+                {
+                    stage = await txn.StageAsync(cancelled);
+                }
+                catch (OperationCanceledException)
+                {
+                    stage = await txn.StageAsync(TestContext.CancellationToken);
+                }
+
+                try
+                {
+                    await stage.CommitAsync(cancelled);
+                }
+                catch (OperationCanceledException)
+                {
+                    await stage.CommitAsync(TestContext.CancellationToken);
+                }
+            }
+
+            (await repo.GetAsync(added)).FileId.ShouldBe(added);
+            await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(existing));
+        }
+        finally
+        {
+            DisposeRepo(repo);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.Immediate, false)]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.Immediate, true)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean, false)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean, true)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.Immediate, false)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.Immediate, true)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.DeferredUntilClean, false)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.DeferredUntilClean, true)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.Immediate, false)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.Immediate, true)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean, false)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean, true)]
+    public async Task Delete_OfAFileAnotherTransactionIsAdding_IsRefusedOrWins(
+        bool staged, RepoFormatVersion formatVersion, DeleteMode deleteMode, bool addCommits)
+    {
+        var repo = CreateRepo(NewRepoDir(), deleteMode, formatVersion: formatVersion);
+
+        try
+        {
+            await using var adding = await repo.BeginTransactionAsync();
+            var fileId = await AddSampleFileAsync(adding);
+
+            // The add has returned, so the application may have committed a row for the file that another of its transactions now deletes.
+            bool isDeleted = staged ? await DeleteInStagedTransactionAsync(fileId) : await DeleteInTransactionAsync(fileId);
+
+            // The adding transaction finishes afterwards, without an error either way.
+            if (addCommits)
+                await adding.CommitAsync(TestContext.CancellationToken);
+            else
+                await adding.RollbackAsync(TestContext.CancellationToken);
+
+            await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+            // A deletion that committed stands whatever the add did afterwards, and one that was refused recorded nothing, so the file is what its add
+            // made of it.
+            if (isDeleted || !addCommits)
+                await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(fileId));
+            else
+                (await repo.GetAsync(fileId)).FileId.ShouldBe(fileId);
+        }
+        finally
+        {
+            DisposeRepo(repo);
+        }
+
+        // An implementation that cannot let the deletion win refuses it with an IOException, which is not the exception for a file that is missing. It
+        // must do so before the commit, which never throws for this.
+        async Task<bool> DeleteInTransactionAsync(FileId fileId)
+        {
+            await using var txn = await repo.BeginTransactionAsync();
+
+            try
+            {
+                await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+            }
+            catch (IOException ex) when (ex is not FileNotFoundException)
+            {
+                return false;
+            }
+
+            await txn.CommitAsync(TestContext.CancellationToken);
+            return true;
+        }
+
+        // A staged transaction must refuse it by the time it is staged, while the application can still roll back its database.
+        async Task<bool> DeleteInStagedTransactionAsync(FileId fileId)
+        {
+            await using var txn = await repo.BeginStagedTransactionAsync();
+            IFileRepoStage stage;
+
+            try
+            {
+                await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+                stage = await txn.StageAsync(TestContext.CancellationToken);
+            }
+            catch (IOException ex) when (ex is not FileNotFoundException)
+            {
+                return false;
+            }
+
+            await stage.CommitAsync(TestContext.CancellationToken);
+            return true;
+        }
+    }
+
+    [TestMethod]
+    public async Task Clean_WhileATransactionIsOpen_LeavesItsFilesAlone()
+    {
+        var repo = CreateRepo(NewRepoDir(), DeleteMode.Immediate);
+
+        try
+        {
+            var existing = await AddSampleFileAsync(repo);
+            FileId added;
+
+            await using (var txn = await repo.BeginTransactionAsync())
+            {
+                added = await AddSampleFileAsync(txn);
+                await txn.DeleteAsync(existing, TestContext.CancellationToken);
+
+                // The callback would have every file it is asked about deleted, but it is not asked about the files of a transaction that can still
+                // commit or roll back.
+                var asked = new List<FileId>();
+
+                await repo.CleanAsync(
+                    TimeSpan.Zero,
+                    id =>
+                    {
+                        asked.Add(id);
+                        return IndeterminateResolution.Delete;
+                    },
+                    TestContext.CancellationToken);
+
+                asked.ShouldBeEmpty();
+                (await repo.GetAsync(added)).FileId.ShouldBe(added);
+                (await repo.GetAsync(existing)).FileId.ShouldBe(existing);
+
+                await txn.CommitAsync(TestContext.CancellationToken);
+            }
+
+            (await repo.GetAsync(added)).FileId.ShouldBe(added);
+            await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(existing));
+        }
+        finally
+        {
+            DisposeRepo(repo);
+        }
+    }
+
+    [TestMethod]
     public async Task EnumerateFiles_ReportsEveryFileGroup()
     {
         var repo = CreateRepo(NewRepoDir(), DeleteMode.DeferredUntilClean);
@@ -714,6 +940,70 @@ public sealed class IFileRepoConformanceTests
             var reported = failures.ShouldHaveSingleItem();
             reported.Operation.ShouldBe(RepoTransactionCompletionOperation.Commit);
             reported.Exception.ShouldNotBeNull();
+        }
+        finally
+        {
+            DisposeRepo(repo);
+        }
+    }
+
+    [TestMethod]
+    public async Task TransactionCompletionFailed_AHandlerThatThrows_MakesTheCommitThrow_OnceItHasCommittedWhatItCould()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.DeferredUntilClean);
+        var handlerException = new InvalidOperationException("Thrown by the handler.");
+
+        repo.TransactionCompletionFailed += _ => Task.FromException(handlerException);
+
+        try
+        {
+            var blocked = await AddSampleFileAsync(repo);
+            FileId added;
+
+            await using (var txn = await repo.BeginTransactionAsync())
+            {
+                added = await AddSampleFileAsync(txn);
+                await txn.DeleteAsync(blocked, TestContext.CancellationToken);
+
+                // A directory in place of the file's delete marker makes the commit unable to record the deletion, as in the test above.
+                var blocker = repoDir
+                    .CombineDirectory(FileRepoPaths.CleanupDirectoryName, PathOptions.None)
+                    .CombineDirectory(blocked + FileRepoPaths.DeleteMarkerExtension, PathOptions.None);
+
+                blocker.Create();
+
+                try
+                {
+                    var thrown = await Should.ThrowAsync<InvalidOperationException>(() => txn.CommitAsync(TestContext.CancellationToken));
+                    thrown.ShouldBeSameAs(handlerException);
+                }
+                finally
+                {
+                    blocker.Delete();
+                }
+            }
+
+            // The exception does not mean that the transaction was not committed. The transaction has been disposed since, and nothing was rolled back:
+            // the add is committed, and the file whose deletion failed is still readable.
+            (await repo.GetAsync(added)).FileId.ShouldBe(added);
+            (await repo.GetAsync(blocked)).FileId.ShouldBe(blocked);
+
+            // That file, and only that one, is left for a cleanup pass to resolve through the callback.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([blocked]);
+            (await repo.GetAsync(added)).FileId.ShouldBe(added);
+            await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(blocked));
         }
         finally
         {

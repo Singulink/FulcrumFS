@@ -1,11 +1,11 @@
 namespace FulcrumFS;
 
 /// <summary>
-/// Identifies a checkpoint in the delete/rebase flow (or in repository initialization, health checking and staged commits) at which a test may observe
-/// progress or inject a simulated crash by throwing from <see cref="FileRepo.DebugStepHook"/>. The hook is <see langword="internal"/> and is never set in production use; it is exercised only by the test assembly
-/// via <c>InternalsVisibleTo</c>. Because the delete/rebase flow is strictly forward-only (every step persists a marker and never compensates on failure),
-/// throwing from the hook at a checkpoint leaves exactly the on-disk state a real crash would, which lets recovery (cleaner rollforward, or the add/delete
-/// optimistic rollforward) be tested faithfully.
+/// Identifies a checkpoint in the delete/rebase flow (or in repository initialization, health checking and transaction commits) at which a test may observe
+/// progress or inject a simulated crash or failure by throwing from <see cref="FileRepo.DebugStepHook"/>. The hook is <see langword="internal"/> and is never
+/// set in production use; it is exercised only by the test assembly via <c>InternalsVisibleTo</c>. Because the delete/rebase flow is strictly forward-only
+/// (every step persists a marker and never compensates on failure), throwing from the hook at a checkpoint leaves exactly the on-disk state a real crash
+/// would, which lets recovery (cleaner rollforward, or the add/delete optimistic rollforward) be tested faithfully.
 /// </summary>
 internal enum DebugStep
 {
@@ -41,6 +41,21 @@ internal enum DebugStep
     /// hook and then disposing the transaction leaves the on-disk state of a process that ended between staging and committing.
     /// </summary>
     StagedCommitStarted,
+
+    /// <summary>
+    /// A committing transaction has released the indeterminate marker of a file it added and is about to remove it, which is what commits the add. Throwing
+    /// from the hook fails the commit of that one file the way a real failure at this point does: the file stays where it is with a marker that nobody
+    /// holds, so it is indeterminate, and the transaction reports the failure and goes on to commit its other files.
+    /// </summary>
+    AddCommitStarted,
+
+    /// <summary>
+    /// A committing transaction has released the indeterminate marker of a file it deleted and is about to record or carry out the deletion (not raised for
+    /// a deletion that a delete journal records). Throwing from the hook fails the commit of that one deletion before anything of it has happened: the file
+    /// stays where it is with a marker that nobody holds, so it is indeterminate, and the transaction reports the failure and goes on to commit its other
+    /// files.
+    /// </summary>
+    DeleteCommitStarted,
 }
 
 /// <content>

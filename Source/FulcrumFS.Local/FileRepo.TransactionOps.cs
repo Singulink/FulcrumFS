@@ -134,6 +134,10 @@ partial class FileRepo
         //
         // The marker is flushed to disk before returning: once the application commits its deletion, a power loss before the repository commit would
         // otherwise lose the only record that the file should go.
+        //
+        // A transaction that added the file and has not finished holds the same marker exclusively, so the open below throws an IOException for as long
+        // as that transaction is open, which refuses the deletion. That is the safe outcome: the commit of the add removes the marker, so a deletion
+        // recorded in it would lose its record.
 
         var indeterminateMarker = _fs.GetIndeterminateMarker(fileId);
         const string message = "A transaction tentatively has marked this file for deletion.";
@@ -202,12 +206,18 @@ partial class FileRepo
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
+        DebugStepHook?.Invoke(DebugStep.AddCommitStarted);
+
         using (await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false))
             await _fs.TryClearIndeterminateStateAsync(fileId).ConfigureAwait(false);
     }
 
-    internal async ValueTask TxnCommitDeleteAsync(FileId fileId) =>
+    internal async ValueTask TxnCommitDeleteAsync(FileId fileId)
+    {
+        DebugStepHook?.Invoke(DebugStep.DeleteCommitStarted);
+
         await DeleteAsync(fileId, immediate: Options.DeleteMode is DeleteMode.Immediate).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Records the deletions an ordinary transaction is committing in one committed delete journal, flushed to disk, and returns <see langword="true"/>; or

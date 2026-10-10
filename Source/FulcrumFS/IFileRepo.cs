@@ -39,7 +39,13 @@ public interface IFileRepo : IFileRepoCleaner
     /// <see cref="AggregateException"/>.</para>
     /// <para>
     /// Completion failures are not thrown, because the affected files remain accessible afterwards and are resolved by the next cleanup pass. Implementations
-    /// raise the event from the commit or rollback call and await each handler, so a handler that throws makes the exception propagate from that call.</para>
+    /// raise the event from the commit or rollback call and await each handler in turn, so a handler that throws makes the exception propagate from that
+    /// call, and keeps the handlers subscribed after it from being called.</para>
+    /// <para>
+    /// The event is raised once the commit or rollback has done all it can: every file of the transaction has been committed (or rolled back) or left
+    /// indeterminate by then. An exception from a handler therefore reaches the caller after the fact and undoes nothing. A caller that sees one from
+    /// <see cref="IFileRepoTransaction.CommitAsync(CancellationToken)"/> or <see cref="IFileRepoStage.CommitAsync(CancellationToken)"/> must not conclude
+    /// that the transaction was not committed or was rolled back: its files are accessible, and a cleanup pass resolves those left indeterminate.</para>
     /// </remarks>
     event RepoTransactionCompletionFailedHandler? TransactionCompletionFailed;
 

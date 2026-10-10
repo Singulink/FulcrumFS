@@ -60,7 +60,7 @@ await stage.CommitAsync();            // Repository second.
 
 The [commit ordering rule](#the-commit-ordering-rule) is the same as for an ordinary transaction: the database commits first and the repository second. Staging only prepares the repository commit, so it comes before the database commit, and a failure to write the journal surfaces from <xref:FulcrumFS.FileRepoStagedTransaction.StageAsync*> while the database transaction can still be rolled back. A staged transaction has no commit method of its own; only the stage can commit it, so committing without staging cannot be written by mistake. When there is no database step between the two, <xref:FulcrumFS.FileRepoStagedTransaction.StageAndCommitAsync*> does both in one call.
 
-Committing the stage renames the journal from staged to committed, a single atomic operation however many files it lists. If that rename fails, <xref:FulcrumFS.FileRepoStage.CommitAsync*> throws, nothing has been committed and the call can be retried. Everything after the rename behaves like an ordinary commit: failures of individual files are reported through <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> and left for the cleaner. Once <xref:FulcrumFS.FileRepoStage.CommitAsync*> has been called the transaction is never rolled back, because the database has committed by then: if the commit failed and is not retried, disposing the transaction leaves its files [indeterminate](#the-indeterminate-state) for the cleaner to resolve.
+Committing the stage renames the journal from staged to committed, a single atomic operation however many files it lists, and flushes the rename to disk. If that step fails, <xref:FulcrumFS.FileRepoStage.CommitAsync*> throws, no file has been committed or deleted and the call can be retried. Everything after it behaves like an ordinary commit: failures of individual files are reported through <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> and left for the cleaner. Once <xref:FulcrumFS.FileRepoStage.CommitAsync*> has started the commit the transaction is never rolled back, because the database has committed by then: if the commit failed and is not retried, disposing the transaction leaves its files for the cleaner to resolve (see [What a Failed Commit Means](#what-a-failed-commit-means)).
 
 Files added in a staged transaction are tracked per file exactly as in an ordinary transaction and are committed or rolled back together with the deletions. Disposing the transaction before its stage commits rolls everything back. If the process ends between staging and committing, the cleaner treats the files listed in the journal like indeterminate files and resolves them through the resolution callback. See [Crash Recovery and Invariants](crash-recovery.md#delete-journals) for each state a journal can be in.
 
@@ -113,6 +113,29 @@ Indeterminate files are resolved during cleanup. <xref:FulcrumFS.FileRepo.CleanA
 
 > [!TIP]
 > The indeterminate state is not a failure mode you need to handle in every request. It is a rare backstop for the worst case. In practice, the resolution callback is the same query the application would use to check whether a row exists, and the cleaner runs it for the small number of indeterminate files cleanup encounters.
+
+## What a Failed Commit Means
+
+The repository commits after the database has, so the application has to know what an exception from the repository commit says about its files. Unless the call was cancelled, it does not say that anything was rolled back:
+
+| The commit call | What has happened to the files | What disposing the transaction then does |
+| --- | --- | --- |
+| returns | Each file is committed, or its commit failed: then it is indeterminate, still readable, and the failure was reported through <xref:FulcrumFS.FileRepo.TransactionCompletionFailed>. | Nothing. |
+| throws what a <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> handler threw | The same. The event is raised once every file has been attempted, so the exception arrives after the fact. | Nothing. |
+| throws <xref:System.ObjectDisposedException> because the repository was disposed | Whatever was committed before the repository was disposed stays committed. Every other file is left indeterminate. | Nothing: those files stay indeterminate. |
+| is <xref:FulcrumFS.FileRepoStage.CommitAsync*?displayProperty=nameWithType> and throws because the journal could not be committed | No added file is committed and no file is deleted. The journal is still staged, or already committed if only the flush of its rename failed. The call can be retried. | Leaves the files to the cleaner: it resolves them through the resolution callback, or deletes the listed files without asking if the journal is committed. |
+| throws <xref:System.OperationCanceledException> | Nothing: the commit did not start, and the transaction is as it was. | Rolls the transaction back. |
+
+Three things follow for an application:
+
+- **An exception from the commit is not a failed operation.** After the database commit, an added file is in the repository and a deleted file is gone or left for the cleaner, whatever the repository commit throws, with the one exception below. Log it; the next cleanup pass resolves what is indeterminate through the resolution callback, which keeps a file the database references and deletes one it does not.
+- **Do not let the commit be cancelled.** A cancellation is the one case in which nothing was committed and disposing the transaction rolls it back, which after the database commit would discard files the database references, or the journal of deletions it has committed. Pass <xref:System.Threading.CancellationToken.None?displayProperty=nameWithType> to <xref:FulcrumFS.FileRepoTransaction.CommitAsync*?displayProperty=nameWithType> and <xref:FulcrumFS.FileRepoStage.CommitAsync*?displayProperty=nameWithType>. A <xref:FulcrumFS.FileRepo> observes the token only while the call waits for another call on the same transaction, and never once the commit has started.
+- **A handler that throws does not undo anything.** It is the way to see a failure to commit a file as an exception at the call site, and what the caller must then assume is exactly what the event says: the affected files are indeterminate.
+
+<xref:FulcrumFS.FileRepoStagedTransaction.StageAsync*> is different, because it comes before the database commit: when it throws, nothing has been staged, the database must not commit, and disposing the transaction rolls it back.
+
+> [!NOTE]
+> A <xref:FulcrumFS.FileRepo> leaves one failure unreported: if the indeterminate marker of an added file cannot be removed, which is what commits the add, the file is left indeterminate and the failure is only logged to the marker. In <xref:FulcrumFS.DeleteMode.Immediate> mode, a file that cannot be deleted at once is not reported, because it is not a failure: its deletion is committed all the same, with a delete marker that a cleanup pass carries out.
 
 ## Orphan Reclamation
 

@@ -76,6 +76,17 @@ await stage.CommitAsync();            // Repository second.
 
 <xref:FulcrumFS.FileRepoStagedTransaction.DeleteAsync*> and <xref:FulcrumFS.FileRepoStagedTransaction.TryDeleteAsync*> behave like their ordinary counterparts, including the exception for a file that is not there. Once the stage is committed, the journal is the delete record of all of its files: in the deferred delete modes the cleaner deletes them once the journal is older than the delete delay, and in <xref:FulcrumFS.DeleteMode.Immediate> mode the commit deletes them straight away. See [Staged Transactions](../concepts/commit-model.md#staged-transactions) for the full model.
 
+#### Deleting a file another transaction is adding
+
+The database commits before the repository, so the row of a new file is visible to the rest of the application before the transaction that added the file has committed it. Another transaction can therefore be asked to delete a file whose add is still open: a message that is removed the moment it is delivered, an upload that is cancelled as it completes. Such a file exists, so neither delete method reports it as missing. What happens depends on how the deleting transaction records its deletions:
+
+- **A staged transaction, on a repository of [format version](../concepts/repository-layout.md#format-version) 2 or later, accepts the deletion, and it wins.** Once the stage is committed the file is deleted, by the commit itself in <xref:FulcrumFS.DeleteMode.Immediate> mode and by the cleaner in the deferred modes, whatever the adding transaction does afterwards: its commit succeeds, reports nothing and does not bring the file back, and its rollback discards the file as it always does. If the staged transaction is rolled back instead, the file is left to its add.
+- **An ordinary transaction refuses the deletion.** <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> and <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*> throw an <xref:System.IO.IOException> (not a <xref:FulcrumFS.RepoFileNotFoundException>) for as long as the adding transaction is open, because that transaction holds the marker the deletion would be recorded in. Nothing is recorded; roll the database transaction back and try again, which succeeds once the add has committed. On a version 1 repository a staged transaction is refused the same way when it is staged, by <xref:FulcrumFS.FileRepoStagedTransaction.StageAsync*>, which is still before the database commit.
+
+Either way a deletion that has committed is never undone by the add, and no file whose deletion committed stays on disk without a record of it. An application in which this can happen should delete with a staged transaction, or be prepared to retry a deletion that throws.
+
+A cleanup pass that runs while the add is open does not ask the resolution callback about the file and leaves it alone, unless a deletion of it has committed, which the pass then carries out.
+
 ## Retiring Variants
 
 Remove one or more variants from a single file group with <xref:FulcrumFS.FileRepo.DeleteVariantsAsync*>, which takes a <xref:FulcrumFS.FileId> and a span of variant IDs. A common use is dropping a thumbnail size that the front-end no longer renders. The call operates on the variants of one file, so a batch migration loops over the affected files:

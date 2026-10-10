@@ -178,6 +178,12 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// Deleting a file that another transaction has also deleted succeeds, including when that deletion has committed and the file is pending cleanup: the
     /// deletions converge in every <see cref="FileRepoOptions.DeleteMode"/>, whichever kind of transaction made them. Only a file that is gone, or never
     /// existed, throws.</para>
+    /// <para>
+    /// A file that another transaction has added and not committed yet exists, and its deletion is recorded like any other. On a repository with delete
+    /// journals it wins: once this transaction has committed, the file is deleted (in <see cref="DeleteMode.Immediate"/> mode by the commit itself) whatever
+    /// the adding transaction does afterwards, and that transaction's commit succeeds without bringing the file back. On a version 1 repository, where
+    /// staging writes the file's indeterminate marker, <see cref="StageAsync(CancellationToken)"/> throws an <see cref="IOException"/> for as long as the
+    /// adding transaction holds that marker.</para>
     /// </remarks>
     /// <exception cref="RepoFileNotFoundException">The file was not found in the repository: it never existed, or its deletion has already been carried
     /// out.</exception>
@@ -207,6 +213,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// <para>
     /// Prefer <see cref="DeleteAsync(FileId, CancellationToken)"/> when the application believes the file exists: a file that is unexpectedly missing usually
     /// indicates an application bug or a missing referenced file, and it should surface rather than be ignored.</para>
+    /// <para>
+    /// A file that another transaction has added and not committed yet exists, so this method returns <see langword="true"/> for it, and its deletion is
+    /// handled as described on <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has been staged or rolled back.</exception>
     public Task<bool> TryDeleteAsync(FileId fileId, CancellationToken cancellationToken = default)
@@ -218,20 +227,23 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// Stages the transaction: writes the deletions it recorded to a delete journal, flushes the journal to disk and holds it open, and returns the stage
     /// that commits the transaction. Call this before committing the application's database, and commit the stage after.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the call while it waits for another call on this transaction to finish. Once
+    /// staging has started it is not observed.</param>
     /// <remarks>
     /// <para>
     /// Once the transaction is staged, files can no longer be added to it or deleted by it. If it recorded no deletions, no journal is written and committing
     /// the stage only commits the files it added.</para>
     /// <para>
-    /// A failure to write the journal is thrown. Nothing has been staged in that case: the transaction can be staged again or rolled back, and the
-    /// application must not commit its database.</para>
+    /// A failure to write the journal is thrown, and so is a cancellation. Nothing has been staged in that case, and the journal that could not be completed
+    /// is removed: the transaction can be staged again or rolled back, disposing it rolls it back, and the application must not commit its database.</para>
     /// <para>
     /// On a version 1 repository the per-file markers described on <see cref="FileRepoStagedTransaction"/> are written instead of a journal. A failure to
-    /// write one is thrown in the same way, after the markers written before it have been removed again.</para>
+    /// write one is thrown in the same way, after the markers written before it have been removed again. The marker of a file that another transaction has
+    /// added and not committed yet cannot be written, because that transaction holds it.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
     /// <exception cref="IOException">The journal (or on a version 1 repository, a marker) could not be written.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled before staging had started. Nothing has been staged.</exception>
     public async Task<FileRepoStage> StageAsync(CancellationToken cancellationToken = default)
     {
         using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
@@ -258,13 +270,21 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// <summary>
     /// Stages the transaction and commits the stage, for callers that have no database commit to make between the two steps.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the call while it waits for another call on this transaction to finish, as for the
+    /// two methods it calls.</param>
     /// <remarks>
+    /// <para>
     /// This is equivalent to calling <see cref="StageAsync(CancellationToken)"/> and then <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> on the
-    /// returned stage, and fails in the same ways.
+    /// returned stage, and fails in the same ways.</para>
+    /// <para>
+    /// The stage is not returned, so a commit that failed cannot be made again, and calling this method again then throws an
+    /// <see cref="InvalidOperationException"/> because the transaction is staged. When this method throws, dispose the transaction: that rolls it back,
+    /// unless the commit had started and failed, in which case it leaves the transaction's files for the cleaner as described on
+    /// <see cref="FileRepoStage.CommitAsync(CancellationToken)"/>. Call the two methods separately if a failed commit is to be retried.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
     /// <exception cref="IOException">The journal could not be written or committed.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled before staging, or before the commit, had started.</exception>
     public async Task StageAndCommitAsync(CancellationToken cancellationToken = default)
     {
         var stage = await StageAsync(cancellationToken).ConfigureAwait(false);
@@ -291,8 +311,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// Disposes the transaction, rolling it back unless its stage has been committed.
     /// </summary>
     /// <remarks>
-    /// If <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> was called and failed, the transaction is not rolled back: its handles are released and
-    /// its files are left indeterminate for the cleaner to resolve through the resolution callback.
+    /// If <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> started the commit and failed, the transaction is not rolled back: its handles are
+    /// released and its files are left for the cleaner, which resolves them through the resolution callback, or deletes the files the journal lists without
+    /// asking if the journal had already been renamed to committed when the commit failed.
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
@@ -349,7 +370,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
             repository.DebugStepHook?.Invoke(DebugStep.StagedCommitStarted);
 
             // 1. Commit the record of the deletions in its single step, if it has one: the journal's atomic rename, flushed to disk. This is the one
-            //    completion step whose failure is thrown rather than reported: until it has succeeded nothing has been committed, and the caller can retry.
+            //    completion step whose failure is thrown rather than reported: until it has succeeded no file has been committed or deleted, and the caller
+            //    can retry. If the rename succeeded and its flush failed, the journal is committed on disk although this throws; a caller that disposes the
+            //    transaction instead of retrying then leaves a committed journal, which the cleaner applies.
             _deletes?.Commit();
 
             // 2. Commit the adds, releasing their indeterminate marker handles.

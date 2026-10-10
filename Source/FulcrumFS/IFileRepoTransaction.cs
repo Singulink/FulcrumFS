@@ -86,9 +86,16 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// Deleting a file that another transaction has also deleted succeeds, including when that deletion has committed and the file is pending cleanup.
     /// Implementations must make the deletions converge in every delete mode, whichever kind of transaction made them. Only a file that is gone, or never
     /// existed, throws.</para>
+    /// <para>
+    /// A file that another transaction has added and not committed yet exists. An implementation either accepts its deletion, which then wins (once this
+    /// transaction has committed, the file is deleted whatever the adding transaction does afterwards, and that transaction's commit succeeds without
+    /// bringing the file back), or refuses it with an <see cref="IOException"/> for as long as the adding transaction is open, having recorded nothing. A
+    /// deletion that has committed is never undone by the add.</para>
     /// </remarks>
     /// <exception cref="RepoFileNotFoundException">The file was not found in the repository: it never existed, or its deletion has already been carried
     /// out.</exception>
+    /// <exception cref="IOException">Another transaction is adding the file and has not finished, and the implementation does not accept the deletion of such
+    /// a file. Nothing has been recorded, and the deletion can be made again once that transaction has finished.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task DeleteAsync(FileId fileId, CancellationToken cancellationToken = default);
 
@@ -109,18 +116,36 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// A file that another transaction has deleted exists until its deletion has been carried out, so this method returns <see langword="true"/> for a file
     /// whose deletion has committed and is pending cleanup, and the deletions converge as described on
     /// <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
+    /// <para>
+    /// A file that another transaction has added and not committed yet exists as well: it is never reported as missing, and its deletion is accepted or
+    /// refused as described on <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
     /// </remarks>
+    /// <exception cref="IOException">Another transaction is adding the file and has not finished, and the implementation does not accept the deletion of such
+    /// a file. Nothing has been recorded, and the deletion can be made again once that transaction has finished.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task<bool> TryDeleteAsync(FileId fileId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Commits the transaction, making the files it added and deleted permanent in the repository.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the call before the commit has started. A commit that has started is not
+    /// interrupted.</param>
     /// <remarks>
+    /// <para>
     /// A failure to commit an individual file is not thrown: the file stays accessible in an indeterminate state for the next cleanup pass to resolve, and
-    /// the failure is reported through <see cref="IFileRepo.TransactionCompletionFailed"/>, whose handlers can throw if the caller should see it.
+    /// the failure is reported through <see cref="IFileRepo.TransactionCompletionFailed"/>. Once this method has returned, every file of the transaction is
+    /// therefore committed or indeterminate, and none has been rolled back.</para>
+    /// <para>
+    /// What has happened when this method throws depends on the exception. An <see cref="OperationCanceledException"/> means that nothing has been
+    /// committed: the transaction is still open, and disposing it rolls it back. So once the application's database has committed, pass
+    /// <see cref="CancellationToken.None"/>, or a cancellation could discard files that the database references. Any other exception comes from a
+    /// <see cref="IFileRepo.TransactionCompletionFailed"/> handler that threw, once every file had been attempted, or from the repository having been
+    /// disposed. Neither means that the transaction was rolled back: every file is committed or left indeterminate as above, and disposing the transaction
+    /// rolls nothing back.</para>
     /// </remarks>
+    /// <exception cref="OperationCanceledException">The token was cancelled before the commit had started. Nothing has been committed.</exception>
+    /// <exception cref="ObjectDisposedException">The repository has been disposed. The files that had not been committed yet are left
+    /// indeterminate.</exception>
     Task CommitAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -124,6 +124,12 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     /// Exceptions are not thrown automatically for completion-step failures since the affected files (added during commit or scheduled for deletion during
     /// rollback) remain accessible afterwards; they are merely left in an indeterminate state pending repair by the next cleaner pass. The handler can
     /// throw an exception if throwing behavior is desired.</para>
+    /// <para>
+    /// The event is raised once the commit or rollback has done all it can, and the handlers are awaited in turn. An exception that a handler throws
+    /// therefore propagates from the commit or rollback call after the fact and undoes nothing, and it keeps the handlers subscribed after it from being
+    /// called. A caller that sees one from <see cref="FileRepoTransaction.CommitAsync(CancellationToken)"/> or
+    /// <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> must not conclude that the transaction was not committed or was rolled back: every file
+    /// of it is committed or left indeterminate, stays accessible, and is not rolled back when the transaction is disposed.</para>
     /// </remarks>
     public event RepoTransactionCompletionFailedHandler? TransactionCompletionFailed;
 

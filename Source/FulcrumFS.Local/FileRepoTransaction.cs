@@ -119,9 +119,15 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// Deleting a file that another transaction has also deleted succeeds, including when that deletion has committed and the file is pending cleanup: the
     /// deletions converge in every <see cref="FileRepoOptions.DeleteMode"/>, whichever kind of transaction made them. Only a file that is gone, or never
     /// existed, throws.</para>
+    /// <para>
+    /// Deleting a file that another transaction has added and not committed yet throws an <see cref="IOException"/>, because that transaction holds the
+    /// file's indeterminate marker, which this deletion is recorded in. Nothing is recorded, and the transaction stays usable: the deletion succeeds once
+    /// the adding transaction has committed, and finds no file once it has rolled back. A <see cref="FileRepoStagedTransaction"/> on a repository with
+    /// delete journals accepts such a deletion instead.</para>
     /// </remarks>
     /// <exception cref="RepoFileNotFoundException">The file was not found in the repository: it never existed, or its deletion has already been carried
     /// out.</exception>
+    /// <exception cref="IOException">Another transaction is adding the file and has not committed or rolled back yet. Nothing has been recorded.</exception>
     public async Task DeleteAsync(FileId fileId, CancellationToken cancellationToken = default)
     {
         await DeleteCoreAsync(fileId, throwIfNotFound: true, cancellationToken).ConfigureAwait(false);
@@ -147,7 +153,11 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// <para>
     /// Prefer <see cref="DeleteAsync(FileId, CancellationToken)"/> when the application believes the file exists: a file that is unexpectedly missing usually
     /// indicates an application bug or a missing referenced file, and it should surface rather than be ignored.</para>
+    /// <para>
+    /// A file that another transaction has added and not committed yet is not reported as missing: this method throws an <see cref="IOException"/> for it,
+    /// as <see cref="DeleteAsync(FileId, CancellationToken)"/> does.</para>
     /// </remarks>
+    /// <exception cref="IOException">Another transaction is adding the file and has not committed or rolled back yet. Nothing has been recorded.</exception>
     public Task<bool> TryDeleteAsync(FileId fileId, CancellationToken cancellationToken = default)
     {
         return DeleteCoreAsync(fileId, throwIfNotFound: false, cancellationToken);
@@ -156,16 +166,31 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// <summary>
     /// Commits the transaction, making all file additions and deletion made during the transaction permanent in the repository.
     /// </summary>
+    /// <param name="cancellationToken">A cancellation token that cancels the call while it waits for another call on this transaction to finish. Once the
+    /// commit has started it is not observed.</param>
     /// <remarks>
     /// <para>
     /// In the deferred delete modes the deletions are recorded for the cleaner: a transaction that deletes two or more files records them in one delete
     /// journal, flushed to disk once for all of them, on a repository whose <see cref="FileRepo.FormatVersion"/> is 2 or later, and otherwise each deleted
-    /// file gets a delete marker of its own. In <see cref="DeleteMode.Immediate"/> mode the files are deleted now.</para>
+    /// file gets a delete marker of its own. In <see cref="DeleteMode.Immediate"/> mode the files are deleted now; one that cannot be deleted at once
+    /// gets a delete marker, and a cleanup pass deletes it.</para>
     /// <para>
     /// A failure to commit an individual file, or to write the journal, is not thrown: it is reported through
     /// <see cref="FileRepo.TransactionCompletionFailed"/>. If the journal cannot be written, each deletion is recorded with its own delete marker instead. A
-    /// file whose commit failed stays accessible in an indeterminate state for the next cleanup pass to resolve.</para>
+    /// file whose commit failed stays accessible in an indeterminate state for the next cleanup pass to resolve. One failure is not reported: an added
+    /// file whose indeterminate marker cannot be removed, which is what commits the add, is left indeterminate with the failure logged only to the marker
+    /// (see <see cref="FileRepoOptions.MarkerFileLogging"/>).</para>
+    /// <para>
+    /// The files are committed one by one, so the transaction has no single point at which it commits, and once the commit has started the method throws
+    /// in two cases only: a <see cref="FileRepo.TransactionCompletionFailed"/> handler threw, which happens after every file has been attempted, or the
+    /// repository has been disposed, which leaves the files not yet committed indeterminate. Neither means that the transaction was rolled back, and
+    /// disposing it afterwards rolls nothing back. An <see cref="OperationCanceledException"/> is thrown before the commit has started: nothing has been
+    /// committed, the transaction is still open, and disposing it rolls it back. Pass <see cref="CancellationToken.None"/> once the application's database
+    /// has committed.</para>
     /// </remarks>
+    /// <exception cref="OperationCanceledException">The token was cancelled before the commit had started. Nothing has been committed.</exception>
+    /// <exception cref="ObjectDisposedException">The repository has been disposed. The files that had not been committed yet are left
+    /// indeterminate.</exception>
     public async Task CommitAsync(CancellationToken cancellationToken = default)
     {
         var elc = new ExceptionListCapture(ex => ex is not ObjectDisposedException);

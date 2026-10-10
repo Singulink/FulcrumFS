@@ -70,6 +70,34 @@ internal sealed class MessageReportingProcessor : FileProcessor
 }
 
 /// <summary>
+/// A processor that waits until the test releases it and then passes the source through unchanged. An add that runs it holds its transaction busy for as
+/// long as the test wants, which is how the tests make another call on the same transaction wait.
+/// </summary>
+internal sealed class GateProcessor : FileProcessor
+{
+    private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Gets a task that completes once the processor is running, which is when its add holds the transaction.
+    /// </summary>
+    public Task Entered => _entered.Task;
+
+    public override IReadOnlyList<string> AllowedFileExtensions => [];
+
+    public void Release() => _released.TrySetResult();
+
+    protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
+    {
+        _entered.TrySetResult();
+        await _released.Task.ConfigureAwait(false);
+
+        var sourceFile = await context.GetSourceAsFileAsync().ConfigureAwait(false);
+        return FileProcessingResult.File(sourceFile, hasChanges: false);
+    }
+}
+
+/// <summary>
 /// Helpers for building common variant pipelines used across the variant alias and retirement tests.
 /// </summary>
 internal static class VariantPipelines
