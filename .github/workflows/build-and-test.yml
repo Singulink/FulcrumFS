@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [ main ]
 
+  # Weekly, whether or not anything was pushed: ffmpeg is built from upstream build systems that are followed at their heads, so a change there, or a new
+  # FFmpeg release that breaks a test, shows up within a week instead of at the next push. (GitHub runs a scheduled workflow on the default branch only, and
+  # pauses it after 60 days without activity in the repository.)
+  schedule:
+    - cron: '23 5 * * 1'
+
 # Auto-cancel any old in-progress runs for the same PR, but not for non-PR runs
 concurrency:
   group: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.run_id }}

@@ -12,13 +12,18 @@ if (-not $env:FFMPEG_OUTPUT_DIR) {
 # Ensure the output directory exists.
 New-Item -ItemType Directory -Force -Path $env:FFMPEG_OUTPUT_DIR | Out-Null
 
-# media-autobuild_suite requires a very short root path.
-$suiteRoot = 'C:\ffmpeg'
+# media-autobuild_suite requires a very short root path. FFMPEG_SUITE_ROOT overrides the default, for a machine where C:\ffmpeg is taken.
+$suiteRoot = if ($env:FFMPEG_SUITE_ROOT) { $env:FFMPEG_SUITE_ROOT } else { 'C:\ffmpeg' }
 $suiteDir = Join-Path $suiteRoot 'media-autobuild_suite'
 
-# Remove any leftover state from a previous (failed) attempt so a retry starts from a clean slate
-# (e.g. a partial git clone or a stale build\compilation_failed marker).
+# The build starts from a clean slate. On CI that means removing what a previous (failed) attempt left behind (e.g. a partial git clone or a stale
+# build\compilation_failed marker). Anywhere else, a folder that exists is someone's own (a developer's suite, with hours of compiled work in it), so it is
+# never deleted: the build refuses to start instead.
 if (Test-Path $suiteRoot) {
+    if (-not $env:CI) {
+        throw "$suiteRoot exists already. This script builds from a clean slate and does not delete a folder outside CI: remove it yourself, or set FFMPEG_SUITE_ROOT to another short path that does not exist."
+    }
+
     Remove-Item -Recurse -Force -Path $suiteRoot
 }
 
@@ -57,7 +62,10 @@ if ([regex]::Matches($content, [regex]::Escape($old)).Count -ne 1) {
     throw "Expected exactly one match in $bat"
 }
 $content = $content.Replace($old, $new)
-Set-Content $bat $content -Encoding UTF8
+
+# Written without a byte order mark, which cmd.exe would read as part of the first command of the batch file (Windows PowerShell's Set-Content -Encoding UTF8
+# writes one; PowerShell 7's does not).
+[System.IO.File]::WriteAllText($bat, $content, (New-Object System.Text.UTF8Encoding($false)))
 
 # Run the suite.
 $PSNativeCommandUseErrorActionPreference = $false
@@ -84,9 +92,13 @@ foreach ($exe in 'ffmpeg.exe', 'ffprobe.exe') {
     Write-Host "Copied $exe to $env:FFMPEG_OUTPUT_DIR."
 }
 
+# Say which FFmpeg was built (the suite builds FFmpeg's current master), so a test run's log names the revision its results are for.
+$versionLine = & (Join-Path $env:FFMPEG_OUTPUT_DIR 'ffmpeg.exe') -hide_banner -version | Select-Object -First 1
+Write-Host "Built $versionLine"
+
 # On CI, delete the build tree now that the (statically linked) binaries have been extracted from it. CI runners have very limited disk space (generally ~14GB),
 # and the sources plus build artifacts take up a large chunk of it. Only do this on CI so local runs can inspect the tree if desired.
-if ($env:CI -ne '') {
+if ($env:CI) {
     Write-Host 'Removing the ffmpeg build tree to free up disk space (CI only).'
     Remove-Item -Recurse -Force -Path $suiteRoot -ErrorAction SilentlyContinue
 }
