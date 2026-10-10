@@ -37,9 +37,15 @@ foreach ($f in 'media-autobuild_suite.ini', 'ffmpeg_options.txt', 'mpv_options.t
     Copy-Item -Force -Path (Join-Path $PSScriptRoot $f) -Destination (Join-Path $buildDir $f)
 }
 
+$bat = Join-Path $suiteDir 'media-autobuild_suite.bat'
+
+# The suite is cloned at the head of its default branch on purpose (it builds FFmpeg's current master with current libraries, which is how the video tests
+# keep running against current FFmpeg), so it can gain an option between two runs. It asks on the console for every option the answers file lacks, and
+# without input it asks forever, so check first that the answers file is complete: a missing answer then fails here, in seconds, naming the option.
+& (Join-Path $PSScriptRoot 'check-suite-options.ps1') -BatPath $bat -IniPath (Join-Path $buildDir 'media-autobuild_suite.ini')
+
 # HACK: We want to run the suite in CI mode so it doesn't ask for input; however, the CI env var doesn't get passed into mintty, so we need to manually adjust
 # the batch file so it sets it. Otherwise CI can get stuck for 6 hours & not retry.
-$bat = Join-Path $suiteDir 'media-autobuild_suite.bat'
 $content = [System.IO.File]::ReadAllText($bat)
 $old = @'
 "%command% %arg%"

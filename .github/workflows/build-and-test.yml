@@ -125,6 +125,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os == 'windows-latest' && 'test-video-windows-x64' || matrix.os == 'ubuntu-latest' && 'test-video-linux-x64' || 'test-video-macos-arm64' }}${{ matrix.hwaccel-mode != 'none' && format('-hwaccel-{0}', matrix.hwaccel-mode) || '' }}
 
+    # ffmpeg is built from source in this job, from upstream build systems that are followed at their heads. A build that hangs (as one waiting for console
+    # input did) is stopped here rather than at the default limit of six hours; the build and both test runs have taken about two and a half hours at most.
+    timeout-minutes: 240
+
     env:
       # Boost the priority of long-running ffmpeg processes so they do not get starved on busy CI machines, which otherwise can be responsible for some spurious test failures.
       BOOST_LONG_RUNNING_PROCESS_PRIORITY: 'true'
