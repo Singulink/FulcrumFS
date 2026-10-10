@@ -1,11 +1,12 @@
 namespace FulcrumFS;
 
 /// <summary>
-/// Identifies a checkpoint in the delete/rebase flow (or in repository initialization, health checking and transaction commits) at which a test may observe
-/// progress or inject a simulated crash or failure by throwing from <see cref="FileRepo.DebugStepHook"/>. The hook is <see langword="internal"/> and is never
-/// set in production use; it is exercised only by the test assembly via <c>InternalsVisibleTo</c>. Because the delete/rebase flow is strictly forward-only
-/// (every step persists a marker and never compensates on failure), throwing from the hook at a checkpoint leaves exactly the on-disk state a real crash
-/// would, which lets recovery (cleaner rollforward, or the add/delete optimistic rollforward) be tested faithfully.
+/// Identifies a checkpoint in the delete/rebase flow (or in repository initialization, health checking, and the deletions and commits of transactions) at
+/// which a test may observe progress or inject a simulated crash or failure by throwing from <see cref="FileRepo.DebugStepHook"/>. The hook is
+/// <see langword="internal"/> and is never set in production use; it is exercised only by the test assembly via <c>InternalsVisibleTo</c>. Because the
+/// delete/rebase flow is strictly forward-only (every step persists a marker and never compensates on failure), throwing from the hook at a checkpoint
+/// leaves exactly the on-disk state a real crash would, which lets recovery (cleaner rollforward, or the add/delete optimistic rollforward) be tested
+/// faithfully.
 /// </summary>
 internal enum DebugStep
 {
@@ -45,7 +46,9 @@ internal enum DebugStep
     /// <summary>
     /// A committing transaction has released the indeterminate marker of a file it added and is about to remove it, which is what commits the add. Throwing
     /// from the hook fails the commit of that one file the way a real failure at this point does: the file stays where it is with a marker that nobody
-    /// holds, so it is indeterminate, and the transaction reports the failure and goes on to commit its other files.
+    /// holds, so it is indeterminate, and the transaction reports the failure and goes on to commit its other files. The hook is called with the file's
+    /// lock held, because releasing and removing the marker are one step: a deletion of the file that the hook starts on another transaction does not get
+    /// through until the hook has returned and the marker is gone, so the hook must not wait for it.
     /// </summary>
     AddCommitStarted,
 
@@ -53,9 +56,17 @@ internal enum DebugStep
     /// A committing transaction has released the indeterminate marker of a file it deleted and is about to record or carry out the deletion (not raised for
     /// a deletion that a delete journal records). Throwing from the hook fails the commit of that one deletion before anything of it has happened: the file
     /// stays where it is with a marker that nobody holds, so it is indeterminate, and the transaction reports the failure and goes on to commit its other
-    /// files.
+    /// files. The hook is called with the file's lock held, as for <see cref="AddCommitStarted"/>: the rollback of another transaction's deletion of the
+    /// file does not get through until the hook has returned and the deletion is recorded.
     /// </summary>
     DeleteCommitStarted,
+
+    /// <summary>
+    /// A transaction that is deleting a file found the file's indeterminate marker in use, which normally means that the transaction that added the file
+    /// has not finished, and is about to wait before it tries to open the marker again. The hook is called without the file's lock, so it can finish the
+    /// transaction that holds the marker, which makes the next attempt the first one that follows the add's commit or rollback.
+    /// </summary>
+    DeleteMarkerInUse,
 }
 
 /// <content>

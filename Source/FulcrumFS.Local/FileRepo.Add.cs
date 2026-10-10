@@ -929,8 +929,10 @@ partial class FileRepo
 
     /// <summary>
     /// Adds a new main file (and any auto-variants declared by the pipeline) to the repository. Creates an indeterminate marker for the file and keeps an
-    /// exclusive handle on it open so that an active transaction can be detected by cleanup operations. The returned marker handle must be disposed by the
-    /// caller when the transaction commits or rolls back.
+    /// exclusive handle on it open so that an active transaction can be detected by cleanup operations, and so that no other transaction records a deletion
+    /// of the file in the marker. The caller hands the returned marker handle back when the transaction commits or rolls back the add (see
+    /// <see cref="TxnCommitAddAsync(FileId, IAsyncDisposable?)"/> and <see cref="TxnRollbackAddAsync(FileId, IAsyncDisposable?)"/>), which releases it in
+    /// the same step in which the marker or the file is removed, and disposes it if it lets go of the file without finishing.
     /// </summary>
     internal async Task<(RepoFileGroupInfo Group, IAsyncDisposable IndeterminateMarker)> AddTransactionalAsyncCore(
         FileId fileId,

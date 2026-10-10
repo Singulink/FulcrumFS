@@ -95,14 +95,16 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// <para>
     /// A file that another transaction has added and not committed yet exists. An implementation either accepts its deletion, which then wins (once this
     /// transaction has committed, the file is deleted whatever the adding transaction does afterwards, and that transaction's commit succeeds without
-    /// bringing the file back), or refuses it with an <see cref="IOException"/> for as long as the adding transaction is open, from this method or from
+    /// bringing the file back), or does not accept it while the adding transaction is open: it may wait briefly for that transaction to finish, and
+    /// refuses the deletion with a <see cref="RepoFileBusyException"/> if it is still open then, as described on
+    /// <see cref="IFileRepoTransaction.DeleteAsync(FileId, CancellationToken)"/>. It does so in this method or in
     /// <see cref="StageAsync(CancellationToken)"/>, which is before the application commits its database. A deletion that has committed is never undone
     /// by the add.</para>
     /// </remarks>
     /// <exception cref="RepoFileNotFoundException">The file was not found in the repository: it never existed, or its deletion has already been carried
     /// out.</exception>
-    /// <exception cref="IOException">Another transaction is adding the file and has not finished, and the implementation does not accept the deletion of such
-    /// a file. Nothing has been recorded.</exception>
+    /// <exception cref="RepoFileBusyException">Another transaction is adding the file and has not finished, and the implementation does not accept the
+    /// deletion of such a file. Nothing has been recorded.</exception>
     /// <exception cref="InvalidOperationException">The transaction has been staged or rolled back.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task DeleteAsync(FileId fileId, CancellationToken cancellationToken = default);
@@ -125,11 +127,11 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// whose deletion has committed and is pending cleanup, and the deletions converge as described on
     /// <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
     /// <para>
-    /// A file that another transaction has added and not committed yet exists as well: it is never reported as missing, and its deletion is accepted or
-    /// refused as described on <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
+    /// A file that another transaction has added and not committed yet exists as well: it is never reported as missing while that transaction is open, and
+    /// its deletion is accepted, waited for or refused as described on <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
     /// </remarks>
-    /// <exception cref="IOException">Another transaction is adding the file and has not finished, and the implementation does not accept the deletion of such
-    /// a file. Nothing has been recorded.</exception>
+    /// <exception cref="RepoFileBusyException">Another transaction is adding the file and has not finished, and the implementation does not accept the
+    /// deletion of such a file. Nothing has been recorded.</exception>
     /// <exception cref="InvalidOperationException">The transaction has been staged or rolled back.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task<bool> TryDeleteAsync(FileId fileId, CancellationToken cancellationToken = default);
@@ -138,7 +140,8 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// Stages the transaction: makes the deletions it recorded durable and returns the stage that commits the transaction. Call this before committing the
     /// application's database, and commit the stage after.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token that cancels the call before staging has started.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the call before the transaction has been staged. Once it is staged, the call is
+    /// not interrupted.</param>
     /// <returns>The stage that commits the transaction.</returns>
     /// <remarks>
     /// <para>
@@ -146,18 +149,25 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// <para>
     /// A failure to stage is thrown, and so is a cancellation. Nothing has been staged in that case and the transaction is as it was before the call: it can
     /// be staged again or rolled back, disposing it rolls it back, and the application must not commit its database.</para>
+    /// <para>
+    /// An implementation that does not accept the deletion of a file that another transaction is adding, and finds that out when it stages, may wait
+    /// briefly for that transaction to finish before it throws a <see cref="RepoFileBusyException"/> (see
+    /// <see cref="DeleteAsync(FileId, CancellationToken)"/>). Nothing has been staged then either, and the transaction can be staged again once the
+    /// adding transaction has finished.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
-    /// <exception cref="IOException">The deletions could not be made durable, or one of them is of a file that another transaction is adding and has not
-    /// finished, which the implementation does not accept (see <see cref="DeleteAsync(FileId, CancellationToken)"/>).</exception>
-    /// <exception cref="OperationCanceledException">The token was cancelled before staging had started. Nothing has been staged.</exception>
+    /// <exception cref="RepoFileBusyException">One of the deletions is of a file that another transaction is adding and has not finished, which the
+    /// implementation does not accept (see <see cref="DeleteAsync(FileId, CancellationToken)"/>). Nothing has been staged.</exception>
+    /// <exception cref="IOException">The deletions could not be made durable.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled before the transaction had been staged. Nothing has been staged.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task<IFileRepoStage> StageAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Stages the transaction and commits the stage, for callers that have no database commit to make between the two steps.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token that cancels the call before staging, or before the commit, has started.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the call before the transaction has been staged, or before the commit has
+    /// started.</param>
     /// <remarks>
     /// <para>
     /// This is equivalent to calling <see cref="StageAsync(CancellationToken)"/> and then <see cref="IFileRepoStage.CommitAsync(CancellationToken)"/> on the
@@ -169,7 +179,8 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
     /// <exception cref="IOException">The transaction could not be staged or committed.</exception>
-    /// <exception cref="OperationCanceledException">The token was cancelled before staging, or before the commit, had started.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled before the transaction had been staged, or before the commit had
+    /// started.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task StageAndCommitAsync(CancellationToken cancellationToken = default);
 

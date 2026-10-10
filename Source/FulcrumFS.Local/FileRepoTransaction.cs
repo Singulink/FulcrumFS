@@ -10,7 +10,9 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
 
     /// <summary>
     /// Tracks the shared open handle on each deleted file's indeterminate marker. Keeping these open is what signals to cleanup operations that the
-    /// transaction is still active and the markers must not be resolved.
+    /// transaction is still active and the markers must not be resolved. The repository counts each as a pending deletion of its file until it is released,
+    /// which keeps the rollback of another transaction's deletion of the same file from removing the marker. A handle is handed to the repository when its
+    /// deletion is committed or rolled back, because the repository releases it in the same step in which it finishes the deletion.
     /// </summary>
     private readonly Dictionary<FileId, IAsyncDisposable> _deleteMarkers = [];
 
@@ -120,14 +122,20 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// deletions converge in every <see cref="FileRepoOptions.DeleteMode"/>, whichever kind of transaction made them. Only a file that is gone, or never
     /// existed, throws.</para>
     /// <para>
-    /// Deleting a file that another transaction has added and not committed yet throws an <see cref="IOException"/>, because that transaction holds the
-    /// file's indeterminate marker, which this deletion is recorded in. Nothing is recorded, and the transaction stays usable: the deletion succeeds once
-    /// the adding transaction has committed, and finds no file once it has rolled back. A <see cref="FileRepoStagedTransaction"/> on a repository with
-    /// delete journals accepts such a deletion instead.</para>
+    /// A file that another transaction has added and not committed yet cannot be deleted while that transaction is open, because it holds the file's
+    /// indeterminate marker, which this deletion is recorded in. The adding transaction normally finishes within milliseconds, so this method waits for
+    /// the marker, for up to half a second, and then makes the deletion as if it had been called at that moment: the file is deleted if its add was
+    /// committed, and not found if it was rolled back. If the marker is still in use when the wait is over, the method throws a
+    /// <see cref="RepoFileBusyException"/>. Nothing has been recorded then, and the transaction stays usable: the deletion can be made again, and
+    /// succeeds once the adding transaction has committed. The wait cannot end if the adding transaction is one that the caller itself has open, which
+    /// is why it is short. A <see cref="FileRepoStagedTransaction"/> on a repository with delete journals accepts such a deletion instead.</para>
     /// </remarks>
     /// <exception cref="RepoFileNotFoundException">The file was not found in the repository: it never existed, or its deletion has already been carried
     /// out.</exception>
-    /// <exception cref="IOException">Another transaction is adding the file and has not committed or rolled back yet. Nothing has been recorded.</exception>
+    /// <exception cref="RepoFileBusyException">The file's indeterminate marker was still in use when the wait for it was over, which normally means that
+    /// another transaction is adding the file and has not committed or rolled back yet. Nothing has been recorded.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled while the call waited: for another call on this transaction, or for the file's
+    /// indeterminate marker. Nothing has been recorded.</exception>
     public async Task DeleteAsync(FileId fileId, CancellationToken cancellationToken = default)
     {
         await DeleteCoreAsync(fileId, throwIfNotFound: true, cancellationToken).ConfigureAwait(false);
@@ -154,10 +162,15 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// Prefer <see cref="DeleteAsync(FileId, CancellationToken)"/> when the application believes the file exists: a file that is unexpectedly missing usually
     /// indicates an application bug or a missing referenced file, and it should surface rather than be ignored.</para>
     /// <para>
-    /// A file that another transaction has added and not committed yet is not reported as missing: this method throws an <see cref="IOException"/> for it,
-    /// as <see cref="DeleteAsync(FileId, CancellationToken)"/> does.</para>
+    /// A file that another transaction has added and not committed yet is not reported as missing while that transaction is open: this method waits for
+    /// the file's indeterminate marker as <see cref="DeleteAsync(FileId, CancellationToken)"/> does, returns <see langword="true"/> if the add was
+    /// committed in that time and <see langword="false"/> if it was rolled back, and throws a <see cref="RepoFileBusyException"/> if the marker is still
+    /// in use when the wait is over.</para>
     /// </remarks>
-    /// <exception cref="IOException">Another transaction is adding the file and has not committed or rolled back yet. Nothing has been recorded.</exception>
+    /// <exception cref="RepoFileBusyException">The file's indeterminate marker was still in use when the wait for it was over, which normally means that
+    /// another transaction is adding the file and has not committed or rolled back yet. Nothing has been recorded.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled while the call waited: for another call on this transaction, or for the file's
+    /// indeterminate marker. Nothing has been recorded.</exception>
     public Task<bool> TryDeleteAsync(FileId fileId, CancellationToken cancellationToken = default)
     {
         return DeleteCoreAsync(fileId, throwIfNotFound: false, cancellationToken);
@@ -227,17 +240,11 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
 
         async Task CommitDeletesToJournalAsync() => isJournaled = await Repository.TxnCommitDeletesToJournalAsync(_deleted).ConfigureAwait(false);
 
-        async Task CommitDeleteAsync(FileId fileId)
-        {
-            await ReleaseDeleteMarkerAsync(fileId).ConfigureAwait(false);
-            await Repository.TxnCommitDeleteAsync(fileId).ConfigureAwait(false);
-        }
+        async Task CommitDeleteAsync(FileId fileId) =>
+            await Repository.TxnCommitDeleteAsync(fileId, TakeDeleteMarker(fileId)).ConfigureAwait(false);
 
-        async Task FinishJournaledDeleteAsync(FileId fileId)
-        {
-            await ReleaseDeleteMarkerAsync(fileId).ConfigureAwait(false);
-            await Repository.TxnFinishJournaledDeleteAsync(fileId).ConfigureAwait(false);
-        }
+        async Task FinishJournaledDeleteAsync(FileId fileId) =>
+            await Repository.TxnFinishJournaledDeleteAsync(fileId, TakeDeleteMarker(fileId)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -301,11 +308,8 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
         if (elc.HasExceptions)
             await repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Rollback, elc.ResultException).ConfigureAwait(false);
 
-        async Task RollbackDeleteAsync(FileId fileId)
-        {
-            await ReleaseDeleteMarkerAsync(fileId).ConfigureAwait(false);
-            await repository.TxnRollbackDeleteAsync(fileId).ConfigureAwait(false);
-        }
+        async Task RollbackDeleteAsync(FileId fileId) =>
+            await repository.TxnRollbackDeleteAsync(fileId, TakeDeleteMarker(fileId)).ConfigureAwait(false);
     }
 
     private async Task<bool> DeleteCoreAsync(FileId fileId, bool throwIfNotFound, CancellationToken cancellationToken)
@@ -322,7 +326,9 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
         if (_deleted.Contains(fileId))
             return true;
 
-        var indeterminateMarker = await Repository.TxnDeleteAsync(fileId, throwIfNotFound).ConfigureAwait(false);
+        // The token cancels the wait for a marker that is in use, normally because the transaction that added the file has not finished. Nothing has
+        // been recorded until the call returns, so a cancellation leaves the transaction as it was.
+        var indeterminateMarker = await Repository.TxnDeleteAsync(fileId, throwIfNotFound, cancellationToken).ConfigureAwait(false);
 
         if (indeterminateMarker is null)
             return false;
@@ -332,9 +338,9 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
         return true;
     }
 
-    private async ValueTask ReleaseDeleteMarkerAsync(FileId fileId)
-    {
-        if (_deleteMarkers.Remove(fileId, out var handle))
-            await handle.DisposeAsync().ConfigureAwait(false);
-    }
+    /// <summary>
+    /// Stops tracking the handle on a deleted file's indeterminate marker and returns it for the repository to release, or <see langword="null"/> if the
+    /// transaction no longer holds one.
+    /// </summary>
+    private IAsyncDisposable? TakeDeleteMarker(FileId fileId) => _deleteMarkers.Remove(fileId, out var handle) ? handle : null;
 }

@@ -463,6 +463,20 @@ partial class FileRepo
         await EnsureInitializedAsync().ConfigureAwait(false);
         using var fileLock = await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false);
 
+        return await DeleteLockedAsync(fileId, immediate).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// MUST BE CALLED WITH THE FILE'S LOCK HELD. Deletes a file and its variants as <see cref="DeleteAsync(FileId, bool)"/> does, for a caller that took
+    /// the lock to release its handle on the file's indeterminate marker in the same step.
+    /// </summary>
+    /// <remarks>
+    /// The file's indeterminate marker is removed whatever deletions of the file other transactions have pending through it, and only once the deletion no
+    /// longer depends on it: after the file group has been deleted, or after the file's delete marker has been written and flushed to disk (or was found
+    /// held by another actor, which flushes it; see <see cref="RepoFileSystem.LogToMarkerAsync(IAbsoluteFilePath, string, object, bool)"/>).
+    /// </remarks>
+    private async ValueTask<bool> DeleteLockedAsync(FileId fileId, bool immediate)
+    {
         var fileDir = _fs.GetFileDirectory(fileId);
         var deleteMarker = _fs.GetDeleteMarker(fileId, null);
         var indeterminateMarker = _fs.GetIndeterminateMarker(fileId);

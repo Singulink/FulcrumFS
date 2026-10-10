@@ -182,8 +182,8 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// A file that another transaction has added and not committed yet exists, and its deletion is recorded like any other. On a repository with delete
     /// journals it wins: once this transaction has committed, the file is deleted (in <see cref="DeleteMode.Immediate"/> mode by the commit itself) whatever
     /// the adding transaction does afterwards, and that transaction's commit succeeds without bringing the file back. On a version 1 repository, where
-    /// staging writes the file's indeterminate marker, <see cref="StageAsync(CancellationToken)"/> throws an <see cref="IOException"/> for as long as the
-    /// adding transaction holds that marker.</para>
+    /// staging writes the file's indeterminate marker, <see cref="StageAsync(CancellationToken)"/> waits briefly for that marker while the adding
+    /// transaction holds it, and throws a <see cref="RepoFileBusyException"/> if it is still in use then.</para>
     /// </remarks>
     /// <exception cref="RepoFileNotFoundException">The file was not found in the repository: it never existed, or its deletion has already been carried
     /// out.</exception>
@@ -227,8 +227,8 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// Stages the transaction: writes the deletions it recorded to a delete journal, flushes the journal to disk and holds it open, and returns the stage
     /// that commits the transaction. Call this before committing the application's database, and commit the stage after.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token that cancels the call while it waits for another call on this transaction to finish. Once
-    /// staging has started it is not observed.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the call while it waits: for another call on this transaction to finish, and on a
+    /// version 1 repository for a marker that is in use. It is not observed otherwise, and nothing has been staged when it cancels the call.</param>
     /// <remarks>
     /// <para>
     /// Once the transaction is staged, files can no longer be added to it or deleted by it. If it recorded no deletions, no journal is written and committing
@@ -239,11 +239,17 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// <para>
     /// On a version 1 repository the per-file markers described on <see cref="FileRepoStagedTransaction"/> are written instead of a journal. A failure to
     /// write one is thrown in the same way, after the markers written before it have been removed again. The marker of a file that another transaction has
-    /// added and not committed yet cannot be written, because that transaction holds it.</para>
+    /// added and not committed yet cannot be written while that transaction is open, because it holds the marker. Staging waits for such a marker as
+    /// <see cref="FileRepoTransaction.DeleteAsync(FileId, CancellationToken)"/> does, and goes on when the adding transaction has finished, whichever way
+    /// it did. If the marker is still in use when the wait is over, the method throws a <see cref="RepoFileBusyException"/>, and nothing has been
+    /// staged.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
+    /// <exception cref="RepoFileBusyException">On a version 1 repository, the indeterminate marker of a deleted file was still in use when the wait for it
+    /// was over, which normally means that another transaction is adding the file and has not committed or rolled back yet. Nothing has been
+    /// staged.</exception>
     /// <exception cref="IOException">The journal (or on a version 1 repository, a marker) could not be written.</exception>
-    /// <exception cref="OperationCanceledException">The token was cancelled before staging had started. Nothing has been staged.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled while the call waited. Nothing has been staged.</exception>
     public async Task<FileRepoStage> StageAsync(CancellationToken cancellationToken = default)
     {
         using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
@@ -255,8 +261,10 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
 
             ThrowIfNotOpen();
 
+            // The token is only observed while a marker that is in use is waited for, on a version 1 repository. Whatever was written is removed again
+            // when that wait is cancelled, so nothing has been staged then.
             if (_deleted.Count > 0)
-                _deletes = await Repository.TxnStageDeletesAsync(_deleted).ConfigureAwait(false);
+                _deletes = await Repository.TxnStageDeletesAsync(_deleted, cancellationToken).ConfigureAwait(false);
 
             _state = State.Staged;
             return new FileRepoStage(this);
@@ -270,8 +278,7 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// <summary>
     /// Stages the transaction and commits the stage, for callers that have no database commit to make between the two steps.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token that cancels the call while it waits for another call on this transaction to finish, as for the
-    /// two methods it calls.</param>
+    /// <param name="cancellationToken">A cancellation token that cancels the call while it waits, as for the two methods it calls.</param>
     /// <remarks>
     /// <para>
     /// This is equivalent to calling <see cref="StageAsync(CancellationToken)"/> and then <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> on the
@@ -283,8 +290,11 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// <see cref="FileRepoStage.CommitAsync(CancellationToken)"/>. Call the two methods separately if a failed commit is to be retried.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
+    /// <exception cref="RepoFileBusyException">The transaction could not be staged, as described on <see cref="StageAsync(CancellationToken)"/>. Nothing has
+    /// been staged.</exception>
     /// <exception cref="IOException">The journal could not be written or committed.</exception>
-    /// <exception cref="OperationCanceledException">The token was cancelled before staging, or before the commit, had started.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled before the transaction had been staged, or before the commit had
+    /// started.</exception>
     public async Task StageAndCommitAsync(CancellationToken cancellationToken = default)
     {
         var stage = await StageAsync(cancellationToken).ConfigureAwait(false);

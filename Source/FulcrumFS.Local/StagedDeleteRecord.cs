@@ -24,17 +24,19 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
 
     /// <summary>
     /// Opens the indeterminate marker of each of the specified files, flushed to disk, and returns the record holding them. The files are not checked again:
-    /// a file that is gone or has been deleted since its deletion was recorded is handled by the commit, as in an ordinary transaction. If a marker cannot be
-    /// written, the markers written so far are rolled back and the exception is propagated.
+    /// a file that is gone or has been deleted since its deletion was recorded is handled by the commit, as in an ordinary transaction. A marker that is in
+    /// use, normally because the transaction that added its file has not finished, is waited for briefly, which the token cancels. If a marker cannot be
+    /// written or the wait is cancelled, the markers written so far are rolled back and the exception is propagated.
     /// </summary>
-    public static async Task<StagedDeleteRecord> CreateMarkersAsync(FileRepo repository, IReadOnlyCollection<FileId> fileIds)
+    public static async Task<StagedDeleteRecord> CreateMarkersAsync(
+        FileRepo repository, IReadOnlyCollection<FileId> fileIds, CancellationToken cancellationToken)
     {
         var record = new MarkerRecord(repository);
 
         try
         {
             foreach (var fileId in fileIds)
-                record.Add(fileId, await repository.TxnOpenDeleteMarkerAsync(fileId).ConfigureAwait(false));
+                record.Add(fileId, await repository.TxnOpenDeleteMarkerAsync(fileId, cancellationToken).ConfigureAwait(false));
         }
         catch
         {
@@ -118,7 +120,7 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
     private sealed class MarkerRecord(FileRepo repository) : StagedDeleteRecord
     {
         // The shared handle on each deleted file's indeterminate marker, in the order the deletions were recorded. An entry is taken out before its deletion
-        // is finished, so whatever is left is still held.
+        // is finished, so whatever is left is still held. The repository releases the handle of a deletion in the same step in which it finishes it.
         private readonly Queue<(FileId FileId, IAsyncDisposable Marker)> _markers = [];
 
         public void Add(FileId fileId, IAsyncDisposable marker) => _markers.Enqueue((fileId, marker));
@@ -129,25 +131,13 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
         public override async Task ApplyAsync(ExceptionListCapture elc)
         {
             while (_markers.TryDequeue(out var entry))
-                await elc.TryRunAsync(CommitDeleteAsync(entry.FileId, entry.Marker)).ConfigureAwait(false);
-
-            async Task CommitDeleteAsync(FileId fileId, IAsyncDisposable marker)
-            {
-                await marker.DisposeAsync().ConfigureAwait(false);
-                await repository.TxnCommitDeleteAsync(fileId).ConfigureAwait(false);
-            }
+                await elc.TryRunAsync(repository.TxnCommitDeleteAsync(entry.FileId, entry.Marker)).ConfigureAwait(false);
         }
 
         public override async Task DiscardAsync(ExceptionListCapture elc)
         {
             while (_markers.TryDequeue(out var entry))
-                await elc.TryRunAsync(RollbackDeleteAsync(entry.FileId, entry.Marker)).ConfigureAwait(false);
-
-            async Task RollbackDeleteAsync(FileId fileId, IAsyncDisposable marker)
-            {
-                await marker.DisposeAsync().ConfigureAwait(false);
-                await repository.TxnRollbackDeleteAsync(fileId).ConfigureAwait(false);
-            }
+                await elc.TryRunAsync(repository.TxnRollbackDeleteAsync(entry.FileId, entry.Marker)).ConfigureAwait(false);
         }
 
         public override async ValueTask DisposeAsync()

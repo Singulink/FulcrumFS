@@ -787,8 +787,8 @@ public sealed class IFileRepoConformanceTests
             DisposeRepo(repo);
         }
 
-        // An implementation that cannot let the deletion win refuses it with an IOException, which is not the exception for a file that is missing. It
-        // must do so before the commit, which never throws for this.
+        // An implementation that cannot let the deletion win refuses it with a RepoFileBusyException, which is neither the exception for a file that is
+        // missing nor one that a storage fault could be taken for. It must do so before the commit, which never throws for this.
         async Task<bool> DeleteInTransactionAsync(FileId fileId)
         {
             await using var txn = await repo.BeginTransactionAsync();
@@ -797,7 +797,7 @@ public sealed class IFileRepoConformanceTests
             {
                 await txn.DeleteAsync(fileId, TestContext.CancellationToken);
             }
-            catch (IOException ex) when (ex is not FileNotFoundException)
+            catch (RepoFileBusyException)
             {
                 return false;
             }
@@ -817,7 +817,7 @@ public sealed class IFileRepoConformanceTests
                 await txn.DeleteAsync(fileId, TestContext.CancellationToken);
                 stage = await txn.StageAsync(TestContext.CancellationToken);
             }
-            catch (IOException ex) when (ex is not FileNotFoundException)
+            catch (RepoFileBusyException)
             {
                 return false;
             }

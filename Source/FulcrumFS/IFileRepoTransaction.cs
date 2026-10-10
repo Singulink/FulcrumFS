@@ -89,13 +89,17 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// <para>
     /// A file that another transaction has added and not committed yet exists. An implementation either accepts its deletion, which then wins (once this
     /// transaction has committed, the file is deleted whatever the adding transaction does afterwards, and that transaction's commit succeeds without
-    /// bringing the file back), or refuses it with an <see cref="IOException"/> for as long as the adding transaction is open, having recorded nothing. A
+    /// bringing the file back), or does not accept it while the adding transaction is open. In that case it may wait briefly for that transaction to
+    /// finish, because it normally does so within milliseconds, and then makes the deletion as if the call had been made at that moment: the file is
+    /// deleted if its add was committed, and not found if it was rolled back. If the adding transaction is still open when the wait is over, it refuses the
+    /// deletion with a <see cref="RepoFileBusyException"/>, having recorded nothing; this transaction stays usable, and the deletion can be made again. A
     /// deletion that has committed is never undone by the add.</para>
     /// </remarks>
     /// <exception cref="RepoFileNotFoundException">The file was not found in the repository: it never existed, or its deletion has already been carried
     /// out.</exception>
-    /// <exception cref="IOException">Another transaction is adding the file and has not finished, and the implementation does not accept the deletion of such
-    /// a file. Nothing has been recorded, and the deletion can be made again once that transaction has finished.</exception>
+    /// <exception cref="RepoFileBusyException">Another transaction is adding the file and has not finished, and the implementation does not accept the
+    /// deletion of such a file. Nothing has been recorded, and the deletion can be made again once that transaction has finished.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled before the deletion had been recorded. Nothing has been recorded.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task DeleteAsync(FileId fileId, CancellationToken cancellationToken = default);
 
@@ -117,11 +121,13 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// whose deletion has committed and is pending cleanup, and the deletions converge as described on
     /// <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
     /// <para>
-    /// A file that another transaction has added and not committed yet exists as well: it is never reported as missing, and its deletion is accepted or
-    /// refused as described on <see cref="DeleteAsync(FileId, CancellationToken)"/>.</para>
+    /// A file that another transaction has added and not committed yet exists as well: it is never reported as missing while that transaction is open, and
+    /// its deletion is accepted, waited for or refused as described on <see cref="DeleteAsync(FileId, CancellationToken)"/>. If the adding transaction
+    /// rolls back while this method waits for it, there is no file any more and the method returns <see langword="false"/>.</para>
     /// </remarks>
-    /// <exception cref="IOException">Another transaction is adding the file and has not finished, and the implementation does not accept the deletion of such
-    /// a file. Nothing has been recorded, and the deletion can be made again once that transaction has finished.</exception>
+    /// <exception cref="RepoFileBusyException">Another transaction is adding the file and has not finished, and the implementation does not accept the
+    /// deletion of such a file. Nothing has been recorded, and the deletion can be made again once that transaction has finished.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled before the deletion had been recorded. Nothing has been recorded.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed.</exception>
     Task<bool> TryDeleteAsync(FileId fileId, CancellationToken cancellationToken = default);
 

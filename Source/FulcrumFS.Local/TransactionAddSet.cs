@@ -17,7 +17,9 @@ internal sealed class TransactionAddSet
 
     /// <summary>
     /// Tracks the exclusive open handle on each added file's indeterminate marker. Keeping these open is what signals to cleanup operations that the
-    /// transaction is still active and the markers must not be resolved.
+    /// transaction is still active and the markers must not be resolved, and what keeps another transaction from recording a deletion of the file in a
+    /// marker that the commit of the add removes. A handle is handed to the repository when its file is committed, rolled back or discarded, because the
+    /// repository releases it in the same step in which it removes the marker or the file.
     /// </summary>
     private readonly Dictionary<FileId, IAsyncDisposable> _indeterminateMarkers = [];
 
@@ -64,8 +66,7 @@ internal sealed class TransactionAddSet
         if (!_added.Contains(fileId))
             return false;
 
-        await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
-        await _repository.TxnRollbackAddAsync(fileId).ConfigureAwait(false);
+        await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
         _added.Remove(fileId);
         _discarded.Add(fileId);
         return true;
@@ -78,8 +79,7 @@ internal sealed class TransactionAddSet
     {
         try
         {
-            await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
-            await _repository.TxnCommitAddAsync(fileId).ConfigureAwait(false);
+            await _repository.TxnCommitAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
         }
         finally
         {
@@ -94,8 +94,7 @@ internal sealed class TransactionAddSet
     {
         try
         {
-            await ReleaseIndeterminateMarkerAsync(fileId).ConfigureAwait(false);
-            await _repository.TxnRollbackAddAsync(fileId).ConfigureAwait(false);
+            await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
         }
         finally
         {
@@ -127,9 +126,9 @@ internal sealed class TransactionAddSet
         }
     }
 
-    private async ValueTask ReleaseIndeterminateMarkerAsync(FileId fileId)
-    {
-        if (_indeterminateMarkers.Remove(fileId, out var handle))
-            await handle.DisposeAsync().ConfigureAwait(false);
-    }
+    /// <summary>
+    /// Stops tracking the handle on a file's indeterminate marker and returns it for the repository to release, or <see langword="null"/> if the transaction
+    /// no longer holds one.
+    /// </summary>
+    private IAsyncDisposable? TakeIndeterminateMarker(FileId fileId) => _indeterminateMarkers.Remove(fileId, out var handle) ? handle : null;
 }

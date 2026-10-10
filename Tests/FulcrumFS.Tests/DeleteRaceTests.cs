@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 
 namespace FulcrumFS;
 
@@ -13,9 +16,10 @@ namespace FulcrumFS;
 /// whatever the adding transaction does afterwards, or the deletion is refused with an exception before anything is recorded.</para>
 /// <para>
 /// The local repository does one or the other depending on how the deleting transaction records its deletions. One that records them with the file's
-/// indeterminate marker (an ordinary transaction when it deletes, and a staged transaction on a version 1 repository when it is staged) is refused, because
-/// the adding transaction holds that marker exclusively. A staged transaction on a repository with delete journals does not touch the marker, so its
-/// deletion is accepted and wins.</para>
+/// indeterminate marker (an ordinary transaction when it deletes, and a staged transaction on a version 1 repository when it is staged) cannot open the
+/// marker while the adding transaction holds it exclusively: it waits briefly for the add to finish, which it normally does within milliseconds, and is
+/// refused with a <see cref="RepoFileBusyException"/> if the add is still open then. A staged transaction on a repository with delete journals does not
+/// touch the marker, so its deletion is accepted and wins.</para>
 /// </remarks>
 [PrefixTestClass]
 public sealed class DeleteRaceTests
@@ -23,12 +27,16 @@ public sealed class DeleteRaceTests
     private static readonly IAbsoluteDirectoryPath _appDir = DirectoryPath.GetAppBase();
     private static readonly IAbsoluteDirectoryPath _sampleDir = _appDir.CombineDirectory("SampleFiles");
 
+    // How long a debug step waits for a call on another transaction that must not get through while the step is running. The call does get through in that
+    // time when the repository does not keep it out, which is what makes the test fail then.
+    private static readonly TimeSpan _blockedCallWait = TimeSpan.FromMilliseconds(150);
+
     private static int _counter;
 
     public required TestContext TestContext { get; set; }
 
     // ---------------------------------------------------------------------------------------------------------------
-    // A deletion that is refused while the add is open
+    // A deletion that waits for the add, and is refused if the add stays open
     // ---------------------------------------------------------------------------------------------------------------
 
     [TestMethod]
@@ -40,7 +48,8 @@ public sealed class DeleteRaceTests
     [DataRow(RepoFormatVersion.Version2, false, true)]
     [DataRow(RepoFormatVersion.Version2, true, false)]
     [DataRow(RepoFormatVersion.Version2, true, true)]
-    public async Task OrdinaryDelete_OfAFileBeingAdded_IsRefusedUntilTheAddHasFinished(RepoFormatVersion formatVersion, bool useTryDelete, bool addCommits)
+    public async Task OrdinaryDelete_OfAFileBeingAdded_WaitsForTheAdd_AndIsMadeAsIfTheAddHadFinishedFirst(
+        RepoFormatVersion formatVersion, bool useTryDelete, bool addCommits)
     {
         var repoDir = NewRepoDir();
         var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
@@ -53,32 +62,80 @@ public sealed class DeleteRaceTests
 
             await using var deleting = await repo.BeginTransactionAsync();
 
-            // Refused, and not as a file that is missing: the file exists, and the transaction that is adding it holds its marker.
-            var ex = await Should.ThrowAsync<IOException>(() => DeleteAsync(deleting, fileId, useTryDelete));
-            ex.ShouldNotBeAssignableTo<FileNotFoundException>();
+            // The add finishes while the deletion waits for the file's marker, which is normally a matter of milliseconds: here, when the deletion has
+            // found the marker in use for the first time. The call is not made again; it goes on by itself.
+            var waits = OnMarkerInUse(repo, () => CompleteAsync(adding, addCommits));
+
+            if (addCommits)
+            {
+                // Accepted as the deletion of a committed file, with a marker of its own, and the commit deletes the file.
+                (await DeleteAsync(deleting, fileId, useTryDelete)).ShouldBeTrue();
+
+                FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+                CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(IndeterminateMarker(repoDir, fileId));
+                IsHeld(IndeterminateMarker(repoDir, fileId)).ShouldBeTrue();
+            }
+            else
+            {
+                // The add was rolled back, so there is no file: the answer of a deletion that was made after the rollback.
+                if (useTryDelete)
+                    (await deleting.TryDeleteAsync(fileId, TestContext.CancellationToken)).ShouldBeFalse();
+                else
+                    await Should.ThrowAsync<RepoFileNotFoundException>(() => deleting.DeleteAsync(fileId, TestContext.CancellationToken));
+
+                CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            }
+
+            repo.DebugStepHook = null;
+            waits.Value.ShouldBe(1);
+
+            await deleting.CommitAsync(TestContext.CancellationToken);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task OrdinaryDelete_OfAFileWhoseAddStaysOpen_ThrowsRepoFileBusyOnceTheWaitIsOver_AndRecordsNothing(bool useTryDelete)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            await using var adding = await repo.BeginTransactionAsync();
+            var fileId = await AddSampleFileAsync(adding);
+
+            await using var deleting = await repo.BeginTransactionAsync();
+
+            // Refused, and neither as a file that is missing nor with whatever the file system said: the file exists, and its marker is in use.
+            long started = Stopwatch.GetTimestamp();
+            var ex = await Should.ThrowAsync<RepoFileBusyException>(() => DeleteAsync(deleting, fileId, useTryDelete));
+            var waited = Stopwatch.GetElapsedTime(started);
+
+            ShouldSayThatTheFileIsBusy(ex, fileId);
+            ShouldHaveWaitedForTheMarker(waited);
 
             // Nothing was recorded, and the add is undisturbed.
             CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(IndeterminateMarker(repoDir, fileId));
             IsHeld(IndeterminateMarker(repoDir, fileId)).ShouldBeTrue();
             (await repo.GetAsync(fileId)).FileId.ShouldBe(fileId);
 
-            await CompleteAsync(adding, addCommits);
+            // The transaction is still usable: once the add has committed, it deletes the file, and its commit carries the deletion out.
+            await adding.CommitAsync(TestContext.CancellationToken);
+            ShouldBeCommitted(repoDir, fileId);
 
-            if (addCommits)
-            {
-                // The same transaction can delete the file now, and its commit deletes it.
-                ShouldBeCommitted(repoDir, fileId);
-                (await DeleteAsync(deleting, fileId, useTryDelete)).ShouldBeTrue();
-            }
-            else if (useTryDelete)
-            {
-                (await deleting.TryDeleteAsync(fileId, TestContext.CancellationToken)).ShouldBeFalse();
-            }
-            else
-            {
-                await Should.ThrowAsync<RepoFileNotFoundException>(() => deleting.DeleteAsync(fileId, TestContext.CancellationToken));
-            }
-
+            (await DeleteAsync(deleting, fileId, useTryDelete)).ShouldBeTrue();
             await deleting.CommitAsync(TestContext.CancellationToken);
 
             FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
@@ -94,7 +151,100 @@ public sealed class DeleteRaceTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task StagedDelete_Version1_OfAFileBeingAdded_IsRefusedWhenItIsStaged(bool addCommits)
+    public async Task OrdinaryDelete_CancelledWhileItWaitsForTheAdd_ThrowsAndRecordsNothing(bool useTryDelete)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            await using var adding = await repo.BeginTransactionAsync();
+            var fileId = await AddSampleFileAsync(adding);
+
+            await using var deleting = await repo.BeginTransactionAsync();
+            using var cts = new CancellationTokenSource();
+
+            // Cancelled when the deletion has found the marker in use and is about to wait.
+            var waits = OnMarkerInUse(repo, cts.CancelAsync);
+
+            if (useTryDelete)
+                await Should.ThrowAsync<OperationCanceledException>(() => deleting.TryDeleteAsync(fileId, cts.Token));
+            else
+                await Should.ThrowAsync<OperationCanceledException>(() => deleting.DeleteAsync(fileId, cts.Token));
+
+            repo.DebugStepHook = null;
+            waits.Value.ShouldBe(1);
+
+            // Nothing was recorded, and the add is undisturbed.
+            CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(IndeterminateMarker(repoDir, fileId));
+            IsHeld(IndeterminateMarker(repoDir, fileId)).ShouldBeTrue();
+
+            // The transaction is as it was before the call, so it deletes the file once the add has committed.
+            await adding.CommitAsync(TestContext.CancellationToken);
+
+            (await DeleteAsync(deleting, fileId, useTryDelete)).ShouldBeTrue();
+            await deleting.CommitAsync(TestContext.CancellationToken);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task OrdinaryDelete_WhenTheMarkerCannotBeOpenedForAnotherReason_ThrowsAtOnce_AndNotAsBusy(bool useTryDelete)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+            await using var deleting = await repo.BeginTransactionAsync();
+
+            // Only a marker that is in use is waited for. A directory in place of the marker is a fault that waiting does not clear.
+            var blocker = CleanupDir(repoDir).CombineDirectory(fileId + FileRepoPaths.IndeterminateMarkerExtension, PathOptions.None);
+            blocker.Create();
+
+            var waits = OnMarkerInUse(repo, () => Task.CompletedTask);
+
+            var ex = await Should.ThrowAsync<IOException>(() => DeleteAsync(deleting, fileId, useTryDelete));
+            ex.ShouldNotBeAssignableTo<RepoFileBusyException>();
+
+            repo.DebugStepHook = null;
+            waits.Value.ShouldBe(0);
+
+            // Nothing was recorded, and the transaction deletes the file once the fault is gone.
+            blocker.Delete();
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+
+            (await DeleteAsync(deleting, fileId, useTryDelete)).ShouldBeTrue();
+            await deleting.CommitAsync(TestContext.CancellationToken);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task StagedDelete_Version1_OfAFileBeingAdded_StagingWaitsForTheAdd(bool addCommits)
     {
         var repoDir = NewRepoDir();
         var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version1);
@@ -112,8 +262,57 @@ public sealed class DeleteRaceTests
             await deleting.DeleteAsync(other, TestContext.CancellationToken);
             (await deleting.TryDeleteAsync(fileId, TestContext.CancellationToken)).ShouldBeTrue();
 
-            var ex = await Should.ThrowAsync<IOException>(() => deleting.StageAsync(TestContext.CancellationToken));
-            ex.ShouldNotBeAssignableTo<FileNotFoundException>();
+            // The add finishes while staging waits for the file's marker, and staging goes on by itself, whichever way the add finished: the deletions
+            // are not checked again when they are staged, and the commit copes with a file that is gone.
+            var waits = OnMarkerInUse(repo, () => CompleteAsync(adding, addCommits));
+
+            var stage = await deleting.StageAsync(TestContext.CancellationToken);
+
+            repo.DebugStepHook = null;
+            waits.Value.ShouldBe(1);
+
+            FileId[] staged = [other, fileId];
+            CleanupDir(repoDir).GetChildFiles().ShouldBe(staged.Select(id => IndeterminateMarker(repoDir, id)), ignoreOrder: true);
+            staged.ShouldAllBe(id => IsHeld(IndeterminateMarker(repoDir, id)));
+
+            await stage.CommitAsync(TestContext.CancellationToken);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            FileDir(repoDir, other).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    public async Task StagedDelete_Version1_OfAFileWhoseAddStaysOpen_StagingThrowsRepoFileBusyOnceTheWaitIsOver_AndStagesNothing()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version1);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var other = await AddSampleFileAsync(repo);
+
+            await using var adding = await repo.BeginTransactionAsync();
+            var fileId = await AddSampleFileAsync(adding);
+
+            await using var deleting = await repo.BeginStagedTransactionAsync();
+            await deleting.DeleteAsync(other, TestContext.CancellationToken);
+            (await deleting.TryDeleteAsync(fileId, TestContext.CancellationToken)).ShouldBeTrue();
+
+            long started = Stopwatch.GetTimestamp();
+            var ex = await Should.ThrowAsync<RepoFileBusyException>(() => deleting.StageAsync(TestContext.CancellationToken));
+            var waited = Stopwatch.GetElapsedTime(started);
+
+            ShouldSayThatTheFileIsBusy(ex, fileId);
+            ShouldHaveWaitedForTheMarker(waited);
 
             // Nothing was staged (the marker written for the other file is gone again), so the application must not commit its database. The add is
             // undisturbed.
@@ -121,9 +320,9 @@ public sealed class DeleteRaceTests
             IsHeld(IndeterminateMarker(repoDir, fileId)).ShouldBeTrue();
             FileDir(repoDir, other).State.ShouldBe(EntryState.Exists);
 
-            await CompleteAsync(adding, addCommits);
+            // The transaction is still open, so it can be staged again once the add has finished.
+            await adding.CommitAsync(TestContext.CancellationToken);
 
-            // The transaction is still open, so it can be staged again once the add has finished, whichever way it did.
             var stage = await deleting.StageAsync(TestContext.CancellationToken);
             await stage.CommitAsync(TestContext.CancellationToken);
 
@@ -134,6 +333,55 @@ public sealed class DeleteRaceTests
         }
         finally
         {
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    public async Task StagedDelete_Version1_CancelledWhileStagingWaitsForTheAdd_ThrowsAndStagesNothing()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version1);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var other = await AddSampleFileAsync(repo);
+
+            await using var adding = await repo.BeginTransactionAsync();
+            var fileId = await AddSampleFileAsync(adding);
+
+            await using var deleting = await repo.BeginStagedTransactionAsync();
+            await deleting.DeleteAsync(other, TestContext.CancellationToken);
+            await deleting.DeleteAsync(fileId, TestContext.CancellationToken);
+
+            using var cts = new CancellationTokenSource();
+            var waits = OnMarkerInUse(repo, cts.CancelAsync);
+
+            await Should.ThrowAsync<OperationCanceledException>(() => deleting.StageAsync(cts.Token));
+
+            repo.DebugStepHook = null;
+            waits.Value.ShouldBe(1);
+
+            // Nothing was staged: the marker written for the other file before the wait is gone again, and the add is undisturbed.
+            CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(IndeterminateMarker(repoDir, fileId));
+            IsHeld(IndeterminateMarker(repoDir, fileId)).ShouldBeTrue();
+            FileDir(repoDir, other).State.ShouldBe(EntryState.Exists);
+
+            // The transaction is as it was before the call, so it can be staged once the add has finished.
+            await adding.CommitAsync(TestContext.CancellationToken);
+
+            var stage = await deleting.StageAsync(TestContext.CancellationToken);
+            await stage.CommitAsync(TestContext.CancellationToken);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            FileDir(repoDir, other).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
             repo.Dispose();
         }
     }
@@ -275,10 +523,17 @@ public sealed class DeleteRaceTests
         }
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // A deletion that arrives while the add is being committed
+    // ---------------------------------------------------------------------------------------------------------------
+
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task OrdinaryDelete_ArrivingWhileTheAddIsCommitting_IsAccepted_AndItsCommitDeletesTheFile(bool deleteCommits)
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public async Task OrdinaryDelete_ArrivingWhileTheAddIsCommitting_IsAcceptedOnceTheAddIsCommitted_AndKeepsItsMarkerUntilItHasFinished(
+        bool deleteCommits, bool deleteFinishesFirst)
     {
         var repoDir = NewRepoDir();
         var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
@@ -286,43 +541,88 @@ public sealed class DeleteRaceTests
 
         try
         {
+            // The adding transaction commits two files, one after the other, so that the deleting transaction can finish before that commit has returned.
             await using var adding = await repo.BeginTransactionAsync();
-            var fileId = await AddSampleFileAsync(adding);
+            FileId[] added = [await AddSampleFileAsync(adding), await AddSampleFileAsync(adding)];
 
             await using var deleting = await repo.BeginTransactionAsync();
 
-            // The deletion arrives at the earliest moment it is not refused: the add's commit has released the file's marker and has not removed it yet. The
-            // deletion then takes the marker, and the add's commit removes it from under the deleting transaction.
-            bool? accepted = null;
+            FileId? deleted = null;
+            Task<bool>? deletion = null;
+            bool? acceptedBeforeTheMarkerWasRemoved = null;
+            ExceptionDispatchInfo? failureInHook = null;
+            int addCommitsStarted = 0;
 
             repo.DebugStepHook = step =>
             {
-                if (step is DebugStep.AddCommitStarted)
-                    accepted = deleting.TryDeleteAsync(fileId, TestContext.CancellationToken).GetAwaiter().GetResult();
+                if (step is not DebugStep.AddCommitStarted)
+                    return;
+
+                if (Interlocked.Increment(ref addCommitsStarted) is 1)
+                {
+                    // The deletion arrives when the add's commit has released the marker of the file it is committing and has not removed it yet. A
+                    // deletion that took that marker would have it removed from under it, so it must not get through until the marker is gone.
+                    var fileId = added.Single(id => !IsHeld(IndeterminateMarker(repoDir, id)));
+
+                    deleted = fileId;
+                    deletion = Task.Run(() => deleting.TryDeleteAsync(fileId, TestContext.CancellationToken), TestContext.CancellationToken);
+                    acceptedBeforeTheMarkerWasRemoved = deletion.Wait(_blockedCallWait, TestContext.CancellationToken);
+                }
+                else if (deleteFinishesFirst)
+                {
+                    // The commit has reached its second file, so the add of the first one is committed while the commit has not returned.
+                    try
+                    {
+                        FinishDeletionAsync().GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        failureInHook = ExceptionDispatchInfo.Capture(ex);
+                    }
+                }
             };
 
             await adding.CommitAsync(TestContext.CancellationToken);
             repo.DebugStepHook = null;
 
-            accepted.ShouldBe(true);
-            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+            failureInHook?.Throw();
 
-            if (deleteCommits)
-            {
-                await deleting.CommitAsync(TestContext.CancellationToken);
-                FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
-            }
-            else
-            {
-                await deleting.RollbackAsync(TestContext.CancellationToken);
-                ShouldBeCommitted(repoDir, fileId);
-            }
+            if (!deleteFinishesFirst)
+                await FinishDeletionAsync();
 
+            acceptedBeforeTheMarkerWasRemoved.ShouldBe(false);
+            ShouldBeCommitted(repoDir, added.Single(id => id != deleted));
             CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
             failures.ShouldBeEmpty();
+
+            async Task FinishDeletionAsync()
+            {
+                var fileId = deleted.ShouldNotBeNull();
+                var marker = IndeterminateMarker(repoDir, fileId);
+
+                // Accepted as the deletion of a committed file: it is pending with a marker of its own, which is on disk and held.
+                (await deletion.ShouldNotBeNull()).ShouldBeTrue();
+
+                FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+                IsHeld(marker).ShouldBeTrue();
+
+                if (deleteCommits)
+                {
+                    await deleting.CommitAsync(TestContext.CancellationToken);
+                    FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+                }
+                else
+                {
+                    await deleting.RollbackAsync(TestContext.CancellationToken);
+                    ShouldBeCommitted(repoDir, fileId);
+                }
+
+                marker.State.ShouldNotBe(EntryState.Exists);
+            }
         }
         finally
         {
+            repo.DebugStepHook = null;
             repo.Dispose();
         }
     }
@@ -438,6 +738,51 @@ public sealed class DeleteRaceTests
 
     private Task CompleteAsync(FileRepoTransaction txn, bool commit) =>
         commit ? txn.CommitAsync(TestContext.CancellationToken) : txn.RollbackAsync(TestContext.CancellationToken);
+
+    /// <summary>
+    /// Runs an action the first time a deletion finds a file's marker in use and is about to wait for it, and counts how often a deletion gets there. The
+    /// repository calls the hook without the file's lock, so the action can finish the transaction that holds the marker.
+    /// </summary>
+    private static StrongBox<int> OnMarkerInUse(FileRepo repo, Func<Task> firstTime)
+    {
+        var waits = new StrongBox<int>();
+
+        repo.DebugStepHook = step =>
+        {
+            if (step is DebugStep.DeleteMarkerInUse && Interlocked.Increment(ref waits.Value) is 1)
+                firstTime().GetAwaiter().GetResult();
+        };
+
+        return waits;
+    }
+
+    /// <summary>
+    /// Asserts that the exception of a deletion that was refused says what the repository knows: which file, that its marker is in use and what that
+    /// normally means, and that nothing was recorded. The file system's exception, which names the marker's path, is inside it and not in its message.
+    /// </summary>
+    private static void ShouldSayThatTheFileIsBusy(RepoFileBusyException ex, FileId fileId)
+    {
+        ex.GetType().ShouldBe(typeof(RepoFileBusyException));
+
+        ex.Message.ShouldBe(
+            $"The deletion of file ID '{fileId}' could not be recorded because the file's indeterminate marker was still in use after " +
+            $"{FileRepo.MarkerInUseMaxWait.TotalMilliseconds:0} ms, which normally means that the transaction that added the file has not committed or " +
+            "rolled back yet. Nothing was recorded, and the deletion can be made again.");
+
+        RepoFileSystem.IsInUse(ex.InnerException.ShouldBeOfType<IOException>()).ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// Asserts that a deletion that was refused gave up when the wait for the marker was over, not before and not long after. The bounds are loose because
+    /// timers are; the time is written to the test's output.
+    /// </summary>
+    private void ShouldHaveWaitedForTheMarker(TimeSpan waited)
+    {
+        TestContext.WriteLine($"Waited {waited.TotalMilliseconds:0} ms for a marker that stayed in use.");
+
+        waited.ShouldBeGreaterThan(FileRepo.MarkerInUseMaxWait - TimeSpan.FromMilliseconds(50));
+        waited.ShouldBeLessThan(FileRepo.MarkerInUseMaxWait + TimeSpan.FromSeconds(10));
+    }
 
     /// <summary>
     /// Deletes a file with <c>TryDeleteAsync</c> or <c>DeleteAsync</c> and returns whether it existed, which <c>DeleteAsync</c> reports by not throwing.

@@ -76,14 +76,24 @@ partial class RepoFileSystem
 
     /// <summary>
     /// Opens or creates a marker file, appends a log entry, and returns a disposable that keeps the marker file open with shared access until disposed.
-    /// Multiple callers may concurrently hold the returned handle on the same marker, and any holder may delete the marker while another still has it open.
-    /// Cleanup operations attempting to open the marker exclusively (with <see cref="FileShare.None"/>) will be blocked while any handle remains open.
+    /// Multiple callers may concurrently hold the returned handle on the same marker. Cleanup operations attempting to open the marker exclusively (with
+    /// <see cref="FileShare.None"/>) will be blocked while any handle remains open.
     /// </summary>
     /// <param name="markerFile">The marker file to open or create.</param>
     /// <param name="header">The header of the log entry.</param>
     /// <param name="message">The message of the log entry.</param>
     /// <param name="flushToDisk">Whether the marker and its directory entry are flushed to disk before the handle is returned, for a marker whose existence
     /// must survive a power loss.</param>
+    /// <remarks>
+    /// <para>
+    /// The sharing lets the marker be deleted while handles on it are open, which says nothing about when a holder may delete it: the other holders may
+    /// still rely on the marker being on disk. The callers decide that. For the indeterminate marker of a file, the repository counts the transactions that
+    /// have a deletion of the file pending through it and removes the marker for one of them only when no other is left, or when the deletion is recorded
+    /// elsewhere.</para>
+    /// <para>
+    /// While a handle that does not share the marker is open, such as the one <see cref="CreateExclusiveMarkerAsync"/> returns, the open throws an
+    /// <see cref="IOException"/> for which <see cref="IsInUse(IOException)"/> returns <see langword="true"/>.</para>
+    /// </remarks>
     public async Task<IAsyncDisposable> OpenOrCreateSharedMarkerAsync(IAbsoluteFilePath markerFile, string header, object message, bool flushToDisk)
     {
         var stream = markerFile.OpenAsyncStream(FileMode.Append, FileAccess.Write, FileShare.Read | FileShare.Write | FileShare.Delete);
@@ -105,6 +115,31 @@ partial class RepoFileSystem
             await stream.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> if an exception thrown by opening a file says that the file is in use: a handle on it is open that does not allow the
+    /// sharing the open needs, which is what opening a marker that is held exclusively fails with. Returns <see langword="false"/> for every other failure
+    /// to open a file, such as a missing directory or a directory in place of the file.
+    /// </summary>
+    /// <remarks>
+    /// The condition has no exception type of its own, so it is told from other I/O failures by the error code the exception carries. On Windows that is the
+    /// sharing violation the open fails with. Unix has no sharing modes: the runtime emulates them with an advisory lock that it tries to take without
+    /// blocking once it has opened the file (exclusive for <see cref="FileShare.None"/>, shared for every other mode), and reports a lock that somebody else
+    /// holds with the same message and the <c>EWOULDBLOCK</c> of the attempt. On a platform where the code is another one, the condition is not recognized
+    /// and the exception is handled as any other I/O failure.
+    /// </remarks>
+    public static bool IsInUse(IOException exception)
+    {
+        // ERROR_SHARING_VIOLATION as the HRESULT that the exception carries on Windows.
+        const int SharingViolation = unchecked((int)0x80070020);
+
+        // On Unix the exception carries the errno itself. EWOULDBLOCK (the same value as EAGAIN) is 11 on Linux and 35 on the BSDs (including Apple
+        // platforms).
+        const int LinuxWouldBlock = 11;
+        const int BsdWouldBlock = 35;
+
+        return exception.HResult == (OperatingSystem.IsWindows() ? SharingViolation : OperatingSystem.IsLinux() ? LinuxWouldBlock : BsdWouldBlock);
     }
 
     /// <summary>

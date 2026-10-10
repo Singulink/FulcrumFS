@@ -779,7 +779,9 @@ public sealed class CommitContractTests
             var blocker = CleanupDir(repoDir).CombineDirectory(fileIds[1] + FileRepoPaths.IndeterminateMarkerExtension, PathOptions.None);
             blocker.Create();
 
-            await Should.ThrowAsync<IOException>(() => txn.StageAsync(TestContext.CancellationToken));
+            // The fault is thrown as it is and at once: only a marker that is in use is waited for and reported as a busy file.
+            var ex = await Should.ThrowAsync<IOException>(() => txn.StageAsync(TestContext.CancellationToken));
+            ex.ShouldNotBeAssignableTo<RepoFileBusyException>();
 
             CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
             fileIds.ShouldAllBe(id => FileDir(repoDir, id).State == EntryState.Exists);

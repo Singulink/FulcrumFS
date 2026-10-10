@@ -64,6 +64,28 @@ Adding a variant that already exists with <xref:FulcrumFS.FileRepo.AddVariantAsy
 
 See [File Variants](file-variants.md).
 
+## Delete Errors
+
+Deleting a file that is not there with <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> throws <xref:FulcrumFS.RepoFileNotFoundException>; <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*> returns `false` instead. See [Retrying and replaying deletes](deleting-files.md#retrying-and-replaying-deletes) for which of the two to use.
+
+Deleting a file that another transaction has added and not committed yet throws <xref:FulcrumFS.RepoFileBusyException> if that transaction is still open after a brief wait. It derives from <xref:System.IO.IOException>, so code that catches that keeps working, but it is not a storage fault: nothing has been recorded, the transaction stays usable, and the same deletion succeeds once the add has committed. Roll the database transaction back and let the operation be tried again.
+
+```csharp
+// Handler for "DELETE /api/documents/{id}".
+try
+{
+    await txn.DeleteAsync(doc.FileId);
+}
+catch (RepoFileBusyException)
+{
+    // The upload of this document is still being committed. Nothing was recorded,
+    // and disposing the transactions rolls them back: the client can try again.
+    return Results.Conflict();
+}
+```
+
+A staged transaction accepts such a deletion instead, on a repository of [format version](../concepts/repository-layout.md#format-version) 2 or later. See [Deleting a file another transaction is adding](deleting-files.md#deleting-a-file-another-transaction-is-adding).
+
 ## Commit and Rollback Failures
 
 Commit and rollback do not throw on failure. Instead, the affected files are marked indeterminate and remain readable, and the failure is reported through a single event:
