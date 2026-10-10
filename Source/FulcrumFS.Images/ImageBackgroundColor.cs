@@ -1,4 +1,5 @@
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace FulcrumFS.Images;
 
@@ -46,5 +47,5 @@ public readonly record struct ImageBackgroundColor
     public static ImageBackgroundColor FromRgb(byte r, byte g, byte b, bool skipIfTransparencySupported = false)
         => new(r, g, b, skipIfTransparencySupported);
 
-    internal Color ToLibColor() => Color.FromRgb(R, G, B);
+    internal Color ToLibColor() => Color.FromPixel(new Rgb24(R, G, B));
 }

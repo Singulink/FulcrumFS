@@ -2,6 +2,8 @@ using PrefixClassName.MsTest;
 using Shouldly;
 using Singulink.IO;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace FulcrumFS.Images;
 
@@ -261,6 +263,80 @@ public sealed class Tests
         });
 
         ex.Message.ShouldBe("Image format 'JPEG' is not allowed. Allowed formats: PNG");
+    }
+
+    [TestMethod]
+    public async Task SourceQualityIsNotExceeded()
+    {
+        ResetRepository();
+
+        // A source encoded at a low quality: encoding it again at a higher one would only make the file larger, so the quality read from the source caps the
+        // quality of the result, whatever the options ask for.
+        using var source = new MemoryStream();
+
+        using (var image = Image.Load(_imageFile.PathExport))
+            image.SaveAsJpeg(source, new JpegEncoder { Quality = 30 });
+
+        source.Position = 0;
+        Image.Identify(source).Metadata.GetJpegMetadata().Quality.ShouldBeInRange(28, 32);
+        source.Position = 0;
+
+        var pipeline = new ImageProcessor(new() {
+            Formats = [new(ImageFormat.Jpeg)],
+            Quality = ImageQuality.Highest,
+            ReencodeMode = ImageReencodeMode.Always,
+        }).ToPipeline();
+
+        FileId fileId;
+
+        await using (var txn = await _repo.BeginTransactionAsync())
+        {
+            fileId = (await txn.AddAsync(source, ".jpg", true, pipeline, TestContext.CancellationToken)).FileId;
+            await txn.CommitAsync(TestContext.CancellationToken);
+        }
+
+        Image.Identify((await _repo.GetAsync(fileId)).Path.PathExport).Metadata.GetJpegMetadata().Quality.ShouldBeInRange(28, 32);
+    }
+
+    [TestMethod]
+    public async Task BackgroundColorReplacesTransparency()
+    {
+        ResetRepository();
+
+        // A fully transparent image converted to a format without transparency takes the background color, channel for channel.
+        using var source = new MemoryStream();
+
+        using (var image = new Image<Rgba32>(32, 32))
+            image.SaveAsPng(source);
+
+        source.Position = 0;
+
+        var pipeline = new ImageProcessor(new() {
+            Formats = [new(ImageFormat.Png, ImageFormat.Jpeg)],
+            BackgroundColor = ImageBackgroundColor.FromRgb(20, 200, 90),
+            Quality = ImageQuality.Highest,
+        }).ToPipeline();
+
+        FileId fileId;
+
+        await using (var txn = await _repo.BeginTransactionAsync())
+        {
+            fileId = (await txn.AddAsync(source, ".png", true, pipeline, TestContext.CancellationToken)).FileId;
+            await txn.CommitAsync(TestContext.CancellationToken);
+        }
+
+        var path = (await _repo.GetAsync(fileId)).Path;
+        path.Extension.ShouldBe(".jpg");
+
+        using var result = Image.Load<Rgb24>(path.PathExport);
+        result.Width.ShouldBe(32);
+        result.Height.ShouldBe(32);
+
+        // JPEG is lossy, so each channel is allowed a small difference.
+        var pixel = result[16, 16];
+        ((int)pixel.R).ShouldBeInRange(16, 24);
+        ((int)pixel.G).ShouldBeInRange(196, 204);
+        ((int)pixel.B).ShouldBeInRange(86, 94);
     }
 
     private static void ResetRepository()

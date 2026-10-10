@@ -27,8 +27,9 @@ public abstract partial class ImageFormat
 
         internal override int GetJpegEquivalentQuality(LibMetadata.ImageMetadata metadata)
         {
-            var jpegMetadata = metadata.GetJpegMetadata();
-            return jpegMetadata.ColorType is not null ? jpegMetadata.Quality : 100;
+            // The quality the JPEG decoder estimated from the quantization tables of the source. (ImageSharp 3 had a nullable color type that told whether
+            // the decoder had filled the metadata in, which was checked here; since ImageSharp 4 the color type is always set.)
+            return metadata.GetJpegMetadata().Quality;
         }
 
         internal override LibFormats.IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int jpegEquivalentQuality, ImageMetadataStrippingMode stripMetadataMode)
