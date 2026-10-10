@@ -26,5 +26,4 @@
 --enable-opencl
 --enable-libvpl
 --enable-libplacebo
---enable-libglslang
 --disable-debug
