@@ -38,7 +38,9 @@ public class FileRepoOptions
     /// <remarks>
     /// The directory must be on a local file system: a local disk, or block storage that the operating system mounts as a local file system, such as an
     /// iSCSI or SAN volume. Network file systems, such as NFS mounts and SMB shares, are not supported. Transactions and the cleaner coordinate through
-    /// file locks, which .NET does not take on NFS and SMB mounts under Linux and macOS.
+    /// file locks, which .NET on Linux and macOS emulates with advisory locks: it does not take the shared lock that a transaction holds on a file it is
+    /// deleting when the file is on an NFS or SMB mount or on a file system it cannot identify, and takes none when its file locking is turned off
+    /// (<c>DOTNET_SYSTEM_IO_DISABLEFILELOCKING</c>), which an application that uses a repository on those platforms must not do.
     /// </remarks>
     public required IAbsoluteDirectoryPath BaseDirectory {
         get;

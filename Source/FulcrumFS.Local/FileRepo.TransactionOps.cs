@@ -191,6 +191,7 @@ partial class FileRepo
         while (true)
         {
             IOException retryReason;
+            bool markerRemoved = false;
 
             // The file is checked, its marker opened and the deletion counted under the file's lock, which every transaction holds while it releases its
             // handle on the marker and removes the marker or the file. So the deletion never takes a marker that the commit of the file's add has released
@@ -227,6 +228,7 @@ partial class FileRepo
 
                     await handle.DisposeAsync().ConfigureAwait(false);
                     retryReason = new IOException($"The indeterminate marker of file ID '{fileId}' was removed just after it was opened.");
+                    markerRemoved = true;
                 }
                 catch (IOException ex) when (RepoFileSystem.IsInUse(ex))
                 {
@@ -243,10 +245,13 @@ partial class FileRepo
 
             if (remaining < TimeSpan.FromMilliseconds(1))
             {
+                string cause = markerRemoved
+                    ? $"the file's indeterminate marker was removed each time it was opened, for {MarkerInUseMaxWait.TotalMilliseconds:0} ms"
+                    : $"the file's indeterminate marker was still in use after {MarkerInUseMaxWait.TotalMilliseconds:0} ms, which normally means that the " +
+                      "transaction that added the file has not committed or rolled back yet";
+
                 throw new RepoFileBusyException(
-                    $"The deletion of file ID '{fileId}' could not be recorded because the file's indeterminate marker was still in use after " +
-                    $"{MarkerInUseMaxWait.TotalMilliseconds:0} ms, which normally means that the transaction that added the file has not committed or rolled " +
-                    "back yet. Nothing was recorded, and the deletion can be made again.",
+                    $"The deletion of file ID '{fileId}' could not be recorded because {cause}. Nothing was recorded, and the deletion can be made again.",
                     retryReason);
             }
 
@@ -263,14 +268,22 @@ partial class FileRepo
     /// </summary>
     /// <param name="fileId">The file.</param>
     /// <param name="handle">The handle on the file's indeterminate marker.</param>
-    /// <param name="createdMarker">Whether the marker was created by opening the handle. It decides whether the marker is the pending deletions' own when
-    /// this is the first of them, and is ignored otherwise.</param>
+    /// <param name="createdMarker">Whether the marker was created by opening the handle. A marker that was already on disk is the pending deletions' own
+    /// only if it was theirs before; one that this deletion created is theirs in any case (see the remarks).</param>
+    /// <remarks>
+    /// A marker that a deletion creates records nothing but the deletions pending through it, even when other deletions of the file are pending and the
+    /// marker they opened was not theirs: that marker is gone, and whatever it recorded was recorded elsewhere before it went. A commit records the deletion
+    /// before it removes the marker, and a cleanup pass removes a marker only once it has resolved the file. The deletions that were pending through the
+    /// old marker are then covered by that record, so the new marker is theirs to remove as well.
+    /// </remarks>
     private PendingDeleteMarker RegisterPendingDelete(FileId fileId, IAsyncDisposable handle, bool createdMarker)
     {
         lock (_pendingDeletesSync)
         {
             if (!_pendingDeletes.TryGetValue(fileId, out var pending))
                 _pendingDeletes[fileId] = pending = new PendingDeletes { OwnMarker = createdMarker };
+            else if (createdMarker)
+                pending.OwnMarker = true;
 
             pending.Count++;
         }
@@ -407,18 +420,21 @@ partial class FileRepo
     /// </remarks>
     internal async ValueTask TxnCommitDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
     {
-        using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
+        using (await LockForMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
         {
             try
             {
+                if (indeterminateMarker is not null)
+                    await indeterminateMarker.DisposeAsync().ConfigureAwait(false);
+
                 DebugStepHook?.Invoke(DebugStep.DeleteCommitStarted);
                 await DeleteLockedAsync(fileId, immediate: Options.DeleteMode is DeleteMode.Immediate).ConfigureAwait(false);
             }
             catch
             {
-                // The deletion is not recorded: the file is where it was, and the marker, which this deletion no longer holds, is its only record. The
-                // failure is reported by the transaction, and the cleaner resolves the file through the marker, which the rollbacks of the deletions still
-                // pending must therefore leave.
+                // The deletion is not recorded: the file is where it was, and the marker, which this deletion no longer holds (releasing the handle takes it
+                // out of the count even when the release fails), is its only record. The failure is reported by the transaction, and the cleaner resolves
+                // the file through the marker, which the rollbacks of the deletions still pending must therefore leave.
                 DisownMarker(fileId);
                 throw;
             }

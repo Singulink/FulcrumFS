@@ -498,15 +498,19 @@ partial class FileRepo
                 // File group directory is already gone; nothing to sweep.
             }
 
+            // The delete marker written when the deletion cannot be completed now is its record from then on, so it is flushed to disk like the delete
+            // marker of a deferred deletion: the indeterminate marker that recorded the deletion until now may be removed as soon as this returns (by the
+            // rollback of another transaction's pending deletion of the file, which no longer counts this one).
+
             if (elc.HasExceptions)
             {
-                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", elc.ResultException).ConfigureAwait(false);
+                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", elc.ResultException, flushToDisk: true).ConfigureAwait(false);
                 return false;
             }
 
             if (!fileDir.TryDelete(recursive: true, out var ex) || !indeterminateMarker.TryDelete(out ex) || !deleteMarker.TryDelete(out ex))
             {
-                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", ex).ConfigureAwait(false);
+                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", ex, flushToDisk: true).ConfigureAwait(false);
                 return false;
             }
 

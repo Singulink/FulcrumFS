@@ -1,4 +1,5 @@
 using System.Globalization;
+using FulcrumFS.Utilities;
 
 namespace FulcrumFS;
 
@@ -570,6 +571,232 @@ public sealed class PendingDeleteMarkerTests
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Findings of the review of the marker rules
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// An immediate commit that cannot delete the file (something has a file of the group open, or a part of it cannot be removed) records the deletion in
+    /// the file's delete marker instead, and that is not a failure. The delete marker is the deletion's record from then on, so it is flushed to disk before
+    /// the commit returns: the rollback of another pending deletion of the file, which no longer counts the committed one, may then remove the indeterminate
+    /// marker, and the cleaner finishes the deletion from the delete marker.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize] // DurableIO.Observer is process-wide.
+    public async Task ImmediateCommit_ThatCannotDeleteTheFile_FlushesItsDeleteMarker_BeforeAnotherPendingDeletionIsRolledBack()
+    {
+        if (!OperatingSystem.IsWindows() && Environment.UserName is "root")
+            throw new AssertInconclusiveException("Directory permissions do not keep root from deleting the file group.");
+
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        IDisposable? blocker = null;
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+            var deleteMarker = DeleteMarker(repoDir, fileId);
+
+            await using var committing = await DeleteInNewTransactionAsync(repo, staged: false, fileId);
+            await using var other = await DeleteInNewTransactionAsync(repo, staged: false, fileId);
+
+            blocker = BlockGroupDeletion(repoDir, fileId);
+            var flushed = new List<string>();
+
+            DurableIO.Observer = path =>
+            {
+                lock (flushed)
+                    flushed.Add(path);
+            };
+
+            try
+            {
+                await committing.CommitAsync();
+            }
+            finally
+            {
+                DurableIO.Observer = null;
+            }
+
+            failures.ShouldBeEmpty();
+            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+            deleteMarker.State.ShouldBe(EntryState.Exists);
+            flushed.ShouldContain(path => path.EndsWith(deleteMarker.Name, StringComparison.Ordinal));
+
+            await other.RollbackAsync();
+
+            // The rollback may remove the indeterminate marker, but the deletion is recorded on disk.
+            deleteMarker.State.ShouldBe(EntryState.Exists);
+
+            blocker.Dispose();
+            blocker = null;
+
+            (await CleanAnsweringAsync(repo, IndeterminateResolution.Keep)).ShouldBeEmpty();
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            DurableIO.Observer = null;
+            blocker?.Dispose();
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A marker that a deletion creates records nothing but the deletions pending through it, even when another deletion of the file is pending through a
+    /// marker that was not theirs and that a commit has since removed (having recorded the deletion first). So the last of them to be rolled back removes it,
+    /// and no cleanup pass has to ask about the file.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkerCreatedAfterACommitRemovedOneThatWasNotTheirs_IsRemovedByTheLastRollback()
+    {
+        var repoDir = NewRepoDir();
+        var fileId = await AddFileAndEndWithItsDeletionPendingAsync(repoDir, RepoFormatVersion.Version2, staged: false);
+        var marker = IndeterminateMarker(repoDir, fileId);
+
+        var repo = CreateRepo(repoDir, DeleteMode.DeferredUntilClean, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            // Two deletions take the marker that was on disk, which is not theirs.
+            await using var committing = await DeleteInNewTransactionAsync(repo, staged: false, fileId);
+            await using var pending = await DeleteInNewTransactionAsync(repo, staged: false, fileId);
+
+            // One commits: the deletion is recorded in the file's delete marker, and the old marker is removed.
+            await committing.CommitAsync();
+            marker.State.ShouldNotBe(EntryState.Exists);
+            DeleteMarker(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+
+            // A third deletion creates a fresh marker while the second is still pending.
+            await using var later = await DeleteInNewTransactionAsync(repo, staged: false, fileId);
+            marker.State.ShouldBe(EntryState.Exists);
+
+            await pending.RollbackAsync();
+            await later.RollbackAsync();
+
+            CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(DeleteMarker(repoDir, fileId));
+
+            // With a delay that keeps the delete marker, a pass has nothing to ask about.
+            (await CleanAnsweringAsync(repo, IndeterminateResolution.Keep, TimeSpan.FromHours(1))).ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A deletion that takes an unheld marker while a cleanup pass resolves the file, and the callback answers Delete (no record references the file): the
+    /// pass deletes the file, or records its deletion with a delete delay, before it removes the marker, so the deletion is never without a record; the
+    /// transaction's own deletion then has nothing left to do, and its commit reports nothing.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Deletion_ThatTakesTheMarkerWhileACleanupPassDeletesTheFile_FindsTheFileDeleted(bool withDelay)
+    {
+        var repoDir = NewRepoDir();
+        var fileId = await AddFileAndEndWithItsDeletionPendingAsync(repoDir, RepoFormatVersion.Version2, staged: false);
+
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        FileRepoTransaction? deleting = null;
+
+        try
+        {
+            await repo.CleanAsync(
+                withDelay ? TimeSpan.FromHours(1) : TimeSpan.Zero,
+                async id =>
+                {
+                    deleting = await repo.BeginTransactionAsync();
+                    await deleting.DeleteAsync(id, TestContext.CancellationToken);
+
+                    return IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            deleting.ShouldNotBeNull();
+
+            if (withDelay)
+            {
+                FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+                DeleteMarker(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+            }
+            else
+            {
+                FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            }
+
+            await deleting.CommitAsync(TestContext.CancellationToken);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            if (deleting is not null)
+                await deleting.DisposeAsync();
+
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A deletion whose marker is removed every time it opens it gives up when the wait is over, with an exception that says so, records nothing, and leaves
+    /// the transaction usable.
+    /// </summary>
+    [TestMethod]
+    public async Task Deletion_WhoseMarkerIsRemovedEachTimeItIsOpened_GivesUpWhenTheWaitIsOver()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+            var marker = IndeterminateMarker(repoDir, fileId);
+
+            repo.DebugStepHook = step =>
+            {
+                if (step is DebugStep.DeleteMarkerOpened)
+                    marker.Delete();
+            };
+
+            await using var txn = await repo.BeginTransactionAsync();
+
+            var ex = await Should.ThrowAsync<RepoFileBusyException>(() => txn.DeleteAsync(fileId, TestContext.CancellationToken));
+            repo.DebugStepHook = null;
+
+            ex.Message.ShouldBe(
+                $"The deletion of file ID '{fileId}' could not be recorded because the file's indeterminate marker was removed each time it was opened, " +
+                $"for {FileRepo.MarkerInUseMaxWait.TotalMilliseconds:0} ms. Nothing was recorded, and the deletion can be made again.");
+
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+
+            // The transaction is usable, and the same deletion succeeds once the marker stays.
+            await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+            IsHeld(marker).ShouldBeTrue();
+
+            await txn.RollbackAsync(TestContext.CancellationToken);
+            ShouldBeCommitted(repoDir, fileId);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------
 
@@ -638,14 +865,15 @@ public sealed class PendingDeleteMarkerTests
     }
 
     /// <summary>
-    /// Runs a cleanup pass with no delete delay whose resolution callback gives the specified answer, and returns the files it was asked about.
+    /// Runs a cleanup pass, with no delete delay unless one is specified, whose resolution callback gives the specified answer, and returns the files it
+    /// was asked about.
     /// </summary>
-    private async Task<List<FileId>> CleanAnsweringAsync(FileRepo repo, IndeterminateResolution resolution)
+    private async Task<List<FileId>> CleanAnsweringAsync(FileRepo repo, IndeterminateResolution resolution, TimeSpan? deleteDelay = null)
     {
         var asked = new List<FileId>();
 
         await repo.CleanAsync(
-            TimeSpan.Zero,
+            deleteDelay ?? TimeSpan.Zero,
             id =>
             {
                 asked.Add(id);
@@ -654,6 +882,34 @@ public sealed class PendingDeleteMarkerTests
             TestContext.CancellationToken);
 
         return asked;
+    }
+
+    /// <summary>
+    /// Makes a file group's directory undeletable until the returned object is disposed: on Windows by holding a data file of the group open without
+    /// sharing its deletion, elsewhere by a subdirectory without permissions that holds a file.
+    /// </summary>
+    private static IDisposable BlockGroupDeletion(IAbsoluteDirectoryPath repoDir, FileId fileId)
+    {
+        var fileDir = FileDir(repoDir, fileId);
+
+        if (OperatingSystem.IsWindows())
+            return fileDir.GetChildFiles().First().OpenStream(FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        var blocker = fileDir.CombineDirectory("blocker", PathOptions.None);
+        blocker.Create();
+        File.WriteAllText(blocker.CombineFile("file", PathOptions.None).PathExport, "x");
+        File.SetUnixFileMode(blocker.PathExport, UnixFileMode.None);
+
+        return new PermissionsRestorer(blocker);
+    }
+
+    private sealed class PermissionsRestorer(IAbsoluteDirectoryPath directory) : IDisposable
+    {
+        public void Dispose()
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(directory.PathExport, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     /// <summary>
