@@ -67,6 +67,14 @@ internal enum DebugStep
     /// transaction that holds the marker, which makes the next attempt the first one that follows the add's commit or rollback.
     /// </summary>
     DeleteMarkerInUse,
+
+    /// <summary>
+    /// A transaction that is deleting a file has opened the file's indeterminate marker and is about to count the deletion as pending through it. The hook
+    /// is called with the file's lock held. Removing the marker from the hook does what something outside the repository's transactions can do at this
+    /// point, such as a cleanup pass in another process on a platform where opening a file and locking it are two steps: it leaves the deletion holding a
+    /// marker that is no longer on disk.
+    /// </summary>
+    DeleteMarkerOpened,
 }
 
 /// <content>

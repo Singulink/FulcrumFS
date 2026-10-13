@@ -299,6 +299,277 @@ public sealed class PendingDeleteMarkerTests
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+    // A marker that records more than the deletions pending through it
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A deletion whose commit fails before it has recorded the deletion leaves the file's marker as the only record of a deletion whose database has
+    /// committed. Another pending deletion of the file that is rolled back afterwards must leave the marker for the cleaner, although no deletion is pending
+    /// through it any more. One that commits records the deletion itself and removes the marker, as always.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, DeleteMode.Immediate, false)]
+    [DataRow(false, DeleteMode.Immediate, true)]
+    [DataRow(false, DeleteMode.DeferredUntilClean, false)]
+    [DataRow(false, DeleteMode.DeferredUntilClean, true)]
+    [DataRow(true, DeleteMode.Immediate, false)]
+    [DataRow(true, DeleteMode.Immediate, true)]
+    [DataRow(true, DeleteMode.DeferredUntilClean, false)]
+    [DataRow(true, DeleteMode.DeferredUntilClean, true)]
+    public async Task PendingDeletion_WhoseCommitFails_KeepsTheMarker_WhenAnotherIsRolledBack(bool staged, DeleteMode deleteMode, bool otherCommits)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, deleteMode, staged ? RepoFormatVersion.Version1 : RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+            var marker = IndeterminateMarker(repoDir, fileId);
+
+            await using var failing = await DeleteInNewTransactionAsync(repo, staged, fileId);
+            await using var other = await DeleteInNewTransactionAsync(repo, staged, fileId);
+
+            // The application of the first transaction commits its database, and the repository commit fails before it has recorded the deletion: it could
+            // neither carry the deletion out nor write the file's delete marker. The failure is reported, and the marker is all that records the deletion.
+            int commits = 0;
+
+            repo.DebugStepHook = step =>
+            {
+                if (step is DebugStep.DeleteCommitStarted && Interlocked.Increment(ref commits) is 1)
+                    throw new IOException("Simulated failure to record a deletion.");
+            };
+
+            await failing.CommitAsync();
+            repo.DebugStepHook = null;
+
+            failures.ShouldHaveSingleItem().Operation.ShouldBe(RepoTransactionCompletionOperation.Commit);
+            IsHeld(marker).ShouldBeTrue();
+
+            if (otherCommits)
+            {
+                await other.CommitAsync();
+
+                ShouldBeDeleted(repoDir, fileId, deleteMode);
+                failures.ShouldHaveSingleItem();
+                return;
+            }
+
+            await other.RollbackAsync();
+
+            // No deletion is pending any more, but the marker records the deletion whose commit failed, so it stays for the cleaner.
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeFalse();
+            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+
+            // The file's row is gone, so the application's answer is to delete the file.
+            (await CleanAnsweringAsync(repo, IndeterminateResolution.Delete)).ShouldBe([fileId]);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldHaveSingleItem();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A marker that was on disk before a deletion of this instance opened it, here left by a process that ended with the deletion of the file pending after
+    /// its database had committed, records something that none of this instance's deletions knows about. Their rollbacks leave it for the cleaner, which asks
+    /// about the file. A deletion that commits records the deletion itself and removes the marker, as always.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public async Task MarkerOnDiskBeforeADeletionOpenedIt_IsLeftByTheRollbacks_ForTheCleaner(bool staged, bool anotherCommits)
+    {
+        var repoDir = NewRepoDir();
+        var formatVersion = staged ? RepoFormatVersion.Version1 : RepoFormatVersion.Version2;
+        var fileId = await AddFileAndEndWithItsDeletionPendingAsync(repoDir, formatVersion, staged);
+        var marker = IndeterminateMarker(repoDir, fileId);
+
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            IsHeld(marker).ShouldBeFalse();
+
+            await using var rolledBack = await DeleteInNewTransactionAsync(repo, staged, fileId);
+
+            if (anotherCommits)
+            {
+                await using var committing = await DeleteInNewTransactionAsync(repo, staged, fileId);
+
+                await rolledBack.RollbackAsync();
+                IsHeld(marker).ShouldBeTrue();
+
+                await committing.CommitAsync();
+
+                ShouldBeDeleted(repoDir, fileId, DeleteMode.Immediate);
+                failures.ShouldBeEmpty();
+                return;
+            }
+
+            await rolledBack.RollbackAsync();
+
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeFalse();
+            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+
+            (await CleanAnsweringAsync(repo, IndeterminateResolution.Delete)).ShouldBe([fileId]);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // A marker that something else removes
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A deletion that takes an unheld marker while a cleanup pass is resolving the file (after the pass found the marker unheld and before it removes it:
+    /// here from the resolution callback, which answers Keep because the file's row is still there) has its deletion pending through that marker, so the
+    /// pass must leave the marker. The deletion then commits, or the process ends after the deletion's database has committed and the next pass deletes the
+    /// file.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Deletion_ThatTakesTheMarkerWhileACleanupPassResolvesTheFile_KeepsTheMarker(bool processEnds)
+    {
+        var repoDir = NewRepoDir();
+
+        // A process ended with a deletion of the file pending before its database had committed: the row is still there.
+        var fileId = await AddFileAndEndWithItsDeletionPendingAsync(repoDir, RepoFormatVersion.Version2, staged: false);
+        var marker = IndeterminateMarker(repoDir, fileId);
+
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        FileRepoTransaction? deleting = null;
+
+        try
+        {
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                async id =>
+                {
+                    // The application deletes the file at this moment, and its row is still there for the answer.
+                    deleting = await repo.BeginTransactionAsync();
+                    await deleting.DeleteAsync(id, TestContext.CancellationToken);
+
+                    return IndeterminateResolution.Keep;
+                },
+                TestContext.CancellationToken);
+
+            deleting.ShouldNotBeNull();
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeTrue();
+            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+
+            if (!processEnds)
+            {
+                await deleting.CommitAsync(TestContext.CancellationToken);
+
+                ShouldBeDeleted(repoDir, fileId, DeleteMode.Immediate);
+                failures.ShouldBeEmpty();
+                return;
+            }
+
+            // The application commits its database, and the process ends before the repository commit.
+            repo.Dispose();
+            await Should.ThrowAsync<ObjectDisposedException>(() => deleting.CommitAsync(TestContext.CancellationToken));
+        }
+        finally
+        {
+            if (deleting is not null)
+                await deleting.DisposeAsync();
+
+            repo.Dispose();
+        }
+
+        var reopened = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+
+        try
+        {
+            (await CleanAnsweringAsync(reopened, IndeterminateResolution.Delete)).ShouldBe([fileId]);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+        }
+        finally
+        {
+            reopened.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A marker that something else removes just after a deletion has opened it leaves the deletion holding a marker that is no longer on disk. On Linux and
+    /// macOS that is what a cleanup pass in another process can do, because opening a file and locking it are two steps there: the deletion opens the
+    /// marker, the pass removes it and lets it go, and the deletion's lock then succeeds on the removed file. The deletion must notice and open the marker
+    /// again, so that its deletion is pending through a marker on disk.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Deletion_WhoseMarkerIsRemovedAsItIsOpened_OpensItAgain(bool commits)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+            var marker = IndeterminateMarker(repoDir, fileId);
+            int opened = 0;
+
+            repo.DebugStepHook = step =>
+            {
+                if (step is DebugStep.DeleteMarkerOpened && Interlocked.Increment(ref opened) is 1)
+                    marker.Delete();
+            };
+
+            await using var txn = await repo.BeginTransactionAsync();
+            await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+            repo.DebugStepHook = null;
+
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeTrue();
+
+            if (commits)
+            {
+                await txn.CommitAsync(TestContext.CancellationToken);
+                ShouldBeDeleted(repoDir, fileId, DeleteMode.Immediate);
+            }
+            else
+            {
+                await txn.RollbackAsync(TestContext.CancellationToken);
+                ShouldBeCommitted(repoDir, fileId);
+                CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            }
+
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------
 
@@ -336,6 +607,53 @@ public sealed class PendingDeleteMarkerTests
         await txn.DeleteAsync(fileId, TestContext.CancellationToken);
 
         return new PendingDeletion(txn, () => txn.CommitAsync(TestContext.CancellationToken), () => txn.RollbackAsync(TestContext.CancellationToken));
+    }
+
+    /// <summary>
+    /// Adds a file and deletes it in a transaction, and ends the instance with the deletion pending, which leaves what a process that ended there leaves: the
+    /// file, and its marker on disk with nobody holding it. Whether the database of the deletion had committed is up to the test: it is what the resolution
+    /// callback answers.
+    /// </summary>
+    private async Task<FileId> AddFileAndEndWithItsDeletionPendingAsync(IAbsoluteDirectoryPath repoDir, RepoFormatVersion formatVersion, bool staged)
+    {
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+            var pending = await DeleteInNewTransactionAsync(repo, staged, fileId);
+
+            repo.Dispose();
+
+            await Should.ThrowAsync<ObjectDisposedException>(pending.CommitAsync);
+            await pending.DisposeAsync();
+
+            IndeterminateMarker(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+            return fileId;
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Runs a cleanup pass with no delete delay whose resolution callback gives the specified answer, and returns the files it was asked about.
+    /// </summary>
+    private async Task<List<FileId>> CleanAnsweringAsync(FileRepo repo, IndeterminateResolution resolution)
+    {
+        var asked = new List<FileId>();
+
+        await repo.CleanAsync(
+            TimeSpan.Zero,
+            id =>
+            {
+                asked.Add(id);
+                return resolution;
+            },
+            TestContext.CancellationToken);
+
+        return asked;
     }
 
     /// <summary>

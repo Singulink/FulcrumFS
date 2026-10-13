@@ -204,6 +204,8 @@ partial class FileRepo
                     var handle = await _fs.OpenOrCreateSharedMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message, flushToDisk: true)
                         .ConfigureAwait(false);
 
+                    DebugStepHook?.Invoke(DebugStep.DeleteMarkerOpened);
+
                     return RegisterPendingDelete(fileId, handle);
                 }
                 catch (IOException ex) when (RepoFileSystem.IsInUse(ex))
