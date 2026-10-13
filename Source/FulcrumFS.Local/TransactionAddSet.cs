@@ -55,22 +55,25 @@ internal sealed class TransactionAddSet
     }
 
     /// <summary>
-    /// Discards the add of a file, if the transaction added it. Returns <see langword="true"/> if the file was added by the transaction and is now
-    /// discarded, or was discarded earlier; <see langword="false"/> if the transaction did not add it.
+    /// Discards the add of a file, if the transaction added it. Returns whether the file was added by the transaction and is now discarded, or was
+    /// discarded earlier, and the failure to delete the file, if there was one.
     /// </summary>
     /// <remarks>
-    /// A discard is the rollback of one add, so a failure to delete the file is reported through <see cref="FileRepo.TransactionCompletionFailed"/> as the
-    /// failure of a rollback, not thrown, and the file is left indeterminate for the cleaner, which deletes it because no record references it. The add is
-    /// discarded whatever happens: a later commit of the transaction must not commit a file the application has deleted. A disposed repository is thrown,
-    /// as it is by every operation of the transaction.
+    /// A discard is the rollback of one add, so a failure to delete the file is not thrown: the caller reports it through
+    /// <see cref="FileRepo.TransactionCompletionFailed"/> as the failure of a rollback, once it has released the transaction's lock, as a commit and a
+    /// rollback report theirs, so that a handler can act on the transaction. The file is left indeterminate for the cleaner, which deletes it because no
+    /// record references it. The add is discarded whatever happens: a later commit of the transaction must not commit a file the application has deleted.
+    /// A disposed repository is thrown, as it is by every operation of the transaction.
     /// </remarks>
-    public async ValueTask<bool> TryDiscardAsync(FileId fileId)
+    public async ValueTask<(bool IsDiscarded, Exception? Failure)> TryDiscardAsync(FileId fileId)
     {
         if (_discarded.Contains(fileId))
-            return true;
+            return (true, null);
 
         if (!_added.Contains(fileId))
-            return false;
+            return (false, null);
+
+        Exception? failure = null;
 
         try
         {
@@ -78,7 +81,7 @@ internal sealed class TransactionAddSet
         }
         catch (Exception ex) when (ex is not ObjectDisposedException)
         {
-            await _repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Rollback, ex).ConfigureAwait(false);
+            failure = ex;
         }
         finally
         {
@@ -86,7 +89,7 @@ internal sealed class TransactionAddSet
             _discarded.Add(fileId);
         }
 
-        return true;
+        return (true, failure);
     }
 
     /// <summary>

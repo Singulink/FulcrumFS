@@ -173,8 +173,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// instead.</para>
     /// <para>
     /// Deleting a file that was added by this transaction discards the add. A failure to delete that file is reported through
-    /// <see cref="FileRepo.TransactionCompletionFailed"/> as the failure of a rollback, not thrown, and the file is left for the cleaner. Deleting a file that
-    /// this transaction has already deleted or discarded does nothing.</para>
+    /// <see cref="FileRepo.TransactionCompletionFailed"/> as the failure of a rollback, not thrown, and the file is left for the cleaner; the event is
+    /// raised once this method has released the transaction, so a handler can act on it, and a handler that throws makes this method throw its exception
+    /// (the add is discarded all the same). Deleting a file that this transaction has already deleted or discarded does nothing.</para>
     /// <para>
     /// Deleting a file that another transaction has also deleted succeeds, including when that deletion has committed and the file is pending cleanup: the
     /// deletions converge in every <see cref="FileRepoOptions.DeleteMode"/>, whichever kind of transaction made them. Only a file that is gone, or never
@@ -434,13 +435,31 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
 
     private async Task<bool> DeleteCoreAsync(FileId fileId, bool throwIfNotFound, CancellationToken cancellationToken)
     {
-        using var syncLock = await _sync.LockAsync(cancellationToken).ConfigureAwait(false);
-        ThrowIfNotOpen();
+        FileRepo repository;
+        Exception? discardFailure;
 
-        // Deleting a file this transaction added discards the add; deleting it again after that is a no-op.
-        if (await _adds.TryDiscardAsync(fileId).ConfigureAwait(false))
-            return true;
+        using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
+        {
+            ThrowIfNotOpen();
+            repository = Repository;
 
+            // Deleting a file this transaction added discards the add; deleting it again after that is a no-op.
+            (bool isDiscarded, discardFailure) = await _adds.TryDiscardAsync(fileId).ConfigureAwait(false);
+
+            if (!isDiscarded)
+                return await DeleteLockedAsync(fileId, throwIfNotFound).ConfigureAwait(false);
+        }
+
+        // A failure to delete a discarded add is reported once the transaction's lock is released, as the failures of a commit or a rollback are, so that a
+        // handler can act on the transaction.
+        if (discardFailure is not null)
+            await repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Rollback, discardFailure).ConfigureAwait(false);
+
+        return true;
+    }
+
+    private async Task<bool> DeleteLockedAsync(FileId fileId, bool throwIfNotFound)
+    {
         if (_deletedSet.Contains(fileId))
             return true;
 

@@ -1038,6 +1038,74 @@ public sealed class PendingDeleteMarkerTests
     }
 
     /// <summary>
+    /// The failure of a discard is reported once the delete call has released the transaction, as the failures of a commit or a rollback are, so a handler
+    /// that acts on the transaction (here by rolling it back) does not wait for the call that raised the event.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task DiscardOfAnAdd_ThatFails_IsReportedAfterTheTransactionIsReleased_SoAHandlerCanActOnIt(bool staged)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        FileRepoTransaction? ordinary = null;
+        FileRepoStagedTransaction? stagedTxn = null;
+        bool? handlerCallCompleted = null;
+
+        repo.TransactionCompletionFailed += async _ =>
+        {
+            var rollback = staged ? stagedTxn!.RollbackAsync(TestContext.CancellationToken) : ordinary!.RollbackAsync(TestContext.CancellationToken);
+            handlerCallCompleted = await Task.WhenAny(rollback, Task.Delay(TimeSpan.FromSeconds(10), TestContext.CancellationToken)) == rollback;
+        };
+
+        try
+        {
+            FileId fileId;
+
+            await using (var source = File.OpenRead(_sampleDir.CombineFile("sample.jpg").PathExport))
+            {
+                if (staged)
+                {
+                    stagedTxn = await repo.BeginStagedTransactionAsync();
+                    fileId = (await stagedTxn.AddAsync(source, ".jpg", leaveOpen: true, FileProcessingPipeline.Empty, TestContext.CancellationToken)).FileId;
+                }
+                else
+                {
+                    ordinary = await repo.BeginTransactionAsync();
+                    fileId = (await ordinary.AddAsync(source, ".jpg", leaveOpen: true, FileProcessingPipeline.Empty, TestContext.CancellationToken)).FileId;
+                }
+            }
+
+            repo.DebugStepHook = step =>
+            {
+                if (step is DebugStep.AddRollbackStarted)
+                    throw new IOException("Simulated failure to discard an add.");
+            };
+
+            bool discarded = staged
+                ? await stagedTxn!.TryDeleteAsync(fileId, TestContext.CancellationToken)
+                : await ordinary!.TryDeleteAsync(fileId, TestContext.CancellationToken);
+
+            repo.DebugStepHook = null;
+
+            discarded.ShouldBeTrue();
+            handlerCallCompleted.ShouldBe(true);
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+
+            if (ordinary is not null)
+                await ordinary.DisposeAsync();
+
+            if (stagedTxn is not null)
+                await stagedTxn.DisposeAsync();
+
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
     /// An immediate staged commit that cannot delete a file is not a failure: the committed journal records the deletion, and the cleaner finishes it. The
     /// delete marker that the attempt writes is not the deletion's record there, so it is not flushed, and a flush failure could not be reported.
     /// </summary>
