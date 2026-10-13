@@ -172,8 +172,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// as an exception. To delete a file that may be missing without that being an error, use <see cref="TryDeleteAsync(FileId, CancellationToken)"/>
     /// instead.</para>
     /// <para>
-    /// Deleting a file that was added by this transaction discards the add. Deleting a file that this transaction has already deleted or discarded does
-    /// nothing.</para>
+    /// Deleting a file that was added by this transaction discards the add. A failure to delete that file is reported through
+    /// <see cref="FileRepo.TransactionCompletionFailed"/> as the failure of a rollback, not thrown, and the file is left for the cleaner. Deleting a file that
+    /// this transaction has already deleted or discarded does nothing.</para>
     /// <para>
     /// Deleting a file that another transaction has also deleted succeeds, including when that deletion has committed and the file is pending cleanup: the
     /// deletions converge in every <see cref="FileRepoOptions.DeleteMode"/>, whichever kind of transaction made them. Only a file that is gone, or never

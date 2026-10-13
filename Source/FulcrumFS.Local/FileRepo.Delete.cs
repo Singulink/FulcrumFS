@@ -458,24 +458,34 @@ partial class FileRepo
     /// Deletes a file and its variants from the repository. Returns <see langword="false"/> if an immediate deletion could not complete; the failure is
     /// logged to the file's delete marker (which is created if needed) so the cleaner retries it. A file group that is already gone counts as deleted.
     /// </summary>
-    private async ValueTask<bool> DeleteAsync(FileId fileId, bool immediate)
+    /// <param name="fileId">The file.</param>
+    /// <param name="immediate">Whether the file is deleted now, rather than marked for deletion by the cleaner.</param>
+    /// <param name="flushFailureRecord">Whether the delete marker written when an immediate deletion cannot complete is flushed to disk, for a caller
+    /// for which it is the only durable record of the deletion (see <see cref="DeleteLockedAsync(FileId, bool, bool)"/>).</param>
+    private async ValueTask<bool> DeleteAsync(FileId fileId, bool immediate, bool flushFailureRecord)
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
         using var fileLock = await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false);
 
-        return await DeleteLockedAsync(fileId, immediate).ConfigureAwait(false);
+        return await DeleteLockedAsync(fileId, immediate, flushFailureRecord).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// MUST BE CALLED WITH THE FILE'S LOCK HELD. Deletes a file and its variants as <see cref="DeleteAsync(FileId, bool)"/> does, for a caller that took
-    /// the lock to release its handle on the file's indeterminate marker in the same step.
+    /// MUST BE CALLED WITH THE FILE'S LOCK HELD. Deletes a file and its variants as <see cref="DeleteAsync(FileId, bool, bool)"/> does, for a caller that
+    /// took the lock to release its handle on the file's indeterminate marker in the same step.
     /// </summary>
+    /// <param name="fileId">The file.</param>
+    /// <param name="immediate">Whether the file is deleted now, rather than marked for deletion by the cleaner.</param>
+    /// <param name="flushFailureRecord">Whether the delete marker written when an immediate deletion cannot complete is flushed to disk. The commit of a
+    /// deletion needs it: once that commit has released its handle, the rollback of another transaction's pending deletion of the file may remove the
+    /// indeterminate marker, after which the delete marker is the only record of the committed deletion. The rollback of an add does not (the add's own
+    /// marker stays on disk while the file does), nor the commit of a staged deletion (its committed journal records it).</param>
     /// <remarks>
     /// The file's indeterminate marker is removed whatever deletions of the file other transactions have pending through it, and only once the deletion no
     /// longer depends on it: after the file group has been deleted, or after the file's delete marker has been written and flushed to disk (or was found
     /// held by another actor, which flushes it; see <see cref="RepoFileSystem.LogToMarkerAsync(IAbsoluteFilePath, string, object, bool)"/>).
     /// </remarks>
-    private async ValueTask<bool> DeleteLockedAsync(FileId fileId, bool immediate)
+    private async ValueTask<bool> DeleteLockedAsync(FileId fileId, bool immediate, bool flushFailureRecord)
     {
         var fileDir = _fs.GetFileDirectory(fileId);
         var deleteMarker = _fs.GetDeleteMarker(fileId, null);
@@ -498,19 +508,18 @@ partial class FileRepo
                 // File group directory is already gone; nothing to sweep.
             }
 
-            // The delete marker written when the deletion cannot be completed now is its record from then on, so it is flushed to disk like the delete
-            // marker of a deferred deletion: the indeterminate marker that recorded the deletion until now may be removed as soon as this returns (by the
-            // rollback of another transaction's pending deletion of the file, which no longer counts this one).
+            // The delete marker written when the deletion cannot be completed now leads the cleaner to finish it. For the commit of a deletion it is the
+            // deletion's record from then on, and it is flushed to disk like the delete marker of a deferred deletion (see flushFailureRecord).
 
             if (elc.HasExceptions)
             {
-                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", elc.ResultException, flushToDisk: true).ConfigureAwait(false);
+                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", elc.ResultException, flushFailureRecord).ConfigureAwait(false);
                 return false;
             }
 
             if (!fileDir.TryDelete(recursive: true, out var ex) || !indeterminateMarker.TryDelete(out ex) || !deleteMarker.TryDelete(out ex))
             {
-                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", ex, flushToDisk: true).ConfigureAwait(false);
+                await _fs.LogToMarkerAsync(deleteMarker, "DELETE ATTEMPT FAILED", ex, flushFailureRecord).ConfigureAwait(false);
                 return false;
             }
 

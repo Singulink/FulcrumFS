@@ -796,6 +796,219 @@ public sealed class PendingDeleteMarkerTests
         }
     }
 
+    /// <summary>
+    /// A commit of a deletion that cannot take the file's lock (the repository was disposed, or cannot be accessed, as it commits) releases its handle
+    /// without the lock, and its deletion is not recorded: the marker is its only record. The rollback of another pending deletion of the file that had
+    /// already passed the repository's initialization check and was waiting for the lock must then leave the marker, although it is the last pending
+    /// deletion, so that the cleaner learns of the committed deletion.
+    /// </summary>
+    [TestMethod]
+    public async Task CommitThatCannotTakeTheFilesLock_LeavesTheMarker_WhenARollbackWasWaitingForTheLock()
+    {
+        // The committing transaction is a staged one on a version 1 repository: its commit reaches the repository first through the commit of the
+        // deletion. An ordinary transaction reaches the same code when the repository goes away between two of its files.
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version1);
+        FileId fileId;
+
+        try
+        {
+            fileId = await AddSampleFileAsync(repo);
+            var marker = IndeterminateMarker(repoDir, fileId);
+
+            await using var committing = await repo.BeginStagedTransactionAsync();
+            await committing.DeleteAsync(fileId, TestContext.CancellationToken);
+            var stage = await committing.StageAsync(TestContext.CancellationToken);
+
+            await using var rollingBack = await repo.BeginTransactionAsync();
+            await rollingBack.DeleteAsync(fileId, TestContext.CancellationToken);
+
+            // A third deletion holds the file's lock in the debug step and then finds the marker in use, so that it never counts: the rollback passes the
+            // initialization check and waits for the lock while the repository is disposed.
+            using var entered = new SemaphoreSlim(0);
+            using var gate = new SemaphoreSlim(0);
+            using var cancellation = new CancellationTokenSource();
+            int opened = 0;
+
+            repo.DebugStepHook = step =>
+            {
+                if (step is not DebugStep.DeleteMarkerOpened || Interlocked.Increment(ref opened) is not 1)
+                    return;
+
+                entered.Release();
+                gate.Wait(TestContext.CancellationToken);
+
+                int inUse = OperatingSystem.IsWindows() ? unchecked((int)0x80070020) : OperatingSystem.IsLinux() ? 11 : 35;
+                throw new IOException("Simulated marker in use.", inUse);
+            };
+
+            await using var holdingTheLock = await repo.BeginTransactionAsync();
+            var holdingDelete = Task.Run(() => holdingTheLock.DeleteAsync(fileId, cancellation.Token), TestContext.CancellationToken);
+            await entered.WaitAsync(TestContext.CancellationToken);
+
+            var rollback = Task.Run(() => rollingBack.RollbackAsync(TestContext.CancellationToken), TestContext.CancellationToken);
+            await Task.Delay(500, TestContext.CancellationToken);
+            rollback.IsCompleted.ShouldBeFalse();
+
+            // The application of the committing transaction has committed its database, and the repository is disposed (the host is stopping) as the
+            // stage commits.
+            repo.Dispose();
+            await Should.ThrowAsync<ObjectDisposedException>(() => stage.CommitAsync(TestContext.CancellationToken));
+
+            cancellation.Cancel();
+            gate.Release();
+
+            var ex = await Should.ThrowAsync<Exception>(() => holdingDelete);
+            (ex is OperationCanceledException or RepoFileBusyException).ShouldBeTrue(ex.GetType().FullName);
+
+            await rollback;
+            repo.DebugStepHook = null;
+
+            // The marker records the committed deletion.
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeFalse();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+
+        var reopened = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version1);
+
+        try
+        {
+            (await CleanAnsweringAsync(reopened, IndeterminateResolution.Delete)).ShouldBe([fileId]);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+        }
+        finally
+        {
+            reopened.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Deleting a file that the same transaction added discards the add. A failure to delete the file is the failure of a rollback: it is reported, not
+    /// thrown, the file is left indeterminate for the cleaner, and the add stays discarded, so that the transaction's commit does not commit the file.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscardOfAnAdd_ThatFails_IsReportedNotThrown_AndTheCommitDoesNotCommitTheFile()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            await using var txn = await repo.BeginTransactionAsync();
+            FileId fileId;
+
+            await using (var source = File.OpenRead(_sampleDir.CombineFile("sample.jpg").PathExport))
+                fileId = (await txn.AddAsync(source, ".jpg", leaveOpen: true, FileProcessingPipeline.Empty, TestContext.CancellationToken)).FileId;
+
+            var marker = IndeterminateMarker(repoDir, fileId);
+            var failure = new IOException("Simulated failure to discard an add.");
+
+            repo.DebugStepHook = step =>
+            {
+                if (step is DebugStep.AddRollbackStarted)
+                    throw failure;
+            };
+
+            (await txn.TryDeleteAsync(fileId, TestContext.CancellationToken)).ShouldBeTrue();
+            repo.DebugStepHook = null;
+
+            var reported = failures.ShouldHaveSingleItem();
+            reported.Operation.ShouldBe(RepoTransactionCompletionOperation.Rollback);
+            reported.Exception.ShouldBeSameAs(failure);
+
+            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeFalse();
+
+            // Deleting it again does nothing, and the commit leaves it indeterminate.
+            (await txn.TryDeleteAsync(fileId, TestContext.CancellationToken)).ShouldBeTrue();
+            await txn.CommitAsync(TestContext.CancellationToken);
+            marker.State.ShouldBe(EntryState.Exists);
+
+            // No record references the file, so the cleaner deletes it.
+            (await CleanAnsweringAsync(repo, IndeterminateResolution.Delete)).ShouldBe([fileId]);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldHaveSingleItem();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// An immediate staged commit that cannot delete a file is not a failure: the committed journal records the deletion, and the cleaner finishes it. The
+    /// delete marker that the attempt writes is not the deletion's record there, so it is not flushed, and a flush failure could not be reported.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize] // DurableIO.Observer is process-wide.
+    public async Task StagedImmediateCommit_ThatCannotDeleteTheFile_IsNotAFailure_BecauseTheJournalRecordsIt()
+    {
+        if (!OperatingSystem.IsWindows() && Environment.UserName is "root")
+            throw new AssertInconclusiveException("Directory permissions do not keep root from deleting the file group.");
+
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        IDisposable? blocker = null;
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+
+            await using var txn = await repo.BeginStagedTransactionAsync();
+            await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+            var stage = await txn.StageAsync(TestContext.CancellationToken);
+
+            blocker = BlockGroupDeletion(repoDir, fileId);
+
+            DurableIO.Observer = path =>
+            {
+                if (path.EndsWith(FileRepoPaths.DeleteMarkerExtension, StringComparison.Ordinal))
+                    throw new IOException("Simulated delete marker flush failure.");
+            };
+
+            try
+            {
+                await stage.CommitAsync(TestContext.CancellationToken);
+            }
+            finally
+            {
+                DurableIO.Observer = null;
+            }
+
+            failures.ShouldBeEmpty();
+            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles("*" + FileRepoPaths.CommittedJournalExtension).ShouldHaveSingleItem();
+
+            blocker.Dispose();
+            blocker = null;
+
+            await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            DurableIO.Observer = null;
+            blocker?.Dispose();
+            repo.Dispose();
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------

@@ -217,13 +217,27 @@ partial class FileRepo
                     var handle = await _fs.OpenOrCreateSharedMarkerAsync(indeterminateMarker, "TRANSACTION PENDING DELETE", message, flushToDisk: true)
                         .ConfigureAwait(false);
 
-                    DebugStepHook?.Invoke(DebugStep.DeleteMarkerOpened);
+                    bool markerIsOnDisk;
 
-                    // Something outside this instance's transactions can remove the marker just after it has been opened. On Linux and macOS, where opening
-                    // a file and locking it are two steps, a cleanup pass (in another process, which this instance cannot coordinate with in memory) can
-                    // remove the marker after the open and let it go before the lock, which then succeeds on a file that is no longer on disk. The deletion
-                    // would be pending without a record, so the marker is opened again: the next attempt creates it, after the usual short wait.
-                    if (indeterminateMarker.State is EntryState.Exists)
+                    try
+                    {
+                        DebugStepHook?.Invoke(DebugStep.DeleteMarkerOpened);
+
+                        // Something outside this instance's transactions can remove the marker just after it has been opened. On Linux and macOS, where
+                        // opening a file and locking it are two steps, a cleanup pass (in another process, which this instance cannot coordinate with in
+                        // memory) can remove the marker after the open and let it go before the lock, which then succeeds on a file that is no longer on
+                        // disk. The deletion would be pending without a record, so the marker is opened again: the next attempt creates it, after the
+                        // usual short wait.
+                        markerIsOnDisk = indeterminateMarker.State is EntryState.Exists;
+                    }
+                    catch
+                    {
+                        // Not counted yet, so nothing but the handle needs letting go.
+                        await handle.DisposeAsync().ConfigureAwait(false);
+                        throw;
+                    }
+
+                    if (markerIsOnDisk)
                         return RegisterPendingDelete(fileId, handle, createdMarker: !markerWasOnDisk);
 
                     await handle.DisposeAsync().ConfigureAwait(false);
@@ -390,7 +404,7 @@ partial class FileRepo
     /// Physically deletes a file listed in a committed delete journal, in immediate delete mode. Returns <see langword="false"/> if the deletion could not
     /// complete; the failure is logged to the file's delete marker and the journal must be kept as the record of the deletion.
     /// </summary>
-    internal ValueTask<bool> TxnCommitStagedDeleteAsync(FileId fileId) => DeleteAsync(fileId, immediate: true);
+    internal ValueTask<bool> TxnCommitStagedDeleteAsync(FileId fileId) => DeleteAsync(fileId, immediate: true, flushFailureRecord: false);
 
     /// <summary>
     /// Commits the add of a file: releases the transaction's exclusive handle on the file's indeterminate marker and removes the marker, as one step under
@@ -420,7 +434,7 @@ partial class FileRepo
     /// </remarks>
     internal async ValueTask TxnCommitDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
     {
-        using (await LockForMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
+        using (await LockForMarkerAsync(fileId, indeterminateMarker, disownMarkerIfUnlocked: true).ConfigureAwait(false))
         {
             try
             {
@@ -428,7 +442,7 @@ partial class FileRepo
                     await indeterminateMarker.DisposeAsync().ConfigureAwait(false);
 
                 DebugStepHook?.Invoke(DebugStep.DeleteCommitStarted);
-                await DeleteLockedAsync(fileId, immediate: Options.DeleteMode is DeleteMode.Immediate).ConfigureAwait(false);
+                await DeleteLockedAsync(fileId, immediate: Options.DeleteMode is DeleteMode.Immediate, flushFailureRecord: true).ConfigureAwait(false);
             }
             catch
             {
@@ -482,7 +496,10 @@ partial class FileRepo
     internal async ValueTask TxnRollbackAddAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
     {
         using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
-            await DeleteLockedAsync(fileId, immediate: true).ConfigureAwait(false);
+        {
+            DebugStepHook?.Invoke(DebugStep.AddRollbackStarted);
+            await DeleteLockedAsync(fileId, immediate: true, flushFailureRecord: false).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -519,7 +536,7 @@ partial class FileRepo
     /// one.</param>
     /// <returns>The file's lock, which the caller releases.</returns>
     /// <remarks>
-    /// The handle is released in every case, as described on <see cref="LockForMarkerAsync(FileId, IAsyncDisposable?)"/>.
+    /// The handle is released in every case, as described on <see cref="LockForMarkerAsync(FileId, IAsyncDisposable?, bool)"/>.
     /// </remarks>
     private async ValueTask<KeyLock<(FileId FileId, string? VariantId)>> LockAndReleaseMarkerAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
     {
@@ -546,12 +563,21 @@ partial class FileRepo
     /// <param name="fileId">The file whose lock is taken.</param>
     /// <param name="indeterminateMarker">The transaction's handle on the file's indeterminate marker, or <see langword="null"/> if it no longer holds
     /// one.</param>
+    /// <param name="disownMarkerIfUnlocked">Whether the marker stops being the pending deletions' own (<see cref="DisownMarker(FileId)"/>) if the handle
+    /// has to be released without the lock. The commit of a deletion passes <see langword="true"/>: its deletion is then not recorded, and the marker is
+    /// its only record.</param>
     /// <returns>The file's lock, which the caller releases.</returns>
     /// <remarks>
     /// If the lock cannot be taken, because the repository has been disposed or cannot be accessed, the handle is released without it and the exception is
-    /// propagated: the marker then stays on disk with nobody holding it, which leaves the file indeterminate for the cleaner to resolve.
+    /// propagated: the marker then stays on disk with nobody holding it, which leaves the file indeterminate for the cleaner to resolve. Releasing the handle
+    /// takes the deletion out of the count without the lock, so the rollback of another pending deletion of the file that is already waiting for the lock
+    /// (it passed the initialization check before the repository went away) would then count itself as the last one and remove the marker; for a commit,
+    /// the marker is disowned first, which only takes the count's own synchronization.
     /// </remarks>
-    private async ValueTask<KeyLock<(FileId FileId, string? VariantId)>> LockForMarkerAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
+    private async ValueTask<KeyLock<(FileId FileId, string? VariantId)>> LockForMarkerAsync(
+        FileId fileId,
+        IAsyncDisposable? indeterminateMarker,
+        bool disownMarkerIfUnlocked = false)
     {
         try
         {
@@ -560,6 +586,9 @@ partial class FileRepo
         }
         catch
         {
+            if (disownMarkerIfUnlocked)
+                DisownMarker(fileId);
+
             if (indeterminateMarker is not null)
             {
                 try { await indeterminateMarker.DisposeAsync().ConfigureAwait(false); }

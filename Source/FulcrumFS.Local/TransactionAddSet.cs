@@ -58,6 +58,12 @@ internal sealed class TransactionAddSet
     /// Discards the add of a file, if the transaction added it. Returns <see langword="true"/> if the file was added by the transaction and is now
     /// discarded, or was discarded earlier; <see langword="false"/> if the transaction did not add it.
     /// </summary>
+    /// <remarks>
+    /// A discard is the rollback of one add, so a failure to delete the file is reported through <see cref="FileRepo.TransactionCompletionFailed"/> as the
+    /// failure of a rollback, not thrown, and the file is left indeterminate for the cleaner, which deletes it because no record references it. The add is
+    /// discarded whatever happens: a later commit of the transaction must not commit a file the application has deleted. A disposed repository is thrown,
+    /// as it is by every operation of the transaction.
+    /// </remarks>
     public async ValueTask<bool> TryDiscardAsync(FileId fileId)
     {
         if (_discarded.Contains(fileId))
@@ -66,9 +72,20 @@ internal sealed class TransactionAddSet
         if (!_added.Contains(fileId))
             return false;
 
-        await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
-        _added.Remove(fileId);
-        _discarded.Add(fileId);
+        try
+        {
+            await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not ObjectDisposedException)
+        {
+            await _repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Rollback, ex).ConfigureAwait(false);
+        }
+        finally
+        {
+            _added.Remove(fileId);
+            _discarded.Add(fileId);
+        }
+
         return true;
     }
 

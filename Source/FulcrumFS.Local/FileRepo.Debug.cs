@@ -75,6 +75,13 @@ internal enum DebugStep
     /// marker that is no longer on disk.
     /// </summary>
     DeleteMarkerOpened,
+
+    /// <summary>
+    /// A transaction that is rolling back the add of a file, or discarding it, has released the file's indeterminate marker and is about to delete the file
+    /// with its marker. The hook is called with the file's lock held. Throwing from it fails the rollback of that one file before anything of it has
+    /// happened: the file stays where it is with a marker that nobody holds, so it is indeterminate.
+    /// </summary>
+    AddRollbackStarted,
 }
 
 /// <content>
