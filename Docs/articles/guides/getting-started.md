@@ -20,10 +20,13 @@ Install the packages that match what you need:
 
 ### Prerequisites
 
-FulcrumFS layers on top of a normal file system, so the only hard requirement is a directory the process can read and write. The library uses <xref:Singulink.IO.IAbsoluteDirectoryPath> and <xref:Singulink.IO.IAbsoluteFilePath> from Singulink.IO.FileSystem for all path handling, so a `using Singulink.IO;` is usually present alongside `using FulcrumFS;`.
+FulcrumFS layers on top of a normal file system, so the only hard requirement is a directory on a local file system that the process can read and write. The library uses <xref:Singulink.IO.IAbsoluteDirectoryPath> and <xref:Singulink.IO.IAbsoluteFilePath> from Singulink.IO.FileSystem for all path handling, so a `using Singulink.IO;` is usually present alongside `using FulcrumFS;`.
 
 > [!TIP]
 > Pick a base directory that lives on the same volume as your application's data and is excluded from any file indexer or antivirus on-access scanner. The repository writes lots of small marker files during normal operation, and a busy scanner can noticeably slow things down.
+
+> [!IMPORTANT]
+> Keep the base directory on a local file system: a local disk, or block storage that the operating system mounts as a local file system, such as an iSCSI or SAN volume or a cloud block volume. Network file systems, such as NFS mounts and SMB shares, are not supported for a repository that is written to or cleaned. Transactions and the cleaner coordinate through file locks, and on Linux and macOS .NET does not take those locks on NFS and SMB mounts, so a cleanup pass there could remove the record of a deletion that a transaction has not committed yet. To use a repository from several machines, use an implementation of <xref:FulcrumFS.IFileRepo> made for that instead of a shared folder (see [Coding Against the Repository Interface](../concepts/repository-abstraction.md)).
 
 ## Creating a Repository
 

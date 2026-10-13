@@ -35,6 +35,11 @@ public class FileRepoOptions
     /// <summary>
     /// Gets or sets the base directory for the file repository.
     /// </summary>
+    /// <remarks>
+    /// The directory must be on a local file system: a local disk, or block storage that the operating system mounts as a local file system, such as an
+    /// iSCSI or SAN volume. Network file systems, such as NFS mounts and SMB shares, are not supported. Transactions and the cleaner coordinate through
+    /// file locks, which .NET does not take on NFS and SMB mounts under Linux and macOS.
+    /// </remarks>
     public required IAbsoluteDirectoryPath BaseDirectory {
         get;
         set {
