@@ -890,6 +890,96 @@ public sealed class PendingDeleteMarkerTests
     }
 
     /// <summary>
+    /// A transaction whose commit is cut short by the repository's disposal, and which the application then disposes (its database has committed the
+    /// deletion), lets go of its handle without the file's lock. The rollback of another pending deletion of the file that was already waiting for the lock
+    /// must leave the marker, which is the only record of the committed deletion, because after the disposal the count no longer says what the marker
+    /// records.
+    /// </summary>
+    [TestMethod]
+    public async Task TransactionDisposedAfterItsCommitWasCutShortByDisposal_LeavesTheMarker_WhenARollbackWasWaitingForTheLock()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        FileId fileId;
+
+        try
+        {
+            fileId = await AddSampleFileAsync(repo);
+            var marker = IndeterminateMarker(repoDir, fileId);
+
+            var committing = await repo.BeginTransactionAsync();
+            await committing.DeleteAsync(fileId, TestContext.CancellationToken);
+
+            await using var rollingBack = await repo.BeginTransactionAsync();
+            await rollingBack.DeleteAsync(fileId, TestContext.CancellationToken);
+
+            // A third deletion holds the file's lock in the debug step and then finds the marker in use, so that it never counts: the rollback passes the
+            // initialization check and waits for the lock while the repository is disposed.
+            using var entered = new SemaphoreSlim(0);
+            using var gate = new SemaphoreSlim(0);
+            using var cancellation = new CancellationTokenSource();
+            int opened = 0;
+
+            repo.DebugStepHook = step =>
+            {
+                if (step is not DebugStep.DeleteMarkerOpened || Interlocked.Increment(ref opened) is not 1)
+                    return;
+
+                entered.Release();
+                gate.Wait(TestContext.CancellationToken);
+
+                int inUse = OperatingSystem.IsWindows() ? unchecked((int)0x80070020) : OperatingSystem.IsLinux() ? 11 : 35;
+                throw new IOException("Simulated marker in use.", inUse);
+            };
+
+            await using var holdingTheLock = await repo.BeginTransactionAsync();
+            var holdingDelete = Task.Run(() => holdingTheLock.DeleteAsync(fileId, cancellation.Token), TestContext.CancellationToken);
+            await entered.WaitAsync(TestContext.CancellationToken);
+
+            var rollback = Task.Run(() => rollingBack.RollbackAsync(TestContext.CancellationToken), TestContext.CancellationToken);
+            await Task.Delay(500, TestContext.CancellationToken);
+            rollback.IsCompleted.ShouldBeFalse();
+
+            // The application has committed its database. The repository is disposed (the host is stopping): the commit throws, and the application
+            // disposes the transaction, as it does with any transaction it is done with.
+            repo.Dispose();
+            await Should.ThrowAsync<ObjectDisposedException>(() => committing.CommitAsync(TestContext.CancellationToken));
+            await committing.DisposeAsync();
+
+            cancellation.Cancel();
+            gate.Release();
+
+            var ex = await Should.ThrowAsync<Exception>(() => holdingDelete);
+            (ex is OperationCanceledException or RepoFileBusyException).ShouldBeTrue(ex.GetType().FullName);
+
+            await rollback;
+            repo.DebugStepHook = null;
+
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeFalse();
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+            repo.Dispose();
+        }
+
+        var reopened = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+
+        try
+        {
+            (await CleanAnsweringAsync(reopened, IndeterminateResolution.Delete)).ShouldBe([fileId]);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+        }
+        finally
+        {
+            reopened.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Deleting a file that the same transaction added discards the add. A failure to delete the file is the failure of a rollback: it is reported, not
     /// thrown, the file is left indeterminate for the cleaner, and the add stays discarded, so that the transaction's commit does not commit the file.
     /// </summary>

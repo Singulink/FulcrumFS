@@ -516,7 +516,13 @@ partial class FileRepo
             // last rollback leaves it too if it records something else (see _pendingDeletes). That is decided before the handle is released, which takes
             // this deletion out of the count; no other deletion can be counted until the lock is released. A handle that the transaction no longer holds is
             // not counted, and the marker is then left for the cleaner.
-            bool removeMarker = indeterminateMarker is not null && IsLastPendingDeleteOfOwnMarker(fileId);
+            //
+            // Nor does it remove the marker once the repository has been disposed. A transaction that the disposal cut short lets go of its handles
+            // without the lock (a commit that cannot take it, or the disposal of the transaction after a commit that threw), which takes its deletions out
+            // of the count although its application's database may have committed them, so the count no longer says whether the marker records anything
+            // else. The count is read first: a deletion that left it because of the disposal did so after the disposal was recorded, which the lock of the
+            // count then makes visible here.
+            bool removeMarker = indeterminateMarker is not null && IsLastPendingDeleteOfOwnMarker(fileId) && !_isDisposed;
 
             if (indeterminateMarker is not null)
                 await indeterminateMarker.DisposeAsync().ConfigureAwait(false);
