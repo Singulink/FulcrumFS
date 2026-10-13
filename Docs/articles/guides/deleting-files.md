@@ -28,31 +28,28 @@ await txn.CommitAsync();     // Repository second.
 
 If the transaction rolls back instead of committing, the deletion is abandoned and the file remains.
 
-#### Retrying and replaying deletes
+#### When the file may be missing
 
 <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> throws <xref:FulcrumFS.RepoFileNotFoundException> when the file is not there. That is deliberate: when the application believes a file exists, a missing one points to an application bug (such as a stale reference) or to a referenced file that has gone missing, and either should surface.
 
 Deleting a file that is already pending deletion succeeds and converges: if another transaction has deleted the file and a cleanup pass has not removed it yet, the second deletion is accepted and both are carried out as one, in every delete mode and whichever kind of transaction made them. Only a file that is gone, or never existed, throws.
 
-Work that may already have run is different. A queue of deletions replayed after a crash, or a retried request whose first attempt may have committed, needs to make sure a file is gone without failing when it already is. Use <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*> for that: it deletes the file if it exists and returns whether it did. When the file is already gone it returns `false` without writing anything; a file that is pending deletion still exists, so it returns `true` and the deletions converge.
+When a missing file is not an error for the operation, use <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*>: it deletes the file if it exists and returns whether it did. When the file is gone it returns `false` without writing anything; a file that is pending deletion still exists, so it returns `true` and the deletions converge. The typical case is a record whose file may already be gone, for example after the database was restored from a backup taken later than the repository's, where deleting the record should still succeed:
 
 ```csharp
-// Replay deletions recorded in the database, for example after a crash.
-foreach (var pending in await dbContext.PendingFileDeletions.ToListAsync())
-{
-    await using var txn = await repo.BeginTransactionAsync();
+// Delete an attachment whose file may be missing.
+await using var txn = await repo.BeginTransactionAsync();
 
-    if (!await txn.TryDeleteAsync(pending.FileId))
-        logger.LogInformation("File {FileId} was already gone.", pending.FileId);
+if (!await txn.TryDeleteAsync(attachment.FileId))
+    logger.LogWarning("The file {FileId} of attachment {AttachmentId} was already gone.", attachment.FileId, attachment.Id);
 
-    dbContext.PendingFileDeletions.Remove(pending);
-    await dbContext.SaveChangesAsync();   // Database first.
+dbContext.Attachments.Remove(attachment);
+await dbContext.SaveChangesAsync();   // Database first.
 
-    await txn.CommitAsync();              // Repository second.
-}
+await txn.CommitAsync();              // Repository second.
 ```
 
-Use <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> whenever the application believes the file exists, so that a mismatch surfaces, and <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*> only when replaying work that may already have run. Within a single transaction, deleting the same file a second time does nothing with either method.
+Use <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> whenever the application believes the file exists, so that a mismatch surfaces, and <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*> where a missing file is expected. Within a single transaction, deleting the same file a second time does nothing with either method.
 
 #### Deleting many files at once
 

@@ -77,7 +77,7 @@ A retirement can be interrupted midway through promoting a survivor and re-point
 - Completes interrupted adds and retirements by rolling them forward.
 - Removes deferred deletions whose grace period has elapsed, including the files listed in committed delete journals.
 - Sweeps stray hints and orphaned temporary work.
-- Resolves indeterminate files, and the files listed in delete journals whose staged transaction did not finish, through the caller-supplied resolution callback, which returns <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> per <xref:FulcrumFS.FileId>.
+- Resolves indeterminate files, and the files listed in delete journals whose staged transaction did not finish, through the caller-supplied resolution callback, which returns <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> per <xref:FulcrumFS.FileId>. If a transaction starts deleting a file while the pass is resolving it, the file's marker is left in place, because it now records that deletion.
 
 > [!IMPORTANT]
 > Because every step is idempotent and forward-only, running the cleaner more often simply reclaims space sooner; it never corrupts state. There is no "cleaner is already running" hazard to avoid. See [Repository Cleanup](../guides/cleanup.md) for scheduling guidance.

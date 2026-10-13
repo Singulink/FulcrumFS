@@ -66,7 +66,7 @@ See [File Variants](file-variants.md).
 
 ## Delete Errors
 
-Deleting a file that is not there with <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> throws <xref:FulcrumFS.RepoFileNotFoundException>; <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*> returns `false` instead. See [Retrying and replaying deletes](deleting-files.md#retrying-and-replaying-deletes) for which of the two to use.
+Deleting a file that is not there with <xref:FulcrumFS.FileRepoTransaction.DeleteAsync*> throws <xref:FulcrumFS.RepoFileNotFoundException>; <xref:FulcrumFS.FileRepoTransaction.TryDeleteAsync*> returns `false` instead. See [When the file may be missing](deleting-files.md#when-the-file-may-be-missing) for which of the two to use.
 
 Deleting a file that another transaction has added and not committed yet throws <xref:FulcrumFS.RepoFileBusyException> if that transaction is still open after a brief wait. It derives from <xref:System.IO.IOException>, so code that catches that keeps working, but it is not a storage fault: nothing has been recorded, the transaction stays usable, and the same deletion succeeds once the add has committed. Roll the database transaction back and let the operation be tried again.
 

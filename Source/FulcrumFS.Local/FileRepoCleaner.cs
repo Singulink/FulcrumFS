@@ -300,9 +300,9 @@ public class FileRepoCleaner : IFileRepoCleaner
                 if (fileDirState is EntryState.ParentExists || deletedFiles.Contains(indeterminateFile.Id))
                 {
                     // Parent dir of the file container dir exists but the file dir itself does not, so we can delete the indeterminate marker since the file dir is
-                    // gone. Ignore errors, we don't want to recreate an indeterminate marker if it is gone.
+                    // gone.
 
-                    indeterminateFile.Marker.TryDelete(out _);
+                    await elc.TryRunAsync(RemoveResolvedIndeterminateMarkerAsync(indeterminateFile.Marker)).ConfigureAwait(false);
                     continue;
                 }
 
@@ -313,7 +313,7 @@ public class FileRepoCleaner : IFileRepoCleaner
 
                 if (resolution is IndeterminateResolution.Keep)
                 {
-                    await elc.TryRunAsync(_fs.TryClearIndeterminateStateAsync(indeterminateFile.Id)).ConfigureAwait(false);
+                    await elc.TryRunAsync(RemoveResolvedIndeterminateMarkerAsync(indeterminateFile.Marker)).ConfigureAwait(false);
                 }
                 else if (resolution is IndeterminateResolution.Delete)
                 {
@@ -490,6 +490,43 @@ public class FileRepoCleaner : IFileRepoCleaner
         }
 
         return deleteSucceeded;
+    }
+
+    /// <summary>
+    /// Removes an indeterminate marker that this pass found unheld and has resolved, unless a transaction has taken it since. A transaction that deletes the
+    /// file in the meantime (between the probe and now, which spans the callback) has its deletion pending through the marker, which is then its only record:
+    /// the marker is left to that transaction, which removes it when it finishes, or to the next pass if it lets go of the marker without finishing.
+    /// </summary>
+    /// <remarks>
+    /// The marker is opened exclusively and removed when it is closed, so that no transaction can take it between the check and the removal: one that tries
+    /// in the meantime finds it in use, waits, and then creates a marker of its own. Removing the marker by its path while holding it would not do on Windows:
+    /// on a file system without POSIX deletion semantics the marker would be left pending deletion until the handle is closed, and an open in between would
+    /// fail with access denied, which a deletion does not wait for. A failure other than the marker being in use or gone is logged to the marker, which stays
+    /// for the next pass.
+    /// </remarks>
+    private async Task RemoveResolvedIndeterminateMarkerAsync(IAbsoluteFilePath marker)
+    {
+        FileStream stream;
+
+        try
+        {
+            stream = marker.OpenStream(FileMode.Open, FileAccess.Read, FileShare.None, 1, FileOptions.DeleteOnClose);
+        }
+        catch (FileNotFoundException)
+        {
+            return;
+        }
+        catch (IOException ex) when (RepoFileSystem.IsInUse(ex))
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await _fs.LogToOptionalMarkerAsync(marker, "DELETE MARKER ATTEMPT FAILED", ex).ConfigureAwait(false);
+            return;
+        }
+
+        await stream.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>

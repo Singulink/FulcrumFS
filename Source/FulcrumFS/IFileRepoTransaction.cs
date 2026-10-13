@@ -114,8 +114,9 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// </returns>
     /// <remarks>
     /// <para>
-    /// This is the idempotent form of <see cref="DeleteAsync(FileId, CancellationToken)"/> for callers that are retrying or replaying work that may already
-    /// have run. Nothing may be written to the repository when <see langword="false"/> is returned.</para>
+    /// Use this method instead of <see cref="DeleteAsync(FileId, CancellationToken)"/> when a missing file is not an error for the caller, for example when
+    /// deleting a record whose file may be gone after the database was restored from a backup taken later than the repository's. Nothing may be written to the
+    /// repository when <see langword="false"/> is returned.</para>
     /// <para>
     /// A file that another transaction has deleted exists until its deletion has been carried out, so this method returns <see langword="true"/> for a file
     /// whose deletion has committed and is pending cleanup, and the deletions converge as described on
