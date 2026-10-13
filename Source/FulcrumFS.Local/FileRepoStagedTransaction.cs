@@ -403,7 +403,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
             foreach (var fileId in _adds.FileIds)
                 await elc.TryRunAsync(_adds.CommitAsync(fileId, waitBudget)).ConfigureAwait(false);
 
-            // 3. Apply the deletions according to the delete mode and release the record.
+            // 3. Apply the deletions according to the delete mode and release the record. A journal committed them in step 1, so one that cannot be
+            //    applied is left to the journal and the cleaner without being reported; a record of markers commits each of them here and reports the
+            //    ones that fail.
             if (_deletes is not null)
             {
                 await _deletes.ApplyAsync(elc, waitBudget).ConfigureAwait(false);

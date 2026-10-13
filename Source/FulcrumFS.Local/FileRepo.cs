@@ -30,6 +30,10 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     private readonly RepoFileSystem _fs;
     private readonly IAbsoluteDirectoryPath _tempDirectory;
 
+    // Whether this instance has emptied the temp directory, which it does once, at its first successful initialization (see InitializeCore). Read and
+    // written within the state sync lock.
+    private bool _isTempDirectoryCleaned;
+
     private readonly KeyLocker<(FileId FileId, string? VariantId)> _fileSync = new();
     private readonly AsyncLock _stateSync = new();
 
@@ -539,8 +543,13 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     /// <see cref="EnsureCreated"/> creates it first if needed.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// An instance initializes again whenever a health check has failed and dropped the repository lock (see <see cref="DropLockStream"/>), and its
+    /// operations go on in the meantime. The first initialization empties the temp directory of what a previous process left in it; a later one leaves the
+    /// directory's content, which is the working files of those operations, as it is.</para>
+    /// <para>
     /// In read-only mode only the repository's <c>read-compat-version</c> and structure are verified, once: no lock is taken (another instance may hold it as
-    /// the writer), nothing is upgraded, the temp directory is not touched and no health checks run, since the probe writes to the lock file.
+    /// the writer), nothing is upgraded, the temp directory is not touched and no health checks run, since the probe writes to the lock file.</para>
     /// </remarks>
     private void InitializeCore()
     {
@@ -575,7 +584,15 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
                 if (_formatVersion < targetVersion && RepoInfoFile.VerifyFullAccessSupportedAndUpgrade(_infoFile, targetVersion))
                     _formatVersion = targetVersion;
 
-                _tempDirectory.Delete(recursive: true);
+                // The temp directory is emptied once, at the first initialization of this instance, which is when it takes the repository lock: what is
+                // in the directory then was left behind by a process that ended. From then on its content is the working files of this instance's own
+                // operations, which go on while the repository is initialized again after a failed health check; an add can be in its pipeline for
+                // minutes. Emptying the directory then would delete those files from under the add, which fails when it goes on, and where one of them is
+                // open and cannot be deleted (on Windows, a file that is open without sharing its deletion) it would fail every initialization until the
+                // add had finished. So later initializations only make sure that the directory exists.
+                if (!_isTempDirectoryCleaned)
+                    _tempDirectory.Delete(recursive: true);
+
                 _tempDirectory.Create();
             }
             catch
@@ -585,6 +602,7 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
             }
 
             _lockStream = lockStream;
+            _isTempDirectoryCleaned = true;
             Volatile.Write(ref _lastAccessTimestamp, Stopwatch.GetTimestamp());
             DebugStepHook?.Invoke(DebugStep.RepoInitialized);
             ArmHealthCheckTimer();

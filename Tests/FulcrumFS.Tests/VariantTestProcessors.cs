@@ -98,6 +98,54 @@ internal sealed class GateProcessor : FileProcessor
 }
 
 /// <summary>
+/// A processor that writes its result to a new work file in two parts and, between them, waits with the file open until the test releases it. An add that
+/// runs it has its output open in the repository's temp directory for as long as the test wants, as a processor that takes long (a transcode) has.
+/// </summary>
+internal sealed class GatedRewriteProcessor : FileProcessor
+{
+    private readonly byte[] _firstPart;
+    private readonly byte[] _secondPart;
+    private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public GatedRewriteProcessor(byte[] firstPart, byte[] secondPart)
+    {
+        _firstPart = firstPart;
+        _secondPart = secondPart;
+    }
+
+    /// <summary>
+    /// Gets a task that completes once the processor has written the first part to its work file, which it holds open from then on.
+    /// </summary>
+    public Task Entered => _entered.Task;
+
+    public override IReadOnlyList<string> AllowedFileExtensions => [];
+
+    public void Release() => _released.TrySetResult();
+
+    protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
+    {
+        var workFile = context.GetNewWorkFile(context.Extension);
+        workFile.ParentDirectory.Create();
+
+        var stream = workFile.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.None);
+
+        await using (stream.ConfigureAwait(false))
+        {
+            await stream.WriteAsync(_firstPart).ConfigureAwait(false);
+            await stream.FlushAsync().ConfigureAwait(false);
+
+            _entered.TrySetResult();
+            await _released.Task.ConfigureAwait(false);
+
+            await stream.WriteAsync(_secondPart).ConfigureAwait(false);
+        }
+
+        return FileProcessingResult.File(workFile, hasChanges: true);
+    }
+}
+
+/// <summary>
 /// Helpers for building common variant pipelines used across the variant alias and retirement tests.
 /// </summary>
 internal static class VariantPipelines

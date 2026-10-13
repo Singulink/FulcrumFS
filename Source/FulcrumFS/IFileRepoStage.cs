@@ -20,8 +20,9 @@ public interface IFileRepoStage
     /// <para>
     /// The deletions are committed first, in a single atomic step however many files they cover. A failure of that step is thrown: no added file has been
     /// committed and no deletion applied in that case, and the call can be made again. Once the step has succeeded, the added files are committed and the
-    /// deletions are applied according to <see cref="IFileRepo.DeleteMode"/>, and failures of individual files are not thrown but reported through
-    /// <see cref="IFileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, leaving the affected files for the cleaner.</para>
+    /// deletions are applied according to <see cref="IFileRepo.DeleteMode"/>. A failure to commit an individual file is not thrown but reported through
+    /// <see cref="IFileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, leaving the file for the cleaner. A deletion that the step has
+    /// committed and that cannot be applied at once is not a failure and is not reported: a cleanup pass carries it out.</para>
     /// <para>
     /// Calling this method again after it succeeded does nothing. The transaction is never rolled back once this method has started the commit, even if it
     /// then throws: the application's database has committed, so disposing the transaction leaves its files for a cleanup pass, which resolves them through

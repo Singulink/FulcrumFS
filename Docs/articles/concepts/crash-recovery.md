@@ -76,8 +76,10 @@ A retirement can be interrupted midway through promoting a survivor and re-point
 
 - Completes interrupted adds and retirements by rolling them forward.
 - Removes deferred deletions whose grace period has elapsed, including the files listed in committed delete journals.
-- Sweeps stray hints and orphaned temporary work.
+- Sweeps stray hints.
 - Resolves indeterminate files, and the files listed in delete journals whose staged transaction did not finish, through the caller-supplied resolution callback, which returns <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> per <xref:FulcrumFS.FileId>. If a transaction starts deleting a file while the pass is resolving it and the callback answers <xref:FulcrumFS.IndeterminateResolution.Keep>, the file's marker is left in place, because it now records that deletion. If the callback answers <xref:FulcrumFS.IndeterminateResolution.Delete>, the pass deletes the file, or records its deletion, before it removes the marker, and the transaction's own deletion of the file then has nothing left to do.
+
+Temporary work is not the cleaner's to sweep. The work files of an add live in the `temp` directory until the add finishes, which removes them. What a process that ended in the middle of an add left there is removed when a <xref:FulcrumFS.FileRepo> next opens the repository: it empties the directory once, when it first initializes and takes the repository lock. It does not empty it when it initializes again after its volume stopped answering for a while, because the directory then holds the work files of its own adds, which are still running.
 
 > [!IMPORTANT]
 > Because every step is idempotent and forward-only, running the cleaner more often simply reclaims space sooner; it never corrupts state. There is no "cleaner is already running" hazard to avoid. See [Repository Cleanup](../guides/cleanup.md) for scheduling guidance.

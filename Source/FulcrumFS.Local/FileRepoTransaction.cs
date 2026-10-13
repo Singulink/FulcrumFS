@@ -195,10 +195,14 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// <see cref="FileRepo.TransactionCompletionFailed"/>. If the journal cannot be written, each deletion is recorded with its own delete marker instead. A
     /// file whose commit failed stays accessible in an indeterminate state for the next cleanup pass to resolve.</para>
     /// <para>
+    /// Once the journal is written, the deletions it records are committed, and nothing that goes wrong with them afterwards is reported. All that is
+    /// left is to remove each file's indeterminate marker, and a marker that cannot be removed, whatever the reason, is removed by the cleaner, which
+    /// deletes the files the journal lists without asking.</para>
+    /// <para>
     /// If the repository cannot be accessed, for example because its volume has stopped answering, the commit waits for it for up to
     /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of its files, not once for each, counting only the time it waits. Once that time
     /// is used up, each further file is attempted once without waiting, and one that cannot be committed is reported and left for the cleaner as
-    /// above.</para>
+    /// above; a deletion that the journal has recorded is committed, and is not reported.</para>
     /// <para>
     /// An indeterminate marker that cannot be removed because something else has it open is tolerated, not reported: removing the marker is what commits
     /// an added file, the file is accessible either way, and it stays indeterminate until the next cleanup pass resolves it and removes the marker. The
@@ -240,8 +244,10 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
 
             foreach (var fileId in _deleted)
             {
-                await elc.TryRunAsync(isJournaled ? FinishJournaledDeleteAsync(fileId, waitBudget) : CommitDeleteAsync(fileId, waitBudget))
-                    .ConfigureAwait(false);
+                if (isJournaled)
+                    await FinishJournaledDeleteAsync(fileId, waitBudget).ConfigureAwait(false);
+                else
+                    await elc.TryRunAsync(CommitDeleteAsync(fileId, waitBudget)).ConfigureAwait(false);
 
                 _deleted.Remove(fileId);
             }
@@ -252,14 +258,32 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
         if (elc.HasExceptions)
             await Repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Commit, elc.ResultException).ConfigureAwait(false);
 
-        async Task CommitDeletesToJournalAsync(AccessWaitBudget waitBudget) =>
+        async Task CommitDeletesToJournalAsync(AccessWaitBudget waitBudget)
+        {
             isJournaled = await Repository.TxnCommitDeletesToJournalAsync(_deleted, waitBudget).ConfigureAwait(false);
+
+            if (isJournaled)
+                Repository.DebugStepHook?.Invoke(DebugStep.DeleteJournalWritten);
+        }
 
         async Task CommitDeleteAsync(FileId fileId, AccessWaitBudget waitBudget) =>
             await Repository.TxnCommitDeleteAsync(fileId, TakeDeleteMarker(fileId), waitBudget).ConfigureAwait(false);
 
-        async Task FinishJournaledDeleteAsync(FileId fileId, AccessWaitBudget waitBudget) =>
-            await Repository.TxnFinishJournaledDeleteAsync(fileId, TakeDeleteMarker(fileId), waitBudget).ConfigureAwait(false);
+        async Task FinishJournaledDeleteAsync(FileId fileId, AccessWaitBudget waitBudget)
+        {
+            // The journal has committed the deletion, and all that is left is to remove the file's indeterminate marker, which the cleaner does when it
+            // applies the journal (it removes the marker with the file), or before that through the resolution callback. So a marker that cannot be
+            // removed is not a failure of the commit and is not reported, whatever the step throws, as every one of them does with a TimeoutException on
+            // a volume that has stopped answering; the step releases the transaction's handle on the marker in every case. A disposed repository is still
+            // thrown, as by every other step of the commit.
+            try
+            {
+                await Repository.TxnFinishJournaledDeleteAsync(fileId, TakeDeleteMarker(fileId), waitBudget).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not ObjectDisposedException)
+            {
+            }
+        }
     }
 
     /// <summary>

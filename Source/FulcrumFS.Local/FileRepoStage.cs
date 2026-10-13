@@ -33,14 +33,17 @@ public sealed class FileRepoStage : IFileRepoStage
     /// the files are deleted now and the journal is removed; in the deferred modes the committed journal stays as the delete record of its files, and a
     /// cleanup pass deletes them once it is older than the delete delay.</para>
     /// <para>
-    /// A failure to commit the journal is thrown; nothing else has been committed in that case and the call can be retried. Failures to commit or delete
-    /// individual files are not thrown: they are reported through <see cref="FileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, and the
-    /// affected files are left for the cleaner. Calling this method again after it succeeded does nothing.</para>
+    /// A failure to commit the journal is thrown; nothing else has been committed in that case and the call can be retried. A failure to commit an added
+    /// file is not thrown: it is reported through <see cref="FileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, and the file is left
+    /// for the cleaner to resolve. A deletion is never reported once the journal is committed, because the journal has committed every deletion it
+    /// records: a file that cannot be deleted in <see cref="DeleteMode.Immediate"/> mode, whatever the reason, is not a failure. The journal is kept
+    /// then, and a cleanup pass deletes the file without asking; it also removes a journal that could not be removed although its files are gone. Calling
+    /// this method again after it succeeded does nothing.</para>
     /// <para>
     /// If the repository cannot be accessed, for example because its volume has stopped answering, the commit of the files waits for it for up to
     /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of them, not once for each, counting only the time it waits. Once that time is
-    /// used up, each further file is attempted once without waiting, and one that cannot be committed or deleted is reported and left for the cleaner as
-    /// above.</para>
+    /// used up, each further file is attempted once without waiting: an added file that cannot be committed is reported and left for the cleaner as above,
+    /// and a file that cannot be deleted is left to the journal.</para>
     /// <para>
     /// Once this method has started the commit, the transaction is never rolled back, whatever the method throws. If it is not called again, disposing the
     /// transaction leaves the files to the cleaner. After a failure to commit the journal, that depends on how far the step came: if the rename failed, the

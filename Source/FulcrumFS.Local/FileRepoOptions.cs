@@ -149,9 +149,10 @@ public class FileRepoOptions
     /// time the files take to commit, so a large commit on slow but healthy storage is never cut short, and an outage is ridden out wherever in the commit it
     /// happens, as long as the commit's waits for its outages together stay within this time. Once the time is used up, each further file is attempted once
     /// without waiting and, if the repository is still inaccessible, fails with the same <see cref="TimeoutException"/>, which the commit or rollback reports
-    /// through <see cref="FileRepo.TransactionCompletionFailed"/> like any file it could not complete, leaving the file for the cleaner. So on a volume that
-    /// has stopped answering, a commit of any number of files returns after waiting this long once. On a version 1 repository, staging a staged transaction,
-    /// which writes a marker for each file it deletes, shares one wait among its files in the same way.</para>
+    /// through <see cref="FileRepo.TransactionCompletionFailed"/> like any file it could not complete, leaving the file for the cleaner (a deletion that a
+    /// committed delete journal records is committed, so the commit does not report it). So on a volume that has stopped answering, a commit of any number
+    /// of files returns after waiting this long once. On a version 1 repository, staging a staged transaction, which writes a marker for each file it
+    /// deletes, shares one wait among its files in the same way.</para>
     /// </remarks>
     public TimeSpan MaxAccessWaitOrRetryTime {
         get;

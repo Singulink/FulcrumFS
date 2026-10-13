@@ -691,6 +691,95 @@ public sealed class CommitContractTests
         }
     }
 
+    /// <summary>
+    /// A deletion that a committed delete journal records is not reported when a step of it fails afterwards (see <see cref="AccessWaitBudgetTests"/>), but
+    /// a disposed repository still ends the commit there with an <see cref="ObjectDisposedException"/>, as it does at any other file.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Commit_WhenTheRepositoryIsDisposedOnceTheDeleteJournalIsCommitted_ThrowsObjectDisposed_AndTheCleanerMakesTheDeletions(bool staged)
+    {
+        // A staged commit has a step for each file its journal lists in immediate mode, in which it deletes the file. An ordinary commit writes a journal
+        // in a deferred mode and then has one in which it removes the file's indeterminate marker.
+        var repoDir = NewRepoDir();
+        var deleteMode = staged ? DeleteMode.Immediate : DeleteMode.DeferredUntilClean;
+        var repo = CreateRepo(repoDir, deleteMode, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        FileId[] fileIds;
+
+        try
+        {
+            fileIds = await AddSampleFilesAsync(repo, 2);
+
+            if (staged)
+            {
+                var txn = await repo.BeginStagedTransactionAsync();
+
+                foreach (var fileId in fileIds)
+                    await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+                var stage = await txn.StageAsync(TestContext.CancellationToken);
+
+                // Committing the journal needs nothing of the repository instance, so the commit comes as far as the first file.
+                repo.Dispose();
+
+                await Should.ThrowAsync<ObjectDisposedException>(() => stage.CommitAsync(TestContext.CancellationToken));
+                await txn.DisposeAsync();
+            }
+            else
+            {
+                var txn = await repo.BeginTransactionAsync();
+
+                foreach (var fileId in fileIds)
+                    await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+                repo.DebugStepHook = step =>
+                {
+                    if (step is DebugStep.DeleteJournalWritten)
+                        repo.Dispose();
+                };
+
+                await Should.ThrowAsync<ObjectDisposedException>(() => txn.CommitAsync(TestContext.CancellationToken));
+                await txn.DisposeAsync();
+            }
+
+            // Nothing is reported and no file is deleted. The journal is committed, and nobody holds it.
+            failures.ShouldBeEmpty();
+            IsHeld(CleanupDir(repoDir).GetChildFiles("*" + FileRepoPaths.CommittedJournalExtension).ShouldHaveSingleItem()).ShouldBeFalse();
+            fileIds.ShouldAllBe(id => FileDir(repoDir, id).State == EntryState.Exists);
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+
+        // The next clean, by whoever opens the repository next, makes the committed deletions without asking.
+        var reopened = CreateRepo(repoDir, deleteMode, RepoFormatVersion.Version2);
+
+        try
+        {
+            var asked = new List<FileId>();
+
+            await reopened.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return IndeterminateResolution.Keep;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBeEmpty();
+            fileIds.ShouldAllBe(id => FileDir(repoDir, id).State != EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+        }
+        finally
+        {
+            reopened.Dispose();
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Staged transactions: staging
     // ---------------------------------------------------------------------------------------------------------------

@@ -57,10 +57,14 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
     public abstract void Commit();
 
     /// <summary>
-    /// Applies the committed deletions according to the repository's <see cref="FileRepoOptions.DeleteMode"/> and releases the record. Failures are captured
-    /// by <paramref name="elc"/> and the affected files are left for the cleaner. Each access to the repository waits within the commit's
-    /// <paramref name="waitBudget"/>.
+    /// Applies the committed deletions according to the repository's <see cref="FileRepoOptions.DeleteMode"/> and releases the record. Each access to the
+    /// repository waits within the commit's <paramref name="waitBudget"/>.
     /// </summary>
+    /// <remarks>
+    /// A record of markers commits each deletion here: its failures are captured by <paramref name="elc"/>, and the affected files are left for the
+    /// cleaner to resolve. A journal committed all of its deletions in <see cref="Commit"/>, and the cleaner carries out what is left of them without
+    /// asking, so a deletion that cannot be carried out here is not a failure of the commit and is not captured, whether its step says so or throws.
+    /// </remarks>
     public abstract Task ApplyAsync(ExceptionListCapture elc, AccessWaitBudget waitBudget);
 
     /// <summary>
@@ -87,24 +91,34 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
             // In immediate mode the listed files are deleted now and the journal is removed once all of them are gone; a deletion that cannot complete keeps
             // the journal, the durable record of the deletion, for the cleaner to finish. In the deferred modes (both defer main files) the committed journal
             // stays as the delete record of its files, and the cleaner applies the delete delay to it.
+            //
+            // The committed journal has committed every deletion it lists: the cleaner carries out what is left of them without asking. So a deletion that
+            // cannot be carried out here is not a failure of the commit and is not reported, whether its step says so or throws, as every one of them does
+            // with a TimeoutException on a volume that has stopped answering; reporting those would tell the application that its commit failed when its
+            // deletions are recorded and will be made. A disposed repository is still thrown, as by every other step of a commit.
             if (_isCommitted && repository.Options.DeleteMode is DeleteMode.Immediate)
             {
                 bool allDeleted = true;
 
                 foreach (var fileId in fileIds)
                 {
-                    // A deletion that threw did not complete either, so it keeps the journal as well.
-                    if (!await elc.TryRunAsync(DeleteFileAsync(fileId)).ConfigureAwait(false))
+                    try
+                    {
+                        if (!await repository.TxnCommitStagedDeleteAsync(fileId, waitBudget).ConfigureAwait(false))
+                            allDeleted = false;
+                    }
+                    catch (Exception ex) when (ex is not ObjectDisposedException)
+                    {
                         allDeleted = false;
+                    }
                 }
 
+                // A journal that cannot be removed although all of its files are gone is the same case: it is still committed, and the cleaner removes a
+                // committed journal once it finds the files it lists gone.
                 if (allDeleted)
-                    elc.TryRun(journal.DeleteCommitted);
-
-                async Task DeleteFileAsync(FileId fileId)
                 {
-                    if (!await repository.TxnCommitStagedDeleteAsync(fileId, waitBudget).ConfigureAwait(false))
-                        allDeleted = false;
+                    try { journal.DeleteCommitted(); }
+                    catch { }
                 }
             }
 

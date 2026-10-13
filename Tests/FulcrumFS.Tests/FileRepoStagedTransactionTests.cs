@@ -827,7 +827,7 @@ public sealed class FileRepoStagedTransactionTests
     }
 
     [TestMethod]
-    public async Task CommitFailure_DeletionThrows_KeepsTheJournal_AndReportsTheFailure()
+    public async Task Commit_DeletionThrows_KeepsTheJournal_AndIsNotAFailure()
     {
         var repoDir = NewRepoDir();
         var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
@@ -859,8 +859,9 @@ public sealed class FileRepoStagedTransactionTests
                 }
             }
 
-            // The commit did not throw. It reported the failure and kept the committed journal, the record of the deletion that did not complete.
-            failures.ShouldHaveSingleItem().Operation.ShouldBe(RepoTransactionCompletionOperation.Commit);
+            // The commit did not throw, and it reported nothing: the committed journal records the deletion that did not complete, so that deletion is
+            // not a failure of the commit. It kept the journal.
+            failures.ShouldBeEmpty();
             CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().Extension.ShouldBe(FileRepoPaths.CommittedJournalExtension);
             FileDir(repoDir, fileIds[1]).State.ShouldNotBe(EntryState.Exists);
 
@@ -872,10 +873,81 @@ public sealed class FileRepoStagedTransactionTests
             foreach (var fileId in fileIds)
                 FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
 
-            failures.ShouldHaveSingleItem();
+            failures.ShouldBeEmpty();
         }
         finally
         {
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    [DoNotParallelize] // DurableIO.Observer is process-wide.
+    public async Task Commit_JournalThatCannotBeRemoved_IsKept_AndIsNotAFailure()
+    {
+        if (!OperatingSystem.IsWindows() && Environment.UserName is "root")
+            throw new AssertInconclusiveException("Directory permissions do not keep root from removing the journal.");
+
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        IDisposable? blocker = null;
+
+        try
+        {
+            var fileIds = await AddSampleFilesAsync(repo, 2);
+            var cleanupDir = CleanupDir(repoDir);
+            IAbsoluteFilePath committedJournal;
+
+            await using (var txn = await repo.BeginStagedTransactionAsync())
+            {
+                foreach (var fileId in fileIds)
+                    await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+                var stage = await txn.StageAsync(TestContext.CancellationToken);
+                committedJournal = cleanupDir.GetChildFiles().ShouldHaveSingleItem().WithExtension(FileRepoPaths.CommittedJournalExtension, PathOptions.None);
+
+                // From the moment the commit has renamed the journal and flushed the rename, the journal cannot be removed, so the commit deletes both files
+                // and then fails to remove it.
+                RecordFlushes(path =>
+                {
+                    if (path == cleanupDir.PathExport)
+                        blocker ??= BlockRemoval(committedJournal);
+                });
+
+                try
+                {
+                    await stage.CommitAsync(TestContext.CancellationToken);
+                }
+                finally
+                {
+                    DurableIO.Observer = null;
+                }
+            }
+
+            // The commit did not throw, and it reported nothing: the journal is still committed, with every file it lists gone, and nobody holds it.
+            failures.ShouldBeEmpty();
+            blocker.ShouldNotBeNull();
+
+            foreach (var fileId in fileIds)
+                FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+
+            cleanupDir.GetChildFiles().ShouldHaveSingleItem().ShouldBe(committedJournal);
+
+            blocker.Dispose();
+            blocker = null;
+            IsHeld(committedJournal).ShouldBeFalse();
+
+            // The cleaner removes a committed journal whose files are gone.
+            await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+            cleanupDir.GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            DurableIO.Observer = null;
+            blocker?.Dispose();
             repo.Dispose();
         }
     }
@@ -1221,6 +1293,44 @@ public sealed class FileRepoStagedTransactionTests
         catch (IOException)
         {
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Makes a file of the cleanup directory impossible to remove until the returned object is disposed: on Windows by holding it open without sharing its
+    /// deletion, elsewhere by taking the write permission of the directory away, which keeps every entry of the directory from being removed.
+    /// </summary>
+    private static IDisposable BlockRemoval(IAbsoluteFilePath file)
+    {
+        if (OperatingSystem.IsWindows())
+            return file.OpenStream(FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+        return new PermissionsRestorer(file.ParentDirectory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+    }
+
+    /// <summary>
+    /// Gives a directory the specified permissions until it is disposed, which gives it back the ones it had.
+    /// </summary>
+    private sealed class PermissionsRestorer : IDisposable
+    {
+        private readonly string _directory;
+        private readonly UnixFileMode _mode;
+
+        public PermissionsRestorer(IAbsoluteDirectoryPath directory, UnixFileMode mode)
+        {
+            _directory = directory.PathExport;
+
+            if (!OperatingSystem.IsWindows())
+            {
+                _mode = File.GetUnixFileMode(_directory);
+                File.SetUnixFileMode(_directory, mode);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(_directory, _mode);
         }
     }
 

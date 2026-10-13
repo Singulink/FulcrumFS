@@ -410,7 +410,8 @@ partial class FileRepo
 
     /// <summary>
     /// Physically deletes a file listed in a committed delete journal, in immediate delete mode. Returns <see langword="false"/> if the deletion could not
-    /// complete; the failure is logged to the file's delete marker and the journal must be kept as the record of the deletion.
+    /// complete; the failure is logged to the file's delete marker and the journal must be kept as the record of the deletion. An exception, such as the
+    /// <see cref="TimeoutException"/> of a repository that cannot be accessed, means the same: the journal has committed the deletion either way.
     /// </summary>
     internal ValueTask<bool> TxnCommitStagedDeleteAsync(FileId fileId, AccessWaitBudget waitBudget) =>
         DeleteAsync(fileId, immediate: true, flushFailureRecord: false, waitBudget);
@@ -492,6 +493,11 @@ partial class FileRepo
     /// bring the marker back together with the journal, which deletes the file, and the cleaner removes the marker of a file whose group is gone. The marker
     /// is removed whatever other deletions of the file are pending, because the journal has recorded the deletion.
     /// </summary>
+    /// <remarks>
+    /// The deletion is committed whether this succeeds or not, so the transaction does not report an exception from it: the handle is released in every
+    /// case, and a marker that is left on disk is removed by the cleaner, with the file when it applies the journal, or before that through the resolution
+    /// callback if a pass finds the marker while the journal is still younger than the delete delay.
+    /// </remarks>
     internal async ValueTask TxnFinishJournaledDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker, AccessWaitBudget waitBudget)
     {
         using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker, waitBudget).ConfigureAwait(false))

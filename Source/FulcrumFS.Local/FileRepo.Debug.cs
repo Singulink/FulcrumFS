@@ -82,6 +82,15 @@ internal enum DebugStep
     /// happened: the file stays where it is with a marker that nobody holds, so it is indeterminate.
     /// </summary>
     AddRollbackStarted,
+
+    /// <summary>
+    /// A committing transaction has recorded its deletions in a committed delete journal, flushed to disk, and is about to finish each of them by releasing
+    /// and removing the file's indeterminate marker (raised by the commit of an ordinary transaction, which writes its journal as it commits). The hook is
+    /// called with no file's lock held. The deletions are committed from here on whatever happens, so a test can make the repository inaccessible in the
+    /// hook to fail every step that follows. Throwing from the hook is reported as a failure of the commit and changes nothing else: the deletions are
+    /// finished as the journal's.
+    /// </summary>
+    DeleteJournalWritten,
 }
 
 /// <content>

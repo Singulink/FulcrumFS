@@ -7,11 +7,13 @@ namespace FulcrumFS;
 /// Pins that a commit, a rollback and the staging of a version 1 repository wait for access to the repository for
 /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once, shared by all of their files, instead of once per file: on a volume that has stopped
 /// answering they fail after one wait and leave their files for the cleaner, they still ride out an outage shorter than the wait, and the time their work
-/// takes does not count.
+/// takes does not count. Also pins what a commit on such a volume reports: the files it could not commit, but no deletion that a committed delete journal
+/// records, which the cleaner makes without asking.
 /// </summary>
 /// <remarks>
-/// The volume stops answering as the repository sees it when that happens while it is idle: its health checks have stopped, the next access probes the
-/// volume inline and the probe fails, and initializing the repository again fails, because its info file is gone, until the volume answers again.
+/// The volume stops answering as the repository sees it when that happens while it is idle (see <see cref="SimulatedVolume"/>): its health checks have
+/// stopped, the next access probes the volume inline and the probe fails, and initializing the repository again fails, because its info file is gone, until
+/// the volume answers again.
 /// </remarks>
 [PrefixTestClass]
 public sealed class AccessWaitBudgetTests
@@ -208,7 +210,7 @@ public sealed class AccessWaitBudgetTests
     [TestMethod]
     [DataRow(RepoFormatVersion.Version1)]
     [DataRow(RepoFormatVersion.Version2)]
-    public async Task StageCommit_OfDeletions_OnAVolumeThatStoppedAnswering_FailsAfterOneWait_AndTheCleanerFinishesThem(RepoFormatVersion formatVersion)
+    public async Task StageCommit_OfDeletions_OnAVolumeThatStoppedAnswering_WaitsOnce_AndTheCleanerFinishesThem(RepoFormatVersion formatVersion)
     {
         // In immediate mode the commit deletes each file the journal lists once it has committed the journal; on version 1 it commits each deletion as an
         // ordinary transaction does.
@@ -232,17 +234,22 @@ public sealed class AccessWaitBudgetTests
                 ShouldHaveWaitedOnce(await TimeAsync(() => stage.CommitAsync(TestContext.CancellationToken)));
             }
 
-            ShouldHaveReportedTimeouts(failures, RepoTransactionCompletionOperation.Commit, FileCount);
             fileIds.ShouldAllBe(id => FileDir(repoDir, id).State == EntryState.Exists);
 
             if (formatVersion is RepoFormatVersion.Version1)
             {
+                // No deletion is recorded: each of them failed to commit, which is reported, and its file is indeterminate.
+                ShouldHaveReportedTimeouts(failures, RepoTransactionCompletionOperation.Commit, FileCount);
+
                 foreach (var fileId in fileIds)
                     ShouldBeIndeterminate(repoDir, fileId);
             }
             else
             {
-                CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().Extension.ShouldBe(FileRepoPaths.CommittedJournalExtension);
+                // The journal was committed before any file was reached, so every deletion is committed although none could be carried out: nothing is
+                // reported, and the journal is kept, with nobody holding it, for the cleaner.
+                failures.ShouldBeEmpty();
+                ShouldBeTheUnheldCommittedJournal(CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem());
             }
 
             volume.AnswerAgain();
@@ -257,6 +264,154 @@ public sealed class AccessWaitBudgetTests
         }
         finally
         {
+            volume.AnswerAgain();
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    public async Task StageCommit_OfAddsAndDeletions_OnAVolumeThatStoppedAnswering_ReportsTheAdds_AndNotTheDeletionsItsJournalRecords()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        var volume = new SimulatedVolume(repo, repoDir);
+
+        try
+        {
+            var deleted = await AddSampleFilesAsync(repo, FileCount);
+            var added = new List<FileId>();
+
+            await using (var txn = await repo.BeginStagedTransactionAsync())
+            {
+                for (int i = 0; i < FileCount / 2; i++)
+                    added.Add(await AddSampleFileAsync(txn));
+
+                foreach (var fileId in deleted)
+                    await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+                var stage = await txn.StageAsync(TestContext.CancellationToken);
+
+                // The commit renames the journal, which needs no access check, then commits each add, and then deletes each file the journal lists.
+                await volume.StopAnsweringOnceIdleAsync();
+                ShouldHaveWaitedOnce(await TimeAsync(() => stage.CommitAsync(TestContext.CancellationToken)));
+            }
+
+            // Nothing records that the adds are committed, so their failures are reported and the files are indeterminate. The deletions are committed
+            // by the journal, so the files that could not be deleted are not failures, and the journal is kept for the cleaner.
+            ShouldHaveReportedTimeouts(failures, RepoTransactionCompletionOperation.Commit, added.Count);
+
+            foreach (var fileId in added)
+                ShouldBeIndeterminate(repoDir, fileId);
+
+            deleted.ShouldAllBe(id => FileDir(repoDir, id).State == EntryState.Exists);
+
+            ShouldBeTheUnheldCommittedJournal(CleanupDir(repoDir).GetChildFiles("*" + FileRepoPaths.CommittedJournalExtension).ShouldHaveSingleItem());
+            CleanupDir(repoDir).GetChildFiles().Count().ShouldBe(added.Count + 1);
+
+            volume.AnswerAgain();
+
+            // The application's database has committed, so its answer to the cleaner is to keep the files it added. The cleaner does not ask about the
+            // files the journal lists.
+            (await CleanAnsweringAsync(repo, _ => IndeterminateResolution.Keep)).ShouldBe(added, ignoreOrder: true);
+
+            foreach (var fileId in added)
+                ShouldBeCommitted(repoDir, fileId);
+
+            deleted.ShouldAllBe(id => FileDir(repoDir, id).State != EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldHaveSingleItem();
+        }
+        finally
+        {
+            volume.AnswerAgain();
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    [DataRow(DeleteMode.DeferredUntilClean, false)]
+    [DataRow(DeleteMode.DeferredFilesOnly, false)]
+    [DataRow(DeleteMode.DeferredUntilClean, true)]
+    public async Task Commit_OfDeletions_WhoseVolumeStopsAnsweringOnceTheirJournalIsWritten_WaitsOnce_ReportsNoDeletion_AndTheCleanerFinishesThem(
+        DeleteMode deleteMode, bool withAnAddWhoseCommitFails)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, deleteMode, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+        var volume = new SimulatedVolume(repo, repoDir);
+
+        try
+        {
+            var fileIds = await AddSampleFilesAsync(repo, FileCount);
+            FileId? added = null;
+            long stoppedAnswering = 0;
+            TimeSpan waited;
+
+            // The commit commits its adds, records its deletions in one journal and then removes the marker of each deleted file, which needs access to
+            // the repository for each of them. The volume stops answering once the journal is written. The wait for the health checks to stop is made in
+            // the debug step, which holds nothing that the checks need. With an add, its commit fails before that, while the volume still answers.
+            volume.OnStep = step =>
+            {
+                if (step is DebugStep.AddCommitStarted)
+                    throw new IOException("Simulated failure to commit the add.");
+
+                if (step is DebugStep.DeleteJournalWritten)
+                {
+                    volume.StopAnsweringOnceIdle();
+                    Volatile.Write(ref stoppedAnswering, Stopwatch.GetTimestamp());
+                }
+            };
+
+            await using (var txn = await repo.BeginTransactionAsync())
+            {
+                if (withAnAddWhoseCommitFails)
+                    added = await AddSampleFileAsync(txn);
+
+                foreach (var fileId in fileIds)
+                    await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+                await txn.CommitAsync(TestContext.CancellationToken);
+                waited = Stopwatch.GetElapsedTime(Volatile.Read(ref stoppedAnswering));
+            }
+
+            volume.OnStep = null;
+            Volatile.Read(ref stoppedAnswering).ShouldNotBe(0);
+            ShouldHaveWaitedOnce(waited);
+
+            // The journal records the deletions, so the markers that could not be removed are not failures of the commit: none of them is reported. The
+            // add that could not be committed is, as ever, and its file is indeterminate.
+            if (added is null)
+                failures.ShouldBeEmpty();
+            else
+                failures.ShouldHaveSingleItem().Exception.ShouldBeOfType<IOException>().Message.ShouldBe("Simulated failure to commit the add.");
+
+            // The journal is on disk, and so is each deleted file with its marker, which nobody holds.
+            ShouldBeTheUnheldCommittedJournal(CleanupDir(repoDir).GetChildFiles("*" + FileRepoPaths.CommittedJournalExtension).ShouldHaveSingleItem());
+            CleanupDir(repoDir).GetChildFiles().Count().ShouldBe(FileCount + 1 + (added is null ? 0 : 1));
+
+            foreach (var fileId in fileIds)
+                ShouldBeIndeterminate(repoDir, fileId);
+
+            if (added is not null)
+                ShouldBeIndeterminate(repoDir, added);
+
+            volume.AnswerAgain();
+
+            // The cleaner deletes the files the journal lists, and removes their markers with them, without asking. It asks about the added file, which
+            // the application's database references.
+            FileId[] expectedToBeAsked = added is null ? [] : [added];
+            (await CleanAnsweringAsync(repo, _ => IndeterminateResolution.Keep)).ShouldBe(expectedToBeAsked);
+
+            if (added is not null)
+                ShouldBeCommitted(repoDir, added);
+
+            fileIds.ShouldAllBe(id => FileDir(repoDir, id).State != EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+        }
+        finally
+        {
+            volume.OnStep = null;
             volume.AnswerAgain();
             repo.Dispose();
         }
@@ -505,6 +660,15 @@ public sealed class AccessWaitBudgetTests
     }
 
     /// <summary>
+    /// Asserts that an entry of the cleanup directory is a committed delete journal that nobody holds, which the cleaner can therefore apply.
+    /// </summary>
+    private static void ShouldBeTheUnheldCommittedJournal(IAbsoluteFilePath entry)
+    {
+        entry.Extension.ShouldBe(FileRepoPaths.CommittedJournalExtension);
+        IsHeld(entry).ShouldBeFalse();
+    }
+
+    /// <summary>
     /// Returns <see langword="true"/> if a marker exists and somebody has it open, which is how the cleaner tells that its transaction is active.
     /// </summary>
     private static bool IsHeld(IAbsoluteFilePath file)
@@ -627,157 +791,5 @@ public sealed class AccessWaitBudgetTests
 
         dir.Create();
         return dir;
-    }
-
-    /// <summary>
-    /// The volume of a repository, which can stop answering as the repository sees it: the repository's health probe fails, and its info file is moved
-    /// aside, so that initializing the repository again fails until the volume answers again. It takes the repository's debug step hook and passes every
-    /// step that it does not fail on to <see cref="OnStep"/>.
-    /// </summary>
-    private sealed class SimulatedVolume
-    {
-        private static readonly TimeSpan _idleTimeout = TimeSpan.FromSeconds(10);
-
-        private readonly FileRepo _repo;
-        private readonly string _infoFile;
-        private readonly string _infoFileAside;
-        private readonly Lock _sync = new();
-
-        private bool _isAnswering = true;
-        private TimeSpan? _answerAgainAfter;
-        private int _failedProbes;
-        private int _initializations;
-
-        public SimulatedVolume(FileRepo repo, IAbsoluteDirectoryPath repoDir)
-        {
-            _repo = repo;
-            _infoFile = repoDir.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None).PathExport;
-            _infoFileAside = _infoFile + ".aside";
-
-            repo.DebugStepHook = OnDebugStep;
-        }
-
-        /// <summary>
-        /// Gets or sets an action invoked for each debug step of the repository that the volume does not fail on.
-        /// </summary>
-        public Action<DebugStep>? OnStep { get; set; }
-
-        /// <summary>
-        /// Gets or sets how long a health probe hangs before it fails while the volume is not answering, for a volume that hangs rather than fails; or
-        /// <see langword="null"/> for one that fails at once.
-        /// </summary>
-        public TimeSpan? ProbeHang { get; set; }
-
-        /// <summary>
-        /// Gets the number of health probes that failed because the volume was not answering.
-        /// </summary>
-        public int FailedProbes => Volatile.Read(ref _failedProbes);
-
-        /// <summary>
-        /// Gets the number of times the repository has been initialized since the volume was created.
-        /// </summary>
-        public int Initializations => Volatile.Read(ref _initializations);
-
-        /// <summary>
-        /// Waits until the repository has been idle for long enough that its health checks have stopped, so that its next access probes the volume inline, and
-        /// then stops answering. If <paramref name="answerAgainAfter"/> is specified, the volume answers again that long after that probe failed.
-        /// </summary>
-        public async Task StopAnsweringOnceIdleAsync(TimeSpan? answerAgainAfter = null)
-        {
-            long start = Stopwatch.GetTimestamp();
-
-            while (_repo.HealthChecksActive)
-            {
-                ThrowIfIdleTimedOut(start);
-                await Task.Delay(50);
-            }
-
-            StopAnswering(answerAgainAfter);
-        }
-
-        /// <summary>
-        /// Does what <see cref="StopAnsweringOnceIdleAsync(TimeSpan?)"/> does, blocking the calling thread, for a debug step.
-        /// </summary>
-        public void StopAnsweringOnceIdle(TimeSpan? answerAgainAfter = null)
-        {
-            long start = Stopwatch.GetTimestamp();
-
-            while (_repo.HealthChecksActive)
-            {
-                ThrowIfIdleTimedOut(start);
-                Thread.Sleep(50);
-            }
-
-            StopAnswering(answerAgainAfter);
-        }
-
-        /// <summary>
-        /// Makes the volume answer again, if it is not answering.
-        /// </summary>
-        public void AnswerAgain()
-        {
-            lock (_sync)
-            {
-                if (_isAnswering)
-                    return;
-
-                File.Move(_infoFileAside, _infoFile);
-                _isAnswering = true;
-            }
-        }
-
-        private void StopAnswering(TimeSpan? answerAgainAfter)
-        {
-            lock (_sync)
-            {
-                File.Move(_infoFile, _infoFileAside);
-                _isAnswering = false;
-                _answerAgainAfter = answerAgainAfter;
-            }
-        }
-
-        private void OnDebugStep(DebugStep step)
-        {
-            if (step is DebugStep.HealthCheckProbe)
-            {
-                TimeSpan? answerAgainAfter;
-
-                lock (_sync)
-                {
-                    if (_isAnswering)
-                        return;
-
-                    answerAgainAfter = _answerAgainAfter;
-                    _answerAgainAfter = null;
-                }
-
-                Interlocked.Increment(ref _failedProbes);
-
-                if (ProbeHang is { } hang)
-                    Thread.Sleep(hang);
-
-                if (answerAgainAfter is { } delay)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(delay);
-                        AnswerAgain();
-                    });
-                }
-
-                throw new IOException("Simulated volume that does not answer.");
-            }
-
-            if (step is DebugStep.RepoInitialized)
-                Interlocked.Increment(ref _initializations);
-
-            OnStep?.Invoke(step);
-        }
-
-        private static void ThrowIfIdleTimedOut(long start)
-        {
-            if (Stopwatch.GetElapsedTime(start) > _idleTimeout)
-                throw new InvalidOperationException("The repository's health checks did not stop while it was idle.");
-        }
     }
 }
