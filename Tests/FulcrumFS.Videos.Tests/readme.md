@@ -1,3 +1,5 @@
+These tests require a build of FFmpeg with everything the library uses, including the optional `libfdk_aac` (see `FFprobeUtilsTests`). Set the `FFMPEG_BINARIES_PATH` environment variable to the directory containing `ffmpeg` and `ffprobe`. The build scripts in `Tools/FFmpeg` make such a build (CI uses them too), e.g. `Tools/FFmpeg/build-ffmpeg.ps1 Binaries` on Windows or `Tools/FFmpeg/build-ffmpeg.sh Binaries` on Linux and macOS (the `Binaries` folder is ignored by git), and `check-ffmpeg` checks an existing build - see the [Setting Up FFmpeg](../../Docs/articles/guides/ffmpeg-setup.md) guide.
+
 Note: you can create a `ffmpeg_path.txt` file like so for testing locally without having to set the environment variable manually (which also allows testing in VS Code for example - note leading / trailing whitespace is ignored) - place it in this directory:
 ```
 /opt/homebrew/bin

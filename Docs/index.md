@@ -33,11 +33,15 @@ The libraries are available on NuGet. Install the packages that match your needs
 
 Here are some additional links to get you started:
 
-- [Getting Started](articles/guides/getting-started.md) - Visit here first for a quick walkthrough and entry point to additional guides.
-- [Guides](articles/guides/toc.yml) - In-depth articles on every aspect of the libraries.
-- [Concepts](articles/concepts/toc.yml) - How the repository, pipelines, variants and crash recovery work under the hood.
+<!-- Keep the API link as api/index.html, even though docfx warns "Invalid file link:(~/api/index.html)": it opens the API landing page with all the
+     namespaces listed and collapsed, which suits an API spread over several namespaces. Never link the API index as api/index.md (in toc.yml it drops
+     the landing page's API sidebar, a known docfx issue) or as api/ (docfx leaves that as a bare folder link). Link to a page of the guides or concepts,
+     never to a toc.yml, which builds to a bare, unstyled toc.html. -->
+
+- [Getting Started](articles/guides/getting-started.md) - Visit here first for a quick walkthrough. It opens the guides: in-depth articles on every aspect of the libraries, listed in the sidebar.
+- [Concepts](articles/concepts/repository-layout.md) - How the repository, pipelines, variants and crash recovery work under the hood, starting with the layout of a repository on disk.
 - [Coding Against the Repository Interface](articles/concepts/repository-abstraction.md) - Depend on the repository interface so that another implementation can replace the local one.
-- [API Documentation](api/index.md) - Browse the fully documented API here.
+- [API Documentation](api/index.html) - Browse the fully documented API here.
 - [Chat on Discord](https://discord.gg/EkQhJFsBu6) - Have questions or want to discuss the library? This is the place for all Singulink project discussions.
 - [Github Repo](https://github.com/Singulink/FulcrumFS) - File issues, contribute pull requests or check out the code for yourself!
 

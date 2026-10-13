@@ -2,7 +2,7 @@
 
 # Video Processing
 
-The `Singulink.FulcrumFS.Videos` package adds video processing built on FFmpeg and FFprobe. It can transcode uploads to a standardized, web-friendly format and extract poster-frame thumbnails. This guide covers configuring the executables, the video processor, and the thumbnail processor, with a practical end-to-end example for a video upload endpoint.
+The `Singulink.FulcrumFS.Videos` package adds video processing built on FFmpeg and FFprobe. It can transcode uploads to a standardized, web-friendly format and extract poster-frame thumbnails. This guide covers configuring the executables (see [Setting Up FFmpeg](ffmpeg-setup.md) for getting a suitable build of them), the video processor, and the thumbnail processor, with a practical end-to-end example for a video upload endpoint.
 
 ### Where it fits
 
@@ -13,7 +13,9 @@ The `Singulink.FulcrumFS.Videos` package adds video processing built on FFmpeg a
 
 ## Configuring FFmpeg
 
-Video processing shells out to FFmpeg, so you must point the library at the directory containing the executables once at startup, before constructing any processor. Call <xref:FulcrumFS.Videos.VideoProcessor.ConfigureWithFFmpegExecutables*> with the directory and optional configuration options.
+Video processing shells out to FFmpeg, so you must point the library at the directory containing the `ffmpeg` and `ffprobe` executables once at startup, before constructing any processor. Call <xref:FulcrumFS.Videos.VideoProcessor.ConfigureWithFFmpegExecutables*> with the directory and optional configuration options.
+
+The FFmpeg build needs a few libraries that not every build has. [Setting Up FFmpeg](ffmpeg-setup.md) lists what it needs, and covers the scripts that check an existing build or build a complete one for Windows, Linux or macOS.
 
 ```csharp
 using FulcrumFS;
@@ -104,7 +106,7 @@ Note that if the requested acceleration mode is not available, it will fall back
 
 ### Requirements and fallback
 
-The mode you request is a *preference*, not a guarantee. The FFmpeg build you configured must actually have been compiled with support for the mode, and the system must be able to initialize it. If a requested mode is unavailable, the library selects the best available alternative (or plain software processing), and if an accelerated run fails partway through, it is automatically retried with hardware filtering turned off, leaving only opportunistic hardware decoding. Certain inputs also disable acceleration on a per-file basis where the hardware path would not currently produce a correct result due to lacking explicit handling, or is unlikely to work anyway. In every case, the file should still process successfully - you do not need need to handle "hardware acceleration was not available" case yourself.
+The mode you request is a *preference*, not a guarantee. The FFmpeg build you configured must actually have been compiled with support for the mode, and the system must be able to initialize it (see [Hardware Acceleration](ffmpeg-setup.md#hardware-acceleration) in the FFmpeg setup guide for what a build includes, and how to check which modes work on a machine). If a requested mode is unavailable, the library selects the best available alternative (or plain software processing), and if an accelerated run fails partway through, it is automatically retried with hardware filtering turned off, leaving only opportunistic hardware decoding. Certain inputs also disable acceleration on a per-file basis where the hardware path would not currently produce a correct result due to lacking explicit handling, or is unlikely to work anyway. In every case, the file should still process successfully - you do not need need to handle "hardware acceleration was not available" case yourself.
 
 > [!IMPORTANT]
 > Processed output is never guaranteed to be identical across devices, even in pure software - different FFmpeg builds and CPUs can produce slightly different results. Hardware acceleration widens that gap considerably: hardware decoders and filters differ between vendors, driver versions and hardware generations, and the difference is sometimes visible (for example, noticeably softer scaling, different colours when scaling, slightly different video length when de-interlacing, etc.). Weigh that against the speed gain, and prefer leaving acceleration disabled if higher consistency between devices matters to you.
@@ -156,6 +158,7 @@ See [Processing Pipelines](processing-pipelines.md) for routing details.
 
 ## Next Steps
 
+- [Setting Up FFmpeg](ffmpeg-setup.md) - What the FFmpeg build needs, and how to check or build one.
 - [Image Processing](image-processing.md) - The image processor and its options.
 - [File Variants](file-variants.md) - Producing thumbnails and alternate renditions.
 - [Processing Pipelines](processing-pipelines.md) - Routing and composing processors.

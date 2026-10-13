@@ -6,3 +6,5 @@ To use this library, you will need a LibreOffice installation (or portable distr
   - Linux/macOS: the directory containing the `soffice` executable (e.g. `/usr/bin` or `/usr/lib/libreoffice/program`).
 
 Each conversion runs in an isolated LibreOffice user profile so conversions can run concurrently. The maximum number of concurrent LibreOffice processes can be limited via the configuration options passed to `ConfigureWithLibreOffice` - note that each process can consume a significant amount of memory.
+
+See the [Document PDF Conversion](../../Docs/articles/guides/document-pdf-conversion.md) guide for how to install LibreOffice on each platform (and in a container image), and the fonts to install alongside it.

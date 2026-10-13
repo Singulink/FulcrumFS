@@ -80,7 +80,7 @@ The main `FulcrumFS` library uses `FileFormat` via the `FileFormatValidationProc
 
 Extension package that adds document to PDF conversion capabilities to file processing pipelines, allowing PDF variants (e.g. for previewing or archiving) to be generated from word processing documents, spreadsheets and presentations.
 
-Document conversion is provided by [LibreOffice](https://www.libreoffice.org/).
+Document conversion is provided by [LibreOffice](https://www.libreoffice.org/), which must be installed on the host: see the [Document PDF Conversion](https://www.singulink.com/Docs/FulcrumFS/articles/guides/document-pdf-conversion.html) guide.
 
 #### FulcrumFS.Images
 
@@ -102,7 +102,7 @@ PDF rendering is provided by [PDFium](https://pdfium.googlesource.com/pdfium/) v
 
 Extension package that adds customizable video processing capabilities to file processing pipelines, including validation, thumbnail generation, resizing, format conversion, metadata stripping, bitrate limiting and audio stripping.
 
-Video processing is provided by `FFmpeg` and `FFprobe`.
+Video processing is provided by `FFmpeg` and `FFprobe`, from a build you supply that includes the libraries the package uses. The [Setting Up FFmpeg](https://www.singulink.com/Docs/FulcrumFS/articles/guides/ffmpeg-setup.html) guide covers what the build needs, with scripts that check an existing build or build a complete one.
 
 ## Usage
 

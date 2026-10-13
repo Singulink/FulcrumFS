@@ -1,9 +1,5 @@
-To use this library, you will need a build of ffmpeg. It must support the following features:
-- libx264 / libx265 encoders (based on your primary result video codec).
-- Native (built-in to ffmpeg) aac encoder.
-- (Optional, but strongly preferred) LibFDK-AAC encoder.
-- Native (built-in to ffmpeg) MP4 muxer.
-- The following filters (usually included by default): zscale, scale, fps, tonemap, format, bwdif, setsar.
-- Decoders depending on your enabled source codecs: mpeg1video, mpeg2video, mpeg4, h263, h264, hevc, vvc, vp8, vp9, avi, aac, mp2, mp3, vorbis, opus, libdav1d, libvpx, libvpx-vp9.
-- Demuxers depending on your enabled source formats: mov (and related, like mp4), matroska (and related, like webm), avi, mpegts, mpeg.
-- If `TryPreserveUnrecognizedStreams = true`, then the mov_text and dvdsub encoders are also needed.
+To use this library, you will need a build of FFmpeg (`ffmpeg` and `ffprobe`) with the libraries it uses, which not every build has: in particular `libx264`, `libx265`, `libzimg` (for the `zscale` filter), `libvpx` and `dav1d`, and optionally (but strongly preferred) `libfdk_aac`.
+
+The [Setting Up FFmpeg](../../Docs/articles/guides/ffmpeg-setup.md) guide lists everything the library uses and what each is for. The scripts in [`Tools/FFmpeg`](../../Tools/FFmpeg) check an existing build for all of it (`check-ffmpeg.sh` / `check-ffmpeg.ps1`), and build a complete one for Windows, Linux or macOS (`build-ffmpeg.ps1` / `build-ffmpeg.sh`).
+
+What the library requires is checked in `FFprobeUtils.cs`; the check scripts mirror it, so keep them in step when it changes.

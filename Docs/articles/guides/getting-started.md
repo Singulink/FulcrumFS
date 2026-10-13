@@ -115,12 +115,16 @@ For a one-line open when you do not need the metadata, <xref:FulcrumFS.FileRepo.
 
 Now that you can create a repository and round-trip a file, explore the rest of the library:
 
+<!-- Keep the API link as ../../api/index.html, even though docfx warns "Invalid file link": it opens the API landing page with all the namespaces listed
+     and collapsed, which suits an API spread over several namespaces. Never link the API index as api/index.md (in toc.yml it drops the landing page's API
+     sidebar, a known docfx issue) or as api/ (docfx leaves that as a bare folder link). -->
+
 - [Adding and Committing Files](adding-files.md) - Transaction lifecycle, rollback, and the indeterminate state.
 - [Processing Pipelines](processing-pipelines.md) - Validate and transform files as they are stored.
 - [File Variants](file-variants.md) - Generate thumbnails and alternate formats alongside the main file.
 - [Transactional Commit Model](../concepts/commit-model.md) - Why commit ordering matters and how crash recovery works.
 - [Coding Against the Repository Interface](../concepts/repository-abstraction.md) - Depend on the repository interface so that another implementation can replace the local one.
 - [Read-Only Repositories](read-only-repositories.md) - Read a repository from another process while the application uses it.
-- [API Documentation](../../api/index.md) - Browse the full API surface.
+- [API Documentation](../../api/index.html) - Browse the full API surface.
 
 </div>

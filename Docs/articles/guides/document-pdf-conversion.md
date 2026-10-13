@@ -2,7 +2,7 @@
 
 # Document PDF Conversion
 
-The `Singulink.FulcrumFS.Documents` package adds document to PDF conversion built on LibreOffice. It converts word processing documents, spreadsheets and presentations (e.g. `.docx`, `.xlsx`, `.pptx` and their legacy/OpenDocument counterparts) to PDF, which is typically stored as a variant of the original document so it can be previewed in a browser or archived in a stable format. This guide covers configuring LibreOffice, the conversion processor, and a practical end-to-end example for a document upload endpoint.
+The `Singulink.FulcrumFS.Documents` package adds document to PDF conversion built on LibreOffice. It converts word processing documents, spreadsheets and presentations (e.g. `.docx`, `.xlsx`, `.pptx` and their legacy/OpenDocument counterparts) to PDF, which is typically stored as a variant of the original document so it can be previewed in a browser or archived in a stable format. This guide covers installing and configuring LibreOffice, the conversion processor, and a practical end-to-end example for a document upload endpoint.
 
 ### Where it fits
 
@@ -10,6 +10,29 @@ The `Singulink.FulcrumFS.Documents` package adds document to PDF conversion buil
 
 > [!NOTE]
 > Document conversion shells out to LibreOffice, which can take several seconds per file and can consume a significant amount of memory per process. For high-volume upload endpoints, consider generating the PDF variant from a queued background service rather than during the upload request.
+
+## Installing LibreOffice
+
+Conversion runs LibreOffice's `soffice` executable in headless mode, so the host needs a LibreOffice installation, but no display or desktop session. LibreOffice 7 or later is recommended. Only the Writer, Calc and Impress components are used, for word processing documents, spreadsheets and presentations respectively, and each is only needed for the formats it opens.
+
+| Platform | Install with | Directory to configure |
+| --- | --- | --- |
+| Windows | The installer from [libreoffice.org](https://www.libreoffice.org/download/download-libreoffice/), or `winget install --id TheDocumentFoundation.LibreOffice` | `C:\Program Files\LibreOffice\program` |
+| Debian, Ubuntu | `sudo apt-get install --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress` | `/usr/lib/libreoffice/program` |
+| macOS | The installer from libreoffice.org, or `brew install --cask libreoffice` | `/Applications/LibreOffice.app/Contents/MacOS` |
+
+On other Linux distributions, install the distribution's LibreOffice packages and configure the directory containing `soffice` (or `/usr/bin`, if the packages put a link to it there).
+
+Documents are rendered with the fonts installed on the host, and LibreOffice substitutes other fonts for any that are missing, which changes the layout of the documents that use them. Servers, and Linux containers in particular, often have few fonts installed. Metric-compatible replacements for the most common Microsoft Office fonts keep the layout of most documents intact; on Debian and Ubuntu they are in the `fonts-liberation` (Arial, Times New Roman, Courier New), `fonts-crosextra-carlito` (Calibri) and `fonts-crosextra-caladea` (Cambria) packages. Install any other fonts your users' documents commonly use as well.
+
+In a container image based on a Debian or Ubuntu .NET image, install LibreOffice in the final image, which adds several hundred megabytes to it:
+
+```dockerfile
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress \
+       fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
+    && rm -rf /var/lib/apt/lists/*
+```
 
 ## Configuring LibreOffice
 
@@ -89,7 +112,7 @@ await txn.CommitAsync();
 The application can then serve the original document for download, the PDF variant for in-browser preview, and the thumbnail for gallery tiles, with no extra processing at request time. See [File Variants](file-variants.md).
 
 > [!TIP]
-> Conversion fidelity depends on LibreOffice's import filters. Documents that rely on fonts not installed on the host are rendered with substituted fonts, so install the fonts your users' documents commonly use for best results.
+> Conversion fidelity depends on LibreOffice's import filters. Documents that rely on fonts not installed on the host are rendered with substituted fonts, so install the fonts your users' documents commonly use for best results (see [Installing LibreOffice](#installing-libreoffice)).
 
 ## Next Steps
 
