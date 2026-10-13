@@ -327,10 +327,24 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
-        return EnsureInitializedAsync(forceHealthCheck: false, cancellationToken);
+        return EnsureInitializedAsync(forceHealthCheck: false, waitBudget: null, cancellationToken);
     }
 
-    private async ValueTask EnsureInitializedAsync(bool forceHealthCheck, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Ensures that the repository is initialized and accessible for one of the accesses of a commit, a rollback or a staging, which share the specified wait
+    /// budget, or with a wait of its own if it is <see langword="null"/>.
+    /// </summary>
+    private ValueTask EnsureInitializedAsync(AccessWaitBudget? waitBudget, CancellationToken cancellationToken = default)
+    {
+        return EnsureInitializedAsync(forceHealthCheck: false, waitBudget, cancellationToken);
+    }
+
+    /// <summary>
+    /// Ensures that the repository is initialized and accessible, waiting for access for up to <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> from
+    /// the start of the call, or for no longer than what is left of <paramref name="waitBudget"/> if one is specified, and then throws a
+    /// <see cref="TimeoutException"/>.
+    /// </summary>
+    private async ValueTask EnsureInitializedAsync(bool forceHealthCheck, AccessWaitBudget? waitBudget, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -341,13 +355,41 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
         if (!forceHealthCheck && ((_lockStream is not null && _healthChecksActive) || _isReadOnlyInitialized))
             return;
 
-        using (await _stateSync.LockAsync(Options.MaxAccessWaitOrRetryTime, cancellationToken))
+        // How long the call can wait for access. Without a wait budget it is MaxAccessWaitOrRetryTime from the start of the call, whatever the time goes to.
+        // With one it is what is left of the budget, and the call charges the budget with all the time it spends getting access: waiting for the state
+        // lock (which another call holds while it probes the volume or retries initialization), probing the volume, the initialization attempts and the
+        // delays between them. An attempt counts although it is I/O: on a volume that hangs rather than fails, the attempts are where the time goes, and
+        // not charging them would let one access retry for many times the budget. What the budget does not count is the work of the commit or rollback it
+        // belongs to, which happens outside this method. Once nothing is left, the call takes the lock only if it is free, probes and attempts once, and
+        // throws the same TimeoutException as a call whose wait has run out.
+        long chargedUntil = initStartTimestamp;
+        var lockTimeout = waitBudget?.Remaining ?? Options.MaxAccessWaitOrRetryTime;
+        IDisposable stateLock;
+
+        try
+        {
+            stateLock = await _stateSync.LockAsync(lockTimeout, cancellationToken);
+        }
+        catch (TimeoutException) when (waitBudget is not null)
+        {
+            // The wait used up all that was left, although its timer can end it a little before the stopwatch says so.
+            waitBudget.Charge(lockTimeout);
+            throw;
+        }
+
+        // The wait starts with the call: the fast path before it takes no time worth separating.
+        ChargeElapsed();
+
+        using (stateLock)
         {
             // First access after an idle period (or a forced check): probe inline so a failure that happened while idle is caught before the operation
             // proceeds, then resume background checks. Concurrent first accesses wait here for the single probe rather than each probing.
             if (_lockStream is { } lockStream && (forceHealthCheck || !_healthChecksActive))
             {
-                if (TryProbeVolume(lockStream))
+                bool isVolumeAnswering = TryProbeVolume(lockStream);
+                ChargeElapsed();
+
+                if (isVolumeAnswering)
                     ArmHealthCheckTimer();
                 else
                     DropLockStream(lockStream);
@@ -357,19 +399,42 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
                 return;
 
             var elc = new ExceptionListCapture(ex => ex is IOException);
+            var retryInterval = TimeSpan.FromSeconds(1);
 
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (elc.TryRun(InitializeCore))
+                bool isInitialized = elc.TryRun(InitializeCore);
+                ChargeElapsed();
+
+                if (isInitialized)
                     return;
 
-                if (Stopwatch.GetElapsedTime(initStartTimestamp) > Options.MaxAccessWaitOrRetryTime)
+                var retryDelay = waitBudget is null
+                    ? (Stopwatch.GetElapsedTime(initStartTimestamp) > Options.MaxAccessWaitOrRetryTime ? TimeSpan.Zero : retryInterval)
+                    : (waitBudget.Remaining < retryInterval ? waitBudget.Remaining : retryInterval);
+
+                if (retryDelay == TimeSpan.Zero)
                     throw new TimeoutException("The operation timed out attempting to get I/O access to the repository.", elc.ResultException);
 
-                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                // A delay is charged with the length it is given, so that one for all that is left uses the budget up even if its timer ends it early, and
+                // the time it actually took is not charged again.
+                waitBudget?.Charge(retryDelay);
+                await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+                chargedUntil = Stopwatch.GetTimestamp();
             }
+        }
+
+        // Charges the budget, if there is one, with the time since it was last charged.
+        void ChargeElapsed()
+        {
+            if (waitBudget is null)
+                return;
+
+            long now = Stopwatch.GetTimestamp();
+            waitBudget.Charge(Stopwatch.GetElapsedTime(chargedUntil, now));
+            chargedUntil = now;
         }
     }
 

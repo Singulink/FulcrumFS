@@ -245,13 +245,18 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// added and not committed yet cannot be written while that transaction is open, because it holds the marker. Staging waits for such a marker as
     /// <see cref="FileRepoTransaction.DeleteAsync(FileId, CancellationToken)"/> does, and goes on when the adding transaction has finished, whichever way
     /// it did. If the marker is still in use when the wait is over, the method throws a <see cref="RepoFileBusyException"/>, and nothing has been
-    /// staged.</para>
+    /// staged. Writing the markers, and removing them again after a failure, needs access to the repository for each file: if the repository cannot be
+    /// accessed, the method waits for it for up to <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of them, and then throws a
+    /// <see cref="TimeoutException"/>. Markers that could not be removed then are left for the cleaner, which resolves them through the resolution
+    /// callback.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
     /// <exception cref="RepoFileBusyException">On a version 1 repository, the indeterminate marker of a deleted file was still in use when the wait for it
     /// was over, which normally means that another transaction is adding the file and has not committed or rolled back yet. Nothing has been
     /// staged.</exception>
     /// <exception cref="IOException">The journal (or on a version 1 repository, a marker) could not be written.</exception>
+    /// <exception cref="TimeoutException">The repository could not be accessed within <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/>. Nothing has
+    /// been staged.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled while the call waited. Nothing has been staged.</exception>
     public async Task<FileRepoStage> StageAsync(CancellationToken cancellationToken = default)
     {
@@ -316,7 +321,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// transaction leaves its files indeterminate for the cleaner to resolve.</para>
     /// <para>
     /// Failures to roll back individual files or to delete the journal are not thrown; they are reported through
-    /// <see cref="FileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, and the affected files are left for the cleaner.</para>
+    /// <see cref="FileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, and the affected files are left for the cleaner. If the repository
+    /// cannot be accessed, the rollback waits for it for up to <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of its files, as the
+    /// commit does (see <see cref="FileRepoStage.CommitAsync(CancellationToken)"/>).</para>
     /// </remarks>
     public Task RollbackAsync(CancellationToken cancellationToken = default) => RollbackAsync(Repository, cancellationToken);
 
@@ -382,6 +389,10 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
 
             repository.DebugStepHook?.Invoke(DebugStep.StagedCommitStarted);
 
+            // The files share one wait for access to the repository, so that on a volume that has stopped answering the commit fails after one wait
+            // instead of one per file.
+            var waitBudget = new AccessWaitBudget(repository.Options.MaxAccessWaitOrRetryTime);
+
             // 1. Commit the record of the deletions in its single step, if it has one: the journal's atomic rename, flushed to disk. This is the one
             //    completion step whose failure is thrown rather than reported: until it has succeeded no file has been committed or deleted, and the caller
             //    can retry. If the rename succeeded and its flush failed, the journal is committed on disk although this throws; a caller that disposes the
@@ -390,12 +401,12 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
 
             // 2. Commit the adds, releasing their indeterminate marker handles.
             foreach (var fileId in _adds.FileIds)
-                await elc.TryRunAsync(_adds.CommitAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(_adds.CommitAsync(fileId, waitBudget)).ConfigureAwait(false);
 
             // 3. Apply the deletions according to the delete mode and release the record.
             if (_deletes is not null)
             {
-                await _deletes.ApplyAsync(elc).ConfigureAwait(false);
+                await _deletes.ApplyAsync(elc, waitBudget).ConfigureAwait(false);
                 _deletes = null;
             }
 
@@ -415,12 +426,15 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
             if (_state is State.Committed or State.RolledBack || _isCommitStarted)
                 return;
 
+            // The files share one wait for access to the repository, as in a commit.
+            var waitBudget = new AccessWaitBudget(repository.Options.MaxAccessWaitOrRetryTime);
+
             foreach (var fileId in _adds.FileIds)
-                await elc.TryRunAsync(_adds.RollbackAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(_adds.RollbackAsync(fileId, waitBudget)).ConfigureAwait(false);
 
             if (_deletes is not null)
             {
-                await _deletes.DiscardAsync(elc).ConfigureAwait(false);
+                await _deletes.DiscardAsync(elc, waitBudget).ConfigureAwait(false);
                 _deletes = null;
             }
 

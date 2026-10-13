@@ -77,7 +77,7 @@ internal sealed class TransactionAddSet
 
         try
         {
-            await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
+            await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId), waitBudget: null).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not ObjectDisposedException)
         {
@@ -93,13 +93,14 @@ internal sealed class TransactionAddSet
     }
 
     /// <summary>
-    /// Commits the add of a file and stops tracking it, even if the commit fails (the file is then left indeterminate for the cleaner).
+    /// Commits the add of a file and stops tracking it, even if the commit fails (the file is then left indeterminate for the cleaner). The commit waits for
+    /// access to the repository within the transaction commit's wait budget.
     /// </summary>
-    public async ValueTask CommitAsync(FileId fileId)
+    public async ValueTask CommitAsync(FileId fileId, AccessWaitBudget waitBudget)
     {
         try
         {
-            await _repository.TxnCommitAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
+            await _repository.TxnCommitAddAsync(fileId, TakeIndeterminateMarker(fileId), waitBudget).ConfigureAwait(false);
         }
         finally
         {
@@ -108,13 +109,14 @@ internal sealed class TransactionAddSet
     }
 
     /// <summary>
-    /// Rolls back the add of a file and stops tracking it, even if the rollback fails (the file is then left indeterminate for the cleaner).
+    /// Rolls back the add of a file and stops tracking it, even if the rollback fails (the file is then left indeterminate for the cleaner). The rollback
+    /// waits for access to the repository within the transaction rollback's wait budget.
     /// </summary>
-    public async ValueTask RollbackAsync(FileId fileId)
+    public async ValueTask RollbackAsync(FileId fileId, AccessWaitBudget waitBudget)
     {
         try
         {
-            await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId)).ConfigureAwait(false);
+            await _repository.TxnRollbackAddAsync(fileId, TakeIndeterminateMarker(fileId), waitBudget).ConfigureAwait(false);
         }
         finally
         {

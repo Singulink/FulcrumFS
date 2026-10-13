@@ -110,7 +110,8 @@ public class FileRepoOptions
     /// and never block repository operations; once the repository has been idle for the interval they stop, so an idle repository performs no I/O, and the
     /// first operation after an idle period performs the check before proceeding. Health checks are lightweight (a single I/O sys-call). If a check fails,
     /// the repository automatically attempts to re-initialize itself, with each repository operation waiting up to <see cref="MaxAccessWaitOrRetryTime"/>
-    /// for re-initialization before timing out.
+    /// for re-initialization before timing out (a commit or rollback of a transaction waits that long once for all of its files; see
+    /// <see cref="MaxAccessWaitOrRetryTime"/>).
     /// </remarks>
     public TimeSpan HealthCheckInterval {
         get;
@@ -138,6 +139,20 @@ public class FileRepoOptions
     /// Gets or sets the maximum time that repository operations will wait for successful I/O access to the repository before throwing a <see
     /// cref="TimeoutException"/>. Must be between 1 second and 1 minute (inclusive). Default is 8 seconds.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An operation waits when it finds the repository inaccessible, for example after a health check has found that its volume stopped answering (see
+    /// <see cref="HealthCheckInterval"/>): it retries initializing the repository once a second until it succeeds or this time is up.</para>
+    /// <para>
+    /// A commit or a rollback of a transaction, including the rollback made by disposing one, needs access for each of its files, and its files share this wait
+    /// instead of having one each. Only time spent getting access counts (waiting for it, and the attempts to reach a volume that does not answer), not the
+    /// time the files take to commit, so a large commit on slow but healthy storage is never cut short, and an outage is ridden out wherever in the commit it
+    /// happens, as long as the commit's waits for its outages together stay within this time. Once the time is used up, each further file is attempted once
+    /// without waiting and, if the repository is still inaccessible, fails with the same <see cref="TimeoutException"/>, which the commit or rollback reports
+    /// through <see cref="FileRepo.TransactionCompletionFailed"/> like any file it could not complete, leaving the file for the cleaner. So on a volume that
+    /// has stopped answering, a commit of any number of files returns after waiting this long once. On a version 1 repository, staging a staged transaction,
+    /// which writes a marker for each file it deletes, shares one wait among its files in the same way.</para>
+    /// </remarks>
     public TimeSpan MaxAccessWaitOrRetryTime {
         get;
         set {

@@ -37,8 +37,9 @@ partial class FileRepo
 
     /// <summary>
     /// The deletions that transactions have pending through each file's indeterminate marker, for the files that have any: how many there are (the handles
-    /// returned by <see cref="TxnDeleteAsync(FileId, bool, CancellationToken)"/> and <see cref="TxnOpenDeleteMarkerAsync(FileId, CancellationToken)"/> that
-    /// have not been released yet), and whether the marker is theirs to remove when the last of them is rolled back.
+    /// returned by <see cref="TxnDeleteAsync(FileId, bool, CancellationToken)"/> and
+    /// <see cref="TxnOpenDeleteMarkerAsync(FileId, AccessWaitBudget, CancellationToken)"/> that have not been released yet), and whether the marker is theirs
+    /// to remove when the last of them is rolled back.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -161,28 +162,30 @@ partial class FileRepo
     /// <exception cref="RepoFileBusyException">The marker was still in use when the wait was over. Nothing has been recorded.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled while the call waited for the marker. Nothing has been recorded.</exception>
     internal Task<IAsyncDisposable?> TxnDeleteAsync(FileId fileId, bool throwIfNotFound, CancellationToken cancellationToken) =>
-        OpenDeleteMarkerAsync(fileId, checkFile: true, throwIfNotFound, cancellationToken);
+        OpenDeleteMarkerAsync(fileId, checkFile: true, throwIfNotFound, waitBudget: null, cancellationToken);
 
     /// <summary>
     /// Marks a file as tentatively deleted by a transaction without checking that it exists, and returns the transaction's shared handle on its indeterminate
     /// marker, which is counted as a pending deletion of the file until it is released. Used by a staged transaction on a repository without delete journals
-    /// for the deletions it checked when it recorded them. While the marker is in use, the call waits as described on <see cref="MarkerInUseMaxWait"/>.
+    /// for the deletions it checked when it recorded them, as it stages them, which waits for access to the repository within the staging's wait budget.
+    /// While the marker is in use, the call waits as described on <see cref="MarkerInUseMaxWait"/>.
     /// </summary>
     /// <exception cref="RepoFileBusyException">The marker was still in use when the wait was over. Nothing has been recorded.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled while the call waited for the marker. Nothing has been recorded.</exception>
-    internal async Task<IAsyncDisposable> TxnOpenDeleteMarkerAsync(FileId fileId, CancellationToken cancellationToken)
+    internal async Task<IAsyncDisposable> TxnOpenDeleteMarkerAsync(FileId fileId, AccessWaitBudget waitBudget, CancellationToken cancellationToken)
     {
-        var marker = await OpenDeleteMarkerAsync(fileId, checkFile: false, throwIfNotFound: false, cancellationToken).ConfigureAwait(false);
+        var marker = await OpenDeleteMarkerAsync(fileId, checkFile: false, throwIfNotFound: false, waitBudget, cancellationToken).ConfigureAwait(false);
         Debug.Assert(marker is not null, "A marker is always opened for a file that is not checked.");
 
         return marker;
     }
 
-    private async Task<IAsyncDisposable?> OpenDeleteMarkerAsync(FileId fileId, bool checkFile, bool throwIfNotFound, CancellationToken cancellationToken)
+    private async Task<IAsyncDisposable?> OpenDeleteMarkerAsync(
+        FileId fileId, bool checkFile, bool throwIfNotFound, AccessWaitBudget? waitBudget, CancellationToken cancellationToken)
     {
         // The token only cancels the wait for a marker that is in use: a call that does not have to wait runs to its end whatever the token, as it did
         // when there was no wait.
-        await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
+        await EnsureInitializedAsync(waitBudget, CancellationToken.None).ConfigureAwait(false);
 
         var indeterminateMarker = _fs.GetIndeterminateMarker(fileId);
         long waitStart = Stopwatch.GetTimestamp();
@@ -385,15 +388,20 @@ partial class FileRepo
     /// <param name="fileIds">The files whose deletions are recorded.</param>
     /// <param name="cancellationToken">A token that cancels the wait for an indeterminate marker that is in use (see <see cref="MarkerInUseMaxWait"/>), which
     /// only the record of markers has. A journal is written without observing it.</param>
+    /// <remarks>
+    /// The record of markers needs access to the repository for each file, and so does the removal of the markers it has written when one cannot be: all
+    /// of those accesses share one wait (see <see cref="AccessWaitBudget"/>), so a volume that stops answering partway fails the staging after one wait.
+    /// </remarks>
     internal async Task<StagedDeleteRecord> TxnStageDeletesAsync(IReadOnlyCollection<FileId> fileIds, CancellationToken cancellationToken)
     {
-        await EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
+        var waitBudget = new AccessWaitBudget(Options.MaxAccessWaitOrRetryTime);
+        await EnsureInitializedAsync(waitBudget, CancellationToken.None).ConfigureAwait(false);
 
         // A version 1 repository must not contain journals: a FulcrumFS 1.0.x cleaner may run against it, and it would leave the files of a committed journal
         // undeleted. The decision stays valid until the record is finished because per-file markers are valid in every version and nothing downgrades a
         // repository.
         if (_formatVersion < RepoInfoFile.DeleteJournalsVersion)
-            return await StagedDeleteRecord.CreateMarkersAsync(this, fileIds, cancellationToken).ConfigureAwait(false);
+            return await StagedDeleteRecord.CreateMarkersAsync(this, fileIds, waitBudget, cancellationToken).ConfigureAwait(false);
 
         // Journal IDs come from the repository's sequential generator in every file ID mode, so journals sort by the time they were staged.
         var journal = await _fs.CreateStagedJournalAsync(_idGenerator.CreateSequential().Guid, fileIds).ConfigureAwait(false);
@@ -404,17 +412,18 @@ partial class FileRepo
     /// Physically deletes a file listed in a committed delete journal, in immediate delete mode. Returns <see langword="false"/> if the deletion could not
     /// complete; the failure is logged to the file's delete marker and the journal must be kept as the record of the deletion.
     /// </summary>
-    internal ValueTask<bool> TxnCommitStagedDeleteAsync(FileId fileId) => DeleteAsync(fileId, immediate: true, flushFailureRecord: false);
+    internal ValueTask<bool> TxnCommitStagedDeleteAsync(FileId fileId, AccessWaitBudget waitBudget) =>
+        DeleteAsync(fileId, immediate: true, flushFailureRecord: false, waitBudget);
 
     /// <summary>
     /// Commits the add of a file: releases the transaction's exclusive handle on the file's indeterminate marker and removes the marker, as one step under
-    /// the file's lock (see <see cref="LockAndReleaseMarkerAsync(FileId, IAsyncDisposable?)"/>). A deletion of the file from another transaction therefore
-    /// opens the marker before the release, which fails because the marker is in use, or after the removal, which gives it a marker of its own; it never
-    /// takes the marker that is about to be removed.
+    /// the file's lock (see <see cref="LockAndReleaseMarkerAsync(FileId, IAsyncDisposable?, AccessWaitBudget?)"/>). A deletion of the file from another
+    /// transaction therefore opens the marker before the release, which fails because the marker is in use, or after the removal, which gives it a marker of
+    /// its own; it never takes the marker that is about to be removed.
     /// </summary>
-    internal async ValueTask TxnCommitAddAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
+    internal async ValueTask TxnCommitAddAsync(FileId fileId, IAsyncDisposable? indeterminateMarker, AccessWaitBudget waitBudget)
     {
-        using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
+        using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker, waitBudget).ConfigureAwait(false))
         {
             DebugStepHook?.Invoke(DebugStep.AddCommitStarted);
             await _fs.TryClearIndeterminateStateAsync(fileId).ConfigureAwait(false);
@@ -432,9 +441,9 @@ partial class FileRepo
     /// before it has recorded the deletion leaves the marker as the only record of it, and the marker stops being the pending deletions' own (see
     /// <see cref="_pendingDeletes"/>).
     /// </remarks>
-    internal async ValueTask TxnCommitDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
+    internal async ValueTask TxnCommitDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker, AccessWaitBudget waitBudget)
     {
-        using (await LockForMarkerAsync(fileId, indeterminateMarker, disownMarkerIfUnlocked: true).ConfigureAwait(false))
+        using (await LockForMarkerAsync(fileId, indeterminateMarker, waitBudget, disownMarkerIfUnlocked: true).ConfigureAwait(false))
         {
             try
             {
@@ -458,14 +467,14 @@ partial class FileRepo
     /// <summary>
     /// Records the deletions an ordinary transaction is committing in one committed delete journal, flushed to disk, and returns <see langword="true"/>; or
     /// returns <see langword="false"/> without writing anything when each deletion is committed with
-    /// <see cref="TxnCommitDeleteAsync(FileId, IAsyncDisposable?)"/> instead: in immediate delete mode, on a repository whose format has no delete journals,
-    /// and for fewer than <see cref="JournalCommitMinimumDeletions"/> deletions. A failure to write the journal is thrown; the deletions must then be
-    /// committed one by one so that they are still recorded. Once the journal is written, each deletion is finished with
-    /// <see cref="TxnFinishJournaledDeleteAsync(FileId, IAsyncDisposable?)"/>.
+    /// <see cref="TxnCommitDeleteAsync(FileId, IAsyncDisposable?, AccessWaitBudget)"/> instead: in immediate delete mode, on a repository whose format has no
+    /// delete journals, and for fewer than <see cref="JournalCommitMinimumDeletions"/> deletions. A failure to write the journal is thrown; the deletions
+    /// must then be committed one by one so that they are still recorded. Once the journal is written, each deletion is finished with
+    /// <see cref="TxnFinishJournaledDeleteAsync(FileId, IAsyncDisposable?, AccessWaitBudget)"/>.
     /// </summary>
-    internal async ValueTask<bool> TxnCommitDeletesToJournalAsync(IReadOnlyCollection<FileId> fileIds)
+    internal async ValueTask<bool> TxnCommitDeletesToJournalAsync(IReadOnlyCollection<FileId> fileIds, AccessWaitBudget waitBudget)
     {
-        await EnsureInitializedAsync().ConfigureAwait(false);
+        await EnsureInitializedAsync(waitBudget).ConfigureAwait(false);
 
         // Both deferred modes defer main files, which is all a transaction deletes. A version 1 repository must not contain journals (see
         // TxnStageDeletesAsync).
@@ -478,24 +487,25 @@ partial class FileRepo
     }
 
     /// <summary>
-    /// Finishes the deletion of a file that <see cref="TxnCommitDeletesToJournalAsync(IReadOnlyCollection{FileId})"/> recorded in a committed journal by
-    /// releasing the transaction's handle on its indeterminate marker and removing the marker, without flushing: a power loss can only bring the marker back
-    /// together with the journal, which deletes the file, and the cleaner removes the marker of a file whose group is gone. The marker is removed whatever
-    /// other deletions of the file are pending, because the journal has recorded the deletion.
+    /// Finishes the deletion of a file that <see cref="TxnCommitDeletesToJournalAsync(IReadOnlyCollection{FileId}, AccessWaitBudget)"/> recorded in a
+    /// committed journal by releasing the transaction's handle on its indeterminate marker and removing the marker, without flushing: a power loss can only
+    /// bring the marker back together with the journal, which deletes the file, and the cleaner removes the marker of a file whose group is gone. The marker
+    /// is removed whatever other deletions of the file are pending, because the journal has recorded the deletion.
     /// </summary>
-    internal async ValueTask TxnFinishJournaledDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
+    internal async ValueTask TxnFinishJournaledDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker, AccessWaitBudget waitBudget)
     {
-        using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
+        using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker, waitBudget).ConfigureAwait(false))
             await _fs.TryClearIndeterminateStateAsync(fileId).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Rolls back the add of a file: releases the transaction's exclusive handle on the file's indeterminate marker and deletes the file with its marker, as
-    /// one step under the file's lock, so that a deletion of the file from another transaction finds the marker in use or the file gone.
+    /// one step under the file's lock, so that a deletion of the file from another transaction finds the marker in use or the file gone. The rollback of a
+    /// transaction passes its wait budget; the discard of one add, which is a call of its own, passes <see langword="null"/> and has a wait of its own.
     /// </summary>
-    internal async ValueTask TxnRollbackAddAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
+    internal async ValueTask TxnRollbackAddAsync(FileId fileId, IAsyncDisposable? indeterminateMarker, AccessWaitBudget? waitBudget)
     {
-        using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
+        using (await LockAndReleaseMarkerAsync(fileId, indeterminateMarker, waitBudget).ConfigureAwait(false))
         {
             DebugStepHook?.Invoke(DebugStep.AddRollbackStarted);
             await DeleteLockedAsync(fileId, immediate: true, flushFailureRecord: false).ConfigureAwait(false);
@@ -506,9 +516,9 @@ partial class FileRepo
     /// Rolls back the deletion of a file: releases the transaction's handle on the file's indeterminate marker and removes the marker, unless another
     /// transaction still has a deletion of the file pending.
     /// </summary>
-    internal async ValueTask TxnRollbackDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
+    internal async ValueTask TxnRollbackDeleteAsync(FileId fileId, IAsyncDisposable? indeterminateMarker, AccessWaitBudget waitBudget)
     {
-        using (await LockForMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false))
+        using (await LockForMarkerAsync(fileId, indeterminateMarker, waitBudget).ConfigureAwait(false))
         {
             // The marker is all that records the deletion of a transaction that has it pending. If the application of that transaction commits its database
             // and the process ends before the repository commit, the cleaner must find the marker to learn that the file is to go. So the marker stays until
@@ -540,13 +550,18 @@ partial class FileRepo
     /// <param name="fileId">The file whose lock is taken.</param>
     /// <param name="indeterminateMarker">The transaction's handle on the file's indeterminate marker, or <see langword="null"/> if it no longer holds
     /// one.</param>
+    /// <param name="waitBudget">The wait for access to the repository that the commit or rollback shares among its files, or <see langword="null"/> for a
+    /// wait of its own.</param>
     /// <returns>The file's lock, which the caller releases.</returns>
     /// <remarks>
-    /// The handle is released in every case, as described on <see cref="LockForMarkerAsync(FileId, IAsyncDisposable?, bool)"/>.
+    /// The handle is released in every case, as described on <see cref="LockForMarkerAsync(FileId, IAsyncDisposable?, AccessWaitBudget?, bool)"/>.
     /// </remarks>
-    private async ValueTask<KeyLock<(FileId FileId, string? VariantId)>> LockAndReleaseMarkerAsync(FileId fileId, IAsyncDisposable? indeterminateMarker)
+    private async ValueTask<KeyLock<(FileId FileId, string? VariantId)>> LockAndReleaseMarkerAsync(
+        FileId fileId,
+        IAsyncDisposable? indeterminateMarker,
+        AccessWaitBudget? waitBudget)
     {
-        var fileLock = await LockForMarkerAsync(fileId, indeterminateMarker).ConfigureAwait(false);
+        var fileLock = await LockForMarkerAsync(fileId, indeterminateMarker, waitBudget).ConfigureAwait(false);
 
         try
         {
@@ -569,6 +584,8 @@ partial class FileRepo
     /// <param name="fileId">The file whose lock is taken.</param>
     /// <param name="indeterminateMarker">The transaction's handle on the file's indeterminate marker, or <see langword="null"/> if it no longer holds
     /// one.</param>
+    /// <param name="waitBudget">The wait for access to the repository that the commit or rollback shares among its files, or <see langword="null"/> for a
+    /// wait of its own.</param>
     /// <param name="disownMarkerIfUnlocked">Whether the marker stops being the pending deletions' own (<see cref="DisownMarker(FileId)"/>) if the handle
     /// has to be released without the lock. The commit of a deletion passes <see langword="true"/>: its deletion is then not recorded, and the marker is
     /// its only record.</param>
@@ -583,11 +600,12 @@ partial class FileRepo
     private async ValueTask<KeyLock<(FileId FileId, string? VariantId)>> LockForMarkerAsync(
         FileId fileId,
         IAsyncDisposable? indeterminateMarker,
+        AccessWaitBudget? waitBudget,
         bool disownMarkerIfUnlocked = false)
     {
         try
         {
-            await EnsureInitializedAsync().ConfigureAwait(false);
+            await EnsureInitializedAsync(waitBudget).ConfigureAwait(false);
             return await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false);
         }
         catch

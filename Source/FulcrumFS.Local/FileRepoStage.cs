@@ -37,6 +37,11 @@ public sealed class FileRepoStage : IFileRepoStage
     /// individual files are not thrown: they are reported through <see cref="FileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, and the
     /// affected files are left for the cleaner. Calling this method again after it succeeded does nothing.</para>
     /// <para>
+    /// If the repository cannot be accessed, for example because its volume has stopped answering, the commit of the files waits for it for up to
+    /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of them, not once for each, counting only the time it waits. Once that time is
+    /// used up, each further file is attempted once without waiting, and one that cannot be committed or deleted is reported and left for the cleaner as
+    /// above.</para>
+    /// <para>
     /// Once this method has started the commit, the transaction is never rolled back, whatever the method throws. If it is not called again, disposing the
     /// transaction leaves the files to the cleaner. After a failure to commit the journal, that depends on how far the step came: if the rename failed, the
     /// journal is still staged, and the cleaner resolves its files through the resolution callback; if the journal was renamed and could not be flushed to

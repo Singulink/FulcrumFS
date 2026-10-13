@@ -26,23 +26,24 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
     /// Opens the indeterminate marker of each of the specified files, flushed to disk, and returns the record holding them. The files are not checked again:
     /// a file that is gone or has been deleted since its deletion was recorded is handled by the commit, as in an ordinary transaction. A marker that is in
     /// use, normally because the transaction that added its file has not finished, is waited for briefly, which the token cancels. If a marker cannot be
-    /// written or the wait is cancelled, the markers written so far are rolled back and the exception is propagated.
+    /// written or the wait is cancelled, the markers written so far are rolled back and the exception is propagated. Every access to the repository that
+    /// this makes, the rollback included, waits within the staging's wait budget.
     /// </summary>
     public static async Task<StagedDeleteRecord> CreateMarkersAsync(
-        FileRepo repository, IReadOnlyCollection<FileId> fileIds, CancellationToken cancellationToken)
+        FileRepo repository, IReadOnlyCollection<FileId> fileIds, AccessWaitBudget waitBudget, CancellationToken cancellationToken)
     {
         var record = new MarkerRecord(repository);
 
         try
         {
             foreach (var fileId in fileIds)
-                record.Add(fileId, await repository.TxnOpenDeleteMarkerAsync(fileId, cancellationToken).ConfigureAwait(false));
+                record.Add(fileId, await repository.TxnOpenDeleteMarkerAsync(fileId, waitBudget, cancellationToken).ConfigureAwait(false));
         }
         catch
         {
             // Nothing has been staged, so the transaction can be staged again or rolled back: undo what was written. A marker that cannot be cleared is left
             // for the cleaner, which resolves it through the callback like any indeterminate file.
-            await record.DiscardAsync(new ExceptionListCapture(null)).ConfigureAwait(false);
+            await record.DiscardAsync(new ExceptionListCapture(null), waitBudget).ConfigureAwait(false);
             throw;
         }
 
@@ -57,14 +58,16 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
 
     /// <summary>
     /// Applies the committed deletions according to the repository's <see cref="FileRepoOptions.DeleteMode"/> and releases the record. Failures are captured
-    /// by <paramref name="elc"/> and the affected files are left for the cleaner.
+    /// by <paramref name="elc"/> and the affected files are left for the cleaner. Each access to the repository waits within the commit's
+    /// <paramref name="waitBudget"/>.
     /// </summary>
-    public abstract Task ApplyAsync(ExceptionListCapture elc);
+    public abstract Task ApplyAsync(ExceptionListCapture elc, AccessWaitBudget waitBudget);
 
     /// <summary>
     /// Rolls back the deletions and releases the record. Failures are captured by <paramref name="elc"/> and the affected files are left for the cleaner.
+    /// Each access to the repository waits within the rollback's <paramref name="waitBudget"/>.
     /// </summary>
-    public abstract Task DiscardAsync(ExceptionListCapture elc);
+    public abstract Task DiscardAsync(ExceptionListCapture elc, AccessWaitBudget waitBudget);
 
     /// <summary>
     /// Releases whatever the record still holds without finishing it, which leaves its files indeterminate for the cleaner. Failures are ignored.
@@ -79,7 +82,7 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
         // happens if the handle was lost, so its deletions are left to that resolution.
         public override void Commit() => _isCommitted = journal.Commit();
 
-        public override async Task ApplyAsync(ExceptionListCapture elc)
+        public override async Task ApplyAsync(ExceptionListCapture elc, AccessWaitBudget waitBudget)
         {
             // In immediate mode the listed files are deleted now and the journal is removed once all of them are gone; a deletion that cannot complete keeps
             // the journal, the durable record of the deletion, for the cleaner to finish. In the deferred modes (both defer main files) the committed journal
@@ -100,7 +103,7 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
 
                 async Task DeleteFileAsync(FileId fileId)
                 {
-                    if (!await repository.TxnCommitStagedDeleteAsync(fileId).ConfigureAwait(false))
+                    if (!await repository.TxnCommitStagedDeleteAsync(fileId, waitBudget).ConfigureAwait(false))
                         allDeleted = false;
                 }
             }
@@ -108,7 +111,9 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
             await elc.TryRunAsync(journal.DisposeAsync()).ConfigureAwait(false);
         }
 
-        public override async Task DiscardAsync(ExceptionListCapture elc) => await elc.TryRunAsync(journal.DiscardAsync()).ConfigureAwait(false);
+        // Discarding the journal does not go through the repository's access check, so it has no wait to share.
+        public override async Task DiscardAsync(ExceptionListCapture elc, AccessWaitBudget waitBudget) =>
+            await elc.TryRunAsync(journal.DiscardAsync()).ConfigureAwait(false);
 
         public override async ValueTask DisposeAsync()
         {
@@ -128,16 +133,16 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
         // Each deletion commits on its own, as in an ordinary transaction, so there is no single step that could fail before the others.
         public override void Commit() { }
 
-        public override async Task ApplyAsync(ExceptionListCapture elc)
+        public override async Task ApplyAsync(ExceptionListCapture elc, AccessWaitBudget waitBudget)
         {
             while (_markers.TryDequeue(out var entry))
-                await elc.TryRunAsync(repository.TxnCommitDeleteAsync(entry.FileId, entry.Marker)).ConfigureAwait(false);
+                await elc.TryRunAsync(repository.TxnCommitDeleteAsync(entry.FileId, entry.Marker, waitBudget)).ConfigureAwait(false);
         }
 
-        public override async Task DiscardAsync(ExceptionListCapture elc)
+        public override async Task DiscardAsync(ExceptionListCapture elc, AccessWaitBudget waitBudget)
         {
             while (_markers.TryDequeue(out var entry))
-                await elc.TryRunAsync(repository.TxnRollbackDeleteAsync(entry.FileId, entry.Marker)).ConfigureAwait(false);
+                await elc.TryRunAsync(repository.TxnRollbackDeleteAsync(entry.FileId, entry.Marker, waitBudget)).ConfigureAwait(false);
         }
 
         public override async ValueTask DisposeAsync()

@@ -195,6 +195,11 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// <see cref="FileRepo.TransactionCompletionFailed"/>. If the journal cannot be written, each deletion is recorded with its own delete marker instead. A
     /// file whose commit failed stays accessible in an indeterminate state for the next cleanup pass to resolve.</para>
     /// <para>
+    /// If the repository cannot be accessed, for example because its volume has stopped answering, the commit waits for it for up to
+    /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of its files, not once for each, counting only the time it waits. Once that time
+    /// is used up, each further file is attempted once without waiting, and one that cannot be committed is reported and left for the cleaner as
+    /// above.</para>
+    /// <para>
     /// An indeterminate marker that cannot be removed because something else has it open is tolerated, not reported: removing the marker is what commits
     /// an added file, the file is accessible either way, and it stays indeterminate until the next cleanup pass resolves it and removes the marker. The
     /// attempt is logged to the marker (see <see cref="FileRepoOptions.MarkerFileLogging"/>).</para>
@@ -221,17 +226,23 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
             // repository when they are gone.
             ObjectDisposedException.ThrowIf(_isDisposed, this);
 
+            // The files share one wait for access to the repository, so that on a volume that has stopped answering the commit fails after one wait
+            // instead of one per file.
+            var waitBudget = new AccessWaitBudget(Repository.Options.MaxAccessWaitOrRetryTime);
+
             foreach (var fileId in _adds.FileIds)
-                await elc.TryRunAsync(_adds.CommitAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(_adds.CommitAsync(fileId, waitBudget)).ConfigureAwait(false);
 
             // The journal is written while the indeterminate markers are still held, so the cleaner cannot resolve the files before their deletion is
             // recorded. A journal that cannot be written is reported like any other completion failure, and the deletions fall back to a marker each.
             if (_deleted.Count > 0)
-                await elc.TryRunAsync(CommitDeletesToJournalAsync()).ConfigureAwait(false);
+                await elc.TryRunAsync(CommitDeletesToJournalAsync(waitBudget)).ConfigureAwait(false);
 
             foreach (var fileId in _deleted)
             {
-                await elc.TryRunAsync(isJournaled ? FinishJournaledDeleteAsync(fileId) : CommitDeleteAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(isJournaled ? FinishJournaledDeleteAsync(fileId, waitBudget) : CommitDeleteAsync(fileId, waitBudget))
+                    .ConfigureAwait(false);
+
                 _deleted.Remove(fileId);
             }
 
@@ -241,23 +252,33 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
         if (elc.HasExceptions)
             await Repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Commit, elc.ResultException).ConfigureAwait(false);
 
-        async Task CommitDeletesToJournalAsync() => isJournaled = await Repository.TxnCommitDeletesToJournalAsync(_deleted).ConfigureAwait(false);
+        async Task CommitDeletesToJournalAsync(AccessWaitBudget waitBudget) =>
+            isJournaled = await Repository.TxnCommitDeletesToJournalAsync(_deleted, waitBudget).ConfigureAwait(false);
 
-        async Task CommitDeleteAsync(FileId fileId) =>
-            await Repository.TxnCommitDeleteAsync(fileId, TakeDeleteMarker(fileId)).ConfigureAwait(false);
+        async Task CommitDeleteAsync(FileId fileId, AccessWaitBudget waitBudget) =>
+            await Repository.TxnCommitDeleteAsync(fileId, TakeDeleteMarker(fileId), waitBudget).ConfigureAwait(false);
 
-        async Task FinishJournaledDeleteAsync(FileId fileId) =>
-            await Repository.TxnFinishJournaledDeleteAsync(fileId, TakeDeleteMarker(fileId)).ConfigureAwait(false);
+        async Task FinishJournaledDeleteAsync(FileId fileId, AccessWaitBudget waitBudget) =>
+            await Repository.TxnFinishJournaledDeleteAsync(fileId, TakeDeleteMarker(fileId), waitBudget).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Rolls back the transaction, discarding any file additions or deletions made during the transaction.
     /// </summary>
+    /// <remarks>
+    /// Failures to roll back individual files are not thrown: they are reported through <see cref="FileRepo.TransactionCompletionFailed"/>, and the affected
+    /// files are left for the cleaner. If the repository cannot be accessed, the rollback waits for it for up to
+    /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of its files, as <see cref="CommitAsync(CancellationToken)"/> does.
+    /// </remarks>
     public Task RollbackAsync(CancellationToken cancellationToken = default) => RollbackAsync(Repository, cancellationToken);
 
     /// <summary>
     /// Disposes the transaction, rolling back any changes that were not already committed.
     /// </summary>
+    /// <remarks>
+    /// The rollback is made as by <see cref="RollbackAsync(CancellationToken)"/>, which describes how failures are reported and how long it waits for access
+    /// to the repository.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
         if (_isDisposed)
@@ -296,12 +317,15 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
 
         using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
         {
+            // The files share one wait for access to the repository, as in a commit.
+            var waitBudget = new AccessWaitBudget(repository.Options.MaxAccessWaitOrRetryTime);
+
             foreach (var fileId in _adds.FileIds)
-                await elc.TryRunAsync(_adds.RollbackAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(_adds.RollbackAsync(fileId, waitBudget)).ConfigureAwait(false);
 
             foreach (var fileId in _deleted)
             {
-                await elc.TryRunAsync(RollbackDeleteAsync(fileId)).ConfigureAwait(false);
+                await elc.TryRunAsync(RollbackDeleteAsync(fileId, waitBudget)).ConfigureAwait(false);
                 _deleted.Remove(fileId);
             }
 
@@ -311,8 +335,8 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
         if (elc.HasExceptions)
             await repository.OnTxnCompletionErrorAsync(RepoTransactionCompletionOperation.Rollback, elc.ResultException).ConfigureAwait(false);
 
-        async Task RollbackDeleteAsync(FileId fileId) =>
-            await repository.TxnRollbackDeleteAsync(fileId, TakeDeleteMarker(fileId)).ConfigureAwait(false);
+        async Task RollbackDeleteAsync(FileId fileId, AccessWaitBudget waitBudget) =>
+            await repository.TxnRollbackDeleteAsync(fileId, TakeDeleteMarker(fileId), waitBudget).ConfigureAwait(false);
     }
 
     private async Task<bool> DeleteCoreAsync(FileId fileId, bool throwIfNotFound, CancellationToken cancellationToken)

@@ -462,17 +462,18 @@ partial class FileRepo
     /// <param name="immediate">Whether the file is deleted now, rather than marked for deletion by the cleaner.</param>
     /// <param name="flushFailureRecord">Whether the delete marker written when an immediate deletion cannot complete is flushed to disk, for a caller
     /// for which it is the only durable record of the deletion (see <see cref="DeleteLockedAsync(FileId, bool, bool)"/>).</param>
-    private async ValueTask<bool> DeleteAsync(FileId fileId, bool immediate, bool flushFailureRecord)
+    /// <param name="waitBudget">The wait for access to the repository that the commit shares among its files.</param>
+    private async ValueTask<bool> DeleteAsync(FileId fileId, bool immediate, bool flushFailureRecord, AccessWaitBudget waitBudget)
     {
-        await EnsureInitializedAsync().ConfigureAwait(false);
+        await EnsureInitializedAsync(waitBudget).ConfigureAwait(false);
         using var fileLock = await _fileSync.LockAsync((fileId, null)).ConfigureAwait(false);
 
         return await DeleteLockedAsync(fileId, immediate, flushFailureRecord).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// MUST BE CALLED WITH THE FILE'S LOCK HELD. Deletes a file and its variants as <see cref="DeleteAsync(FileId, bool, bool)"/> does, for a caller that
-    /// took the lock to release its handle on the file's indeterminate marker in the same step.
+    /// MUST BE CALLED WITH THE FILE'S LOCK HELD. Deletes a file and its variants as <see cref="DeleteAsync(FileId, bool, bool, AccessWaitBudget)"/> does,
+    /// for a caller that took the lock to release its handle on the file's indeterminate marker in the same step.
     /// </summary>
     /// <param name="fileId">The file.</param>
     /// <param name="immediate">Whether the file is deleted now, rather than marked for deletion by the cleaner.</param>
