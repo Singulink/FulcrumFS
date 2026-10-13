@@ -30,6 +30,11 @@ internal static class FFprobeUtils
     /// Throws if the configured ffmpeg/ffprobe binaries are missing any encoder, decoder, muxer, demuxer or filter the video pipeline may require for the unit
     /// tests (i.e., include anything we may opportunistically depend on, or outright require).
     /// </summary>
+    /// <remarks>
+    /// Tools/FFmpeg/check-ffmpeg.sh and check-ffmpeg.ps1 check a build for the same features (and the hardware acceleration modes, as
+    /// <see cref="CheckHWAccelActuallySupported" /> does) for users, so keep them in step with this list and the detection in
+    /// <see cref="BuildConfigurationInfo" />.
+    /// </remarks>
     internal static void EnsureAllFeaturesPresent()
     {
         ref readonly var c = ref Configuration;

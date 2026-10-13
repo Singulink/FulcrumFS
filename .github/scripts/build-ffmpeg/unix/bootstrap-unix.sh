@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 
-# Runs the Unix ffmpeg build (build-unix.sh) with retries. The build downloads sources from
-# several third-party servers that are occasionally unavailable, so a transient failure (e.g. a
-# download link being temporarily down) should not fail the whole CI run on the first try.
-# build-unix.sh cleans up any leftover state from a previous attempt before each run, so each
-# retry starts from a clean slate.
+# Runs the Unix ffmpeg build (Tools/FFmpeg/build-ffmpeg.sh, the script users build with) into $FFMPEG_OUTPUT_DIR, with retries. The build downloads sources
+# from several third-party servers that are occasionally unavailable, so a transient failure (e.g. a download link being temporarily down) should not fail
+# the whole CI run on the first try. build-ffmpeg.sh deletes the work directory an earlier attempt left behind, so each retry starts from a clean slate.
 
 # Exit on unset variable or failed pipe (but not on command failure, which is handled per attempt).
 set -uo pipefail
 
 # Get directory of this script.
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+build_script="$script_dir/../../../../Tools/FFmpeg/build-ffmpeg.sh"
+
+# Fail early if the workflow did not provide the output directory.
+: "${FFMPEG_OUTPUT_DIR:?FFMPEG_OUTPUT_DIR must be set by the workflow}"
 
 # Total number of attempts (1 initial + 2 retries).
 max_attempts=3
@@ -20,7 +22,7 @@ for (( attempt = 1; attempt <= max_attempts; attempt++ )); do
 
   # Capture the exit code of the build without aborting this loop on failure.
   status=0
-  bash "$script_dir/build-unix.sh" || status=$?
+  bash "$build_script" --install-prerequisites "$FFMPEG_OUTPUT_DIR" || status=$?
 
   if (( status == 0 )); then
     echo "ffmpeg build succeeded on attempt $attempt."

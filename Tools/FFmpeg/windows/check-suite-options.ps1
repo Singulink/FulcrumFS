@@ -58,8 +58,8 @@ foreach ($option in $options) {
 
 if ($missing.Count -gt 0) {
     throw ("media-autobuild_suite asks for $($missing.Count) option(s) that $(Split-Path -Leaf $IniPath) does not answer: $($missing -join ', '). " +
-        "Add them to .github/scripts/build-ffmpeg/windows/media-autobuild_suite.ini (the suite's .bat shows the choices of each); " +
-        "without them the suite waits for console input until the job times out.")
+        "Add them to Tools/FFmpeg/windows/media-autobuild_suite.ini (the suite's .bat shows the choices of each); " +
+        "without them the suite waits for console input forever.")
 }
 
 Write-Host "The answers file covers all $($options.Count) options of media-autobuild_suite."
