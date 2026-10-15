@@ -25,7 +25,8 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// specified pipeline.
     /// </summary>
     /// <param name="stream">The source file stream.</param>
-    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
+    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes. If <see langword="false"/>, the stream is closed
+    /// whether the add succeeds or fails.</param>
     /// <param name="pipeline">The processing pipeline, or the selector that chooses one by extension.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The resulting file group, including the main file and any variants declared by the pipeline.</returns>
@@ -43,7 +44,8 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// </summary>
     /// <param name="stream">The source stream.</param>
     /// <param name="extension">The source file extension including the leading period, or an empty string if it has none.</param>
-    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
+    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes. If <see langword="false"/>, the stream is closed
+    /// whether the add succeeds or fails.</param>
     /// <param name="pipeline">The processing pipeline, or the selector that chooses one by extension.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The resulting file group, including the main file and any variants declared by the pipeline.</returns>

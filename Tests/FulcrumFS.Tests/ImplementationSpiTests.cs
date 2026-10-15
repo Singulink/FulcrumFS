@@ -240,6 +240,69 @@ public sealed class ImplementationSpiTests
     }
 
     [TestMethod]
+    public async Task DisposeAsync_DeletesTheWorkingDirectory_WhenClosingTheSourceFails_AndThenThrows()
+    {
+        var workDir = NewTestDir().CombineDirectory("work");
+        var source = new CloseFailingStream(failEveryTime: true);
+        var context = new FileProcessingContext(FileId.CreateSecure(), null, workDir, source, ".bin", false, TestContext.CancellationToken);
+
+        var workFile = context.GetNewWorkFile(".bin");
+        workFile.ParentDirectory.Create();
+        await File.WriteAllBytesAsync(workFile.PathExport, [1, 2, 3], TestContext.CancellationToken);
+
+        var ex = await Should.ThrowAsync<IOException>(async () => await context.DisposeAsync());
+        ex.Message.ShouldBe(CloseFailingStream.FailureMessage);
+
+        workDir.State.ShouldBe(EntryState.ParentExists);
+        source.CanRead.ShouldBeFalse();
+
+        // The context is disposed: it does not close the source again.
+        await context.DisposeAsync();
+        Should.Throw<ObjectDisposedException>(() => context.GetNewWorkFile(".bin"));
+    }
+
+    [TestMethod]
+    public async Task DisposeAsync_LeavesAWorkingDirectoryThatItCannotDelete_WithoutThrowing()
+    {
+        var workDir = NewTestDir().CombineDirectory("work");
+        var source = new MemoryStream([1, 2, 3]);
+        var context = new FileProcessingContext(FileId.CreateSecure(), null, workDir, source, ".bin", false, TestContext.CancellationToken);
+
+        // A file whose deletion the operating system denies: on Windows a read-only file, and elsewhere a file in a directory that cannot be written to. The
+        // denial is an UnauthorizedAccessException, which the path library throws as an UnauthorizedIOAccessException.
+        var lockedDir = context.GetNewWorkDirectory();
+        var lockedFile = lockedDir.CombineFile("locked.bin", PathOptions.None);
+        lockedDir.Create();
+        await File.WriteAllBytesAsync(lockedFile.PathExport, [4, 5, 6], TestContext.CancellationToken);
+
+        SetLocked(true);
+
+        try
+        {
+            Should.Throw<UnauthorizedIOAccessException>(() => workDir.Delete(recursive: true));
+
+            await context.DisposeAsync();
+
+            source.CanRead.ShouldBeFalse();
+            lockedFile.State.ShouldBe(EntryState.Exists);
+        }
+        finally
+        {
+            SetLocked(false);
+        }
+
+        workDir.Delete(recursive: true);
+
+        void SetLocked(bool locked)
+        {
+            if (OperatingSystem.IsWindows())
+                File.SetAttributes(lockedFile.PathExport, locked ? FileAttributes.ReadOnly : FileAttributes.Normal);
+            else
+                File.SetUnixFileMode(lockedDir.PathExport, locked ? UnixFileMode.UserRead | UnixFileMode.UserExecute : UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [TestMethod]
     public async Task IOExtensions_CopyToAsync_CreatesNewFileUnlessOverwriting()
     {
         var dir = NewTestDir();

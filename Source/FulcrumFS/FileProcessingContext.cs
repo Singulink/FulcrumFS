@@ -275,13 +275,25 @@ public sealed class FileProcessingContext : IAsyncDisposable
     /// <summary>
     /// Asynchronously releases the resources used by the instance, including disposing the source (if owned) and deleting the temporary working directory.
     /// </summary>
+    /// <remarks>
+    /// The working directory is deleted even if disposing the source throws; the exception is thrown once the deletion has been attempted. The deletion is
+    /// best effort: a working directory that cannot be deleted, for example because something still has a file in it open, is left as it is.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
-        if (!_leaveOpen && _source is IAsyncDisposable disposable)
-            await disposable.DisposeAsync().ConfigureAwait(false);
+        try
+        {
+            if (!_leaveOpen && _source is IAsyncDisposable disposable)
+                await disposable.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _source = null;
 
-        _source = null;
-        _tempWorkingDir.TryDelete(recursive: true, out _);
+            // A deletion that the operating system denies (a read-only file on Windows, a directory that cannot be written to on Unix) throws an
+            // UnauthorizedIOAccessException, which is an IOException, so it is ignored like one that fails because a file is open.
+            _tempWorkingDir.TryDelete(recursive: true, out _);
+        }
     }
 
     /// <summary>

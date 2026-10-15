@@ -430,7 +430,6 @@ partial class FileRepo
                     await RunNodeAsync(
                         fileId,
                         streamSource: null,
-                        streamLeaveOpen: false,
                         fileSource: sourceFile,
                         parentRootVariantId,
                         parentRootExtension,
@@ -502,13 +501,13 @@ partial class FileRepo
     /// variant in a pipeline's <see cref="FileProcessingPipeline.Variants"/>, or the main pipeline of a transactional add.
     /// </summary>
     /// <remarks>
-    /// Exactly one of <paramref name="streamSource"/> or <paramref name="fileSource"/> must be non-null. The runner appends to <paramref name="stagedNodes"/>;
-    /// the caller is responsible for disposing all node contexts in the accumulated list (the runner does not roll back on failure).
+    /// Exactly one of <paramref name="streamSource"/> or <paramref name="fileSource"/> must be non-null. The context of a stream-sourced node takes the stream
+    /// over. The runner appends to <paramref name="stagedNodes"/>; the caller is responsible for disposing all node contexts in the accumulated list (the
+    /// runner does not roll back on failure).
     /// </remarks>
     private async Task RunNodeAsync(
         FileId fileId,
-        Stream? streamSource,
-        bool streamLeaveOpen,
+        AddSourceStream? streamSource,
         IAbsoluteFilePath? fileSource,
         string parentRootVariantId,
         string parentRootExtension,
@@ -603,7 +602,7 @@ partial class FileRepo
         FileProcessingContext context;
 
         if (streamSource is not null)
-            context = new FileProcessingContext(fileId, variantId, tempWorkingDir, streamSource, parentRootExtension, streamLeaveOpen, cancellationToken);
+            context = streamSource.CreateContext(fileId, variantId, tempWorkingDir, parentRootExtension, cancellationToken);
         else
             context = new FileProcessingContext(fileId, variantId, tempWorkingDir, fileSource!, cancellationToken);
 
@@ -658,7 +657,10 @@ partial class FileRepo
             }
             catch
             {
-                await context.DisposeAsync().ConfigureAwait(false);
+                // A failure to dispose the context must not replace the failure that is thrown.
+                try { await context.DisposeAsync().ConfigureAwait(false); }
+                catch { }
+
                 throw;
             }
 
@@ -679,7 +681,10 @@ partial class FileRepo
         }
         catch
         {
-            await context.DisposeAsync().ConfigureAwait(false);
+            // A failure to dispose the context must not replace the failure that is thrown.
+            try { await context.DisposeAsync().ConfigureAwait(false); }
+            catch { }
+
             throw;
         }
 
@@ -723,7 +728,6 @@ partial class FileRepo
             await RunNodeAsync(
                 fileId,
                 streamSource: null,
-                streamLeaveOpen: false,
                 fileSource: parentSource,
                 parentRootVariantId,
                 parentRootExtension,
@@ -957,13 +961,12 @@ partial class FileRepo
     /// of the file in the marker. The caller hands the returned marker handle back when the transaction commits or rolls back the add (see
     /// <see cref="TxnCommitAddAsync(FileId, IAsyncDisposable?, AccessWaitBudget)"/> and
     /// <see cref="TxnRollbackAddAsync(FileId, IAsyncDisposable?, AccessWaitBudget?)"/>), which releases it in the same step in which the marker or the file
-    /// is removed, and disposes it if it lets go of the file without finishing.
+    /// is removed, and disposes it if it lets go of the file without finishing. The processing context of the main file takes the source stream over.
     /// </summary>
     internal async Task<(RepoFileGroupInfo Group, IAsyncDisposable IndeterminateMarker)> AddTransactionalAsyncCore(
         FileId fileId,
-        Stream stream,
+        AddSourceStream source,
         string extension,
-        bool leaveOpen,
         IFileProcessingPipelineSelector rootSelector,
         Func<ProgressValue, ValueTask>? progressCallback,
         CancellationToken cancellationToken)
@@ -987,8 +990,7 @@ partial class FileRepo
             // its own root for any child aliases.
             await RunNodeAsync(
                 fileId,
-                streamSource: stream,
-                streamLeaveOpen: leaveOpen,
+                streamSource: source,
                 fileSource: null,
                 parentRootVariantId: FileRepoPaths.MainFileName,
                 parentRootExtension: extension,

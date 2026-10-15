@@ -96,15 +96,15 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// Adds a new file to the repository with the specified file stream, processing it through the specified file pipeline.
     /// </summary>
     /// <param name="stream">The source file stream.</param>
-    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
+    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes. If <see langword="false"/>, the stream is closed
+    /// whether the add succeeds or fails.</param>
     /// <param name="pipeline">The processing pipeline provider to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The resulting file group, including the main file and any auto-variants produced by the pipeline.</returns>
     /// <exception cref="InvalidOperationException">The transaction has been staged or rolled back.</exception>
     public TaskWithProgress<RepoFileGroupInfo> AddAsync(FileStream stream, bool leaveOpen, IFileProcessingPipelineSelector pipeline, CancellationToken cancellationToken = default)
     {
-        string extension = FilePath.ParseAbsolute(stream.Name, PathOptions.None).Extension;
-        return AddAsync(stream, extension, leaveOpen, pipeline, cancellationToken);
+        return _adds.AddAsync(stream, extension: null, leaveOpen, pipeline, _sync, ThrowIfNotOpen, cancellationToken);
     }
 
     /// <summary>
@@ -112,7 +112,8 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// </summary>
     /// <param name="stream">The source stream.</param>
     /// <param name="extension">The source file extension.</param>
-    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes.</param>
+    /// <param name="leaveOpen">Indicates whether to leave the stream open after the operation completes. If <see langword="false"/>, the stream is closed
+    /// whether the add succeeds or fails.</param>
     /// <param name="pipeline">The processing pipeline provider to use.</param>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <returns>The resulting file group, including the main file and any auto-variants produced by the pipeline.</returns>
@@ -128,13 +129,7 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
         IFileProcessingPipelineSelector pipeline,
         CancellationToken cancellationToken = default)
     {
-        return new(cancellationToken, async (ct, progressCallback) =>
-        {
-            using var syncLock = await _sync.LockAsync(ct).ConfigureAwait(false);
-            ThrowIfNotOpen();
-
-            return await _adds.AddAsync(stream, extension, leaveOpen, pipeline, progressCallback, ct).ConfigureAwait(false);
-        });
+        return _adds.AddAsync(stream, extension, leaveOpen, pipeline, _sync, ThrowIfNotOpen, cancellationToken);
     }
 
     /// <inheritdoc/>

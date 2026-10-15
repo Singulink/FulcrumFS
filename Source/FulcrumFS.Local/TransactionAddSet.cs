@@ -1,8 +1,8 @@
 namespace FulcrumFS;
 
 /// <summary>
-/// Tracks the files a transaction has tentatively added; shared by <see cref="FileRepoTransaction"/> and <see cref="FileRepoStagedTransaction"/>. Not
-/// thread-safe: the owning transaction serializes every call through its own lock.
+/// Adds files for a transaction and tracks the files it has tentatively added; shared by <see cref="FileRepoTransaction"/> and
+/// <see cref="FileRepoStagedTransaction"/>. Not thread-safe: the owning transaction serializes every call through its own lock, which an add takes itself.
 /// </summary>
 internal sealed class TransactionAddSet
 {
@@ -35,23 +35,57 @@ internal sealed class TransactionAddSet
     public IReadOnlyCollection<FileId> FileIds => _added;
 
     /// <summary>
-    /// Tentatively adds a file to the repository and starts tracking it.
+    /// Creates the task of an add of the transaction, which tentatively adds a file to the repository and starts tracking it. The task takes the transaction's
+    /// lock, and checks that the transaction can still add files once it has the lock.
     /// </summary>
-    public async Task<RepoFileGroupInfo> AddAsync(
+    /// <param name="stream">The source stream.</param>
+    /// <param name="extension">The source extension, or <see langword="null"/> to take it from the file name of <paramref name="stream"/>, which is then a
+    /// <see cref="FileStream"/>.</param>
+    /// <param name="leaveOpen">Whether to leave the stream open; otherwise the add closes it whether it succeeds or fails.</param>
+    /// <param name="pipeline">The pipeline, or the selector that chooses it by extension.</param>
+    /// <param name="sync">The transaction's lock, which serializes the calls on it.</param>
+    /// <param name="throwIfNotOpen">Throws if the transaction can no longer add files.</param>
+    /// <param name="cancellationToken">A token that cancels the add.</param>
+    public TaskWithProgress<RepoFileGroupInfo> AddAsync(
         Stream stream,
-        string extension,
+        string? extension,
         bool leaveOpen,
         IFileProcessingPipelineSelector pipeline,
-        Func<ProgressValue, ValueTask>? progressCallback,
+        AsyncLock sync,
+        Action throwIfNotOpen,
         CancellationToken cancellationToken)
     {
-        var (result, indeterminateMarker) = await _repository.TxnAddAsync(stream, extension, leaveOpen, pipeline, progressCallback, cancellationToken)
-            .ConfigureAwait(false);
+        var source = new AddSourceStream(stream, leaveOpen);
 
-        _added.Add(result.FileId);
-        _indeterminateMarkers[result.FileId] = indeterminateMarker;
+        // The task is not given the token, because a task whose token is cancelled throws before it starts the add, which then could not close the stream.
+        // The add checks the token itself, first, so that every failure of the add goes through the catch below.
+        return new(CancellationToken.None, async (_, progressCallback) =>
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-        return result;
+                // Read here rather than when the add is called, so that a stream whose name is not a path fails the add like any other failure.
+                extension ??= FilePath.ParseAbsolute(((FileStream)stream).Name, PathOptions.None).Extension;
+
+                using var syncLock = await sync.LockAsync(cancellationToken).ConfigureAwait(false);
+                throwIfNotOpen();
+
+                var (result, indeterminateMarker) = await _repository.TxnAddAsync(source, extension, pipeline, progressCallback, cancellationToken)
+                    .ConfigureAwait(false);
+
+                _added.Add(result.FileId);
+                _indeterminateMarkers[result.FileId] = indeterminateMarker;
+
+                return result;
+            }
+            catch
+            {
+                // Until the processing context of the main file has taken the stream over, the add closes it.
+                await source.CloseIfNotTakenOverAsync().ConfigureAwait(false);
+                throw;
+            }
+        });
     }
 
     /// <summary>

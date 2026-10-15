@@ -435,6 +435,55 @@ public sealed class TempDirectoryTests
         }
     }
 
+    [TestMethod]
+    public async Task Add_WhosePipelineFails_ThrowsItsFailure_WhenItsSourceAlsoFailsToClose()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir);
+
+        try
+        {
+            // The context of the main file owns the source, and closing it fails when the context is disposed after the processor has failed.
+            await using var txn = await repo.BeginTransactionAsync();
+            var source = new CloseFailingStream(failEveryTime: true);
+
+            await Should.ThrowAsync<FileProcessingException>(async () => await AddAsync(txn, source, new WorkFileProcessor(fail: true).ToPipeline()));
+
+            source.CanRead.ShouldBeFalse();
+            TempDir(repoDir).GetChildEntries().ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    [TestMethod]
+    public async Task AliasVariantAdd_ThatFailsBeforeTheAliasIsStaged_ThrowsItsFailure_WhenItsSourceAlsoFailsToClose()
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir);
+        var processor = new AliasStagingFailureProcessor(AliasStagingFailure.MarkerNotCreated, sourceFailsToClose: true);
+
+        try
+        {
+            var fileId = await AddAndCommitAsync(repo, [1, 2, 3]);
+
+            var ex = await Should.ThrowAsync<IOException>(
+                async () => await repo.AddVariantAsync(fileId, "thumb", processor.ToPipeline(aliasWhenVariantSourceUnchanged: true), TestContext.CancellationToken));
+
+            // The failure to create the marker, which names it, and not the failure to close the source that the context owns.
+            ex.Message.ShouldContain($"thumb.{FileRepoPaths.MainFileName}.bin{FileRepoPaths.AliasMarkerExtension}");
+
+            processor.Source.ShouldNotBeNull().CanRead.ShouldBeFalse();
+            TempDir(repoDir).GetChildEntries().ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------
@@ -589,8 +638,19 @@ public sealed class TempDirectoryTests
     private sealed class AliasStagingFailureProcessor : FileProcessor
     {
         private readonly AliasStagingFailure _failure;
+        private readonly bool _sourceFailsToClose;
 
-        public AliasStagingFailureProcessor(AliasStagingFailure failure) => _failure = failure;
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AliasStagingFailureProcessor"/> class.
+        /// </summary>
+        /// <param name="failure">What makes staging the alias fail.</param>
+        /// <param name="sourceFailsToClose">For <see cref="AliasStagingFailure.MarkerNotCreated"/>, whether the stream that the processor leaves as the
+        /// context's source is one that fails every time it is closed, instead of a stream on the source.</param>
+        public AliasStagingFailureProcessor(AliasStagingFailure failure, bool sourceFailsToClose = false)
+        {
+            _failure = failure;
+            _sourceFailsToClose = sourceFailsToClose;
+        }
 
         public Stream? Source { get; private set; }
 
@@ -611,28 +671,11 @@ public sealed class TempDirectoryTests
             string markerName = $"{context.VariantId}.{FileRepoPaths.MainFileName}{context.Extension}{FileRepoPaths.AliasMarkerExtension}";
             await File.WriteAllBytesAsync(workingDir.CombineFile(markerName, PathOptions.None).PathExport, [], context.CancellationToken).ConfigureAwait(false);
 
-            Source = await context.GetSourceAsSeekableStreamAsync(preferInMemory: false, maxInMemoryCopySize: 0).ConfigureAwait(false);
+            Source = _sourceFailsToClose ?
+                new CloseFailingStream(failEveryTime: true) :
+                await context.GetSourceAsSeekableStreamAsync(preferInMemory: false, maxInMemoryCopySize: 0).ConfigureAwait(false);
+
             return FileProcessingResult.Stream(Source, context.Extension, hasChanges: false);
-        }
-    }
-
-    /// <summary>
-    /// A stream that fails the first time it is closed and is closed all the same, as a stream that writes out what it buffered when it is closed does when
-    /// the write fails.
-    /// </summary>
-    private sealed class CloseFailingStream : MemoryStream
-    {
-        private bool _isClosed;
-
-        public override ValueTask DisposeAsync()
-        {
-            if (_isClosed)
-                return ValueTask.CompletedTask;
-
-            _isClosed = true;
-            Dispose();
-
-            return ValueTask.FromException(new IOException("Simulated failure to close the stream."));
         }
     }
 }

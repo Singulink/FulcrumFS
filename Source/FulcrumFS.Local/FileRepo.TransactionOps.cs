@@ -88,9 +88,8 @@ partial class FileRepo
     }
 
     internal async Task<(RepoFileGroupInfo Result, IAsyncDisposable IndeterminateMarker)> TxnAddAsync(
-        Stream stream,
+        AddSourceStream source,
         string extension,
-        bool leaveOpen,
         IFileProcessingPipelineSelector pipeline,
         Func<ProgressValue, ValueTask>? progressCallback,
         CancellationToken cancellationToken = default)
@@ -139,7 +138,7 @@ partial class FileRepo
                 break;
             }
 
-            return await AddTransactionalAsyncCore(fileId, stream, extension, leaveOpen, pipeline, progressCallback, cancellationToken).ConfigureAwait(false);
+            return await AddTransactionalAsyncCore(fileId, source, extension, pipeline, progressCallback, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

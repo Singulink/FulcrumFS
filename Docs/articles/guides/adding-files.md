@@ -38,7 +38,7 @@ FileId fileId = added.FileId;
 The result is a <xref:FulcrumFS.RepoFileGroupInfo>. Its <xref:FulcrumFS.RepoFileGroupInfo.FileId> is the handle you persist on the owning database row (a `Documents.FileId` column, say); its <xref:FulcrumFS.RepoFileGroupInfo.MainFile> and <xref:FulcrumFS.RepoFileGroupInfo.VariantFiles> describe what was produced when the pipeline generates variants such as thumbnails. Every data file an add stores is flushed to disk before <xref:FulcrumFS.FileRepoTransaction.AddAsync*> returns, so the add survives a power loss; that flush per file is the cost of the guarantee (see [Durability Across Power Loss](../concepts/crash-recovery.md#durability-across-power-loss)). The files in the result already know their sizes, which the add took from the files it stored, so reading <xref:FulcrumFS.RepoFileInfo.Length> to record the size of an upload on its row costs no further I/O.
 
 > [!TIP]
-> Pass `leaveOpen: true` when the calling code is responsible for disposing the source stream (the common case with HTTP upload streams owned by the request scope). Pass `leaveOpen: false` only when you want the transaction to take ownership of the stream.
+> Pass `leaveOpen: true` when the calling code is responsible for disposing the source stream (the common case with HTTP upload streams owned by the request scope). Pass `leaveOpen: false` only when you want the transaction to take ownership of the stream: the add then closes it whether it succeeds or fails.
 
 #### Passing a pipeline or a selector
 
