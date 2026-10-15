@@ -18,7 +18,7 @@ A repository base directory contains a small number of well-known entries, creat
 - `fulcrumfs.info`, the info file that marks the directory as a FulcrumFS repository and records its [format version](#format-version).
 - `fulcrumfs.lock`, a lock file that the <xref:FulcrumFS.FileRepo> instance using the repository holds open, so that only one instance uses it at a time.
 - A `files` directory holding the file groups.
-- A `temp` directory for in-progress processing work. Each operation removes its work files when it finishes, and a <xref:FulcrumFS.FileRepo> empties the directory when it first opens the repository, which removes what a process that ended in the middle of an operation left in it.
+- A `temp` directory for in-progress processing work. Each pipeline that an add runs, for the main file or for a variant, works in a directory of its own there, named `{fileId} {n}` or `{fileId} {variantId} {n}`, where `n` is a number that no other pipeline run in the process has. The add removes its directories when it finishes, whether it succeeds or fails. A <xref:FulcrumFS.FileRepo> empties the directory when it first opens the repository, which removes what a process that ended in the middle of an operation left in it, and any working directory that its add could not remove (see [Crash Recovery and Invariants](crash-recovery.md#what-the-cleaner-does)).
 - A `cleanup` directory holding the markers of operations that are in progress or waiting for the cleaner, and delete journals.
 
 Foreign files and folders placed alongside these are left untouched. If a non-empty directory contains foreign content and is not already a repository, <xref:FulcrumFS.FileRepo.EnsureCreated*> throws rather than adopting it.

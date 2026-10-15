@@ -204,7 +204,8 @@ partial class RepoFileSystem
     }
 
     /// <summary>
-    /// Gets a unique entry name for a given file ID and variant ID which is used to name temp work directories or cleanup files associated with the file.
+    /// Gets a unique entry name for a given file ID and variant ID which is used to name cleanup files associated with the file, and which the names of its
+    /// working directories in temp start with (followed by a number that makes each of them unique).
     /// </summary>
     public static string GetFileIdAndVariantString(FileId fileId, string? variantId) => variantId is null ? fileId.ToString() : $"{fileId} {variantId}";
 }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace FulcrumFS;
 
@@ -493,6 +494,9 @@ partial class FileRepo
     // Recursive runner
     // ---------------------------------------------------------------------------------------------------------------
 
+    // The number of the last working directory that RunNodeAsync made for a context, shared by every repository in the process.
+    private static long _lastWorkingDirNumber;
+
     /// <summary>
     /// Executes a pipeline node and all of its nested variants. The node may be the top-level variant (when called from the variant-add path), a nested
     /// variant in a pipeline's <see cref="FileProcessingPipeline.Variants"/>, or the main pipeline of a transactional add.
@@ -587,8 +591,15 @@ partial class FileRepo
             }
         }
 
-        // Create a context with its own temp working dir.
-        var tempWorkingDir = _tempDirectory.CombineDirectory(RepoFileSystem.GetFileIdAndVariantString(fileId, variantId), PathOptions.None);
+        // Create a context with a working directory of its own in temp, named after the file and variant so that temp stays readable, and made unique by a
+        // number. A directory that cannot be removed when its context is disposed (on Windows, while something still has a file in it open, such as an
+        // external tool's child process that has not exited) stays until temp is next emptied. A later context of the same variant of the same file would
+        // otherwise find the earlier one's work files and alias marker there under the names it creates its own with, and fail. A number that is unique within
+        // the process is enough: only the instance that holds the repository lock works in temp, and its first initialization empties temp of what other
+        // processes left in it.
+        long workingDirNumber = Interlocked.Increment(ref _lastWorkingDirNumber);
+        string workingDirName = string.Create(CultureInfo.InvariantCulture, $"{RepoFileSystem.GetFileIdAndVariantString(fileId, variantId)} {workingDirNumber}");
+        var tempWorkingDir = _tempDirectory.CombineDirectory(workingDirName, PathOptions.None);
         FileProcessingContext context;
 
         if (streamSource is not null)
@@ -620,23 +631,36 @@ partial class FileRepo
             // data file for the parent. The marker becomes a first-class addressable variant on disk and lets future GetOrAdd fast-paths succeed for this
             // variant. Children still run against the unchanged parent source.
 
-            tempWorkingDir.Create();
-            string aliasName = BuildAliasFileName(variantId, parentRootVariantId, parentRootExtension);
-            var aliasStaged = tempWorkingDir.CombineFile(aliasName, PathOptions.None);
+            IAbsoluteFilePath aliasStaged;
+            IAbsoluteFilePath childSource;
 
-            using (var stream = aliasStaged.OpenStream(FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            // The catch below, which disposes the context when the pipeline fails, does not see an exception thrown from this block, so until the context is
+            // handed to the staged node a failure disposes it here. It would otherwise keep its working directory in temp, and a source it owns open.
+            try
             {
-                // Zero-byte marker; nothing to write.
+                tempWorkingDir.Create();
+                string aliasName = BuildAliasFileName(variantId, parentRootVariantId, parentRootExtension);
+                aliasStaged = tempWorkingDir.CombineFile(aliasName, PathOptions.None);
+
+                using (var stream = aliasStaged.OpenStream(FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    // Zero-byte marker; nothing to write.
+                }
+
+                // Children run against the unchanged parent data. For a file-sourced node, which every variant node is, that is fileSource directly; for a
+                // stream-sourced node the parent data would have to be materialized from the context. Either way the context owns tempWorkingDir (which holds
+                // the staged alias marker, and possibly the materialized source), so once the marker is staged the context is handed to the staged node and
+                // disposed in the outer finally only after the batch-move has relocated the marker out of the temp dir.
+                childSource = fileSource ?? await context.GetSourceAsFileAsync().ConfigureAwait(false);
+
+                // A processor may have left the source open as a stream on the parent's data file, which would block that file's flush to disk on Windows.
+                await context.ReleaseSourceAsync().ConfigureAwait(false);
             }
-
-            // Children run against the unchanged parent data. For a file-sourced node that is fileSource directly; for a stream-sourced node (the top-level
-            // variant-add path) the parent data must be materialized from the context. Either way the context owns tempWorkingDir (which holds the staged
-            // alias marker, and possibly the materialized source), so it must not be disposed here - it is handed to the staged node and disposed in the outer
-            // finally only after the batch-move has relocated the marker out of the temp dir.
-            var childSource = fileSource ?? await context.GetSourceAsFileAsync().ConfigureAwait(false);
-
-            // A processor may have left the source open as a stream on the parent's data file, which would block that file's flush to disk on Windows.
-            await context.ReleaseSourceAsync().ConfigureAwait(false);
+            catch
+            {
+                await context.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
 
             stagedNodes.Add(new StagedNode
             {
