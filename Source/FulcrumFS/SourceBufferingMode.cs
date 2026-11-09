@@ -16,8 +16,8 @@ namespace FulcrumFS;
 ///     sources (like <see cref="MemoryStream"/> or <see cref="FileStream"/>) while protecting against direct processing of unknown streams.</description>
 ///   </item>
 ///   <item>
-///     <description><strong>Slow Storage:</strong> If the source is a slow <see cref="FileStream"/> (e.g. to a high-latency network share), use <see
-///     cref="ForceTempCopy"/> to ensure it is copied before processing.</description>
+///     <description><strong>Slow Storage:</strong> If the source is a slow <see cref="FileStream"/> (e.g. to a high-latency network share), use
+///     <see cref="ForceTempCopy"/> to ensure it is copied before processing.</description>
 ///   </item>
 ///   <item>
 ///     <description><strong>Trusted Environments:</strong> <see cref="Disabled"/> can be appropriate when repositories are local-only access, clients are

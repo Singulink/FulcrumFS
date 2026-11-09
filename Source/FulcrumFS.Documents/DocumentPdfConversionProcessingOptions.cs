@@ -21,23 +21,25 @@ public sealed record DocumentPdfConversionProcessingOptions
     /// <para>
     /// Gets or initializes the document formats that are accepted as conversion sources, which determines the allowed source file extensions.</para>
     /// <para>
-    /// Default is the full set of built-in word processing, spreadsheet and presentation formats: <see cref="FileFormat.Doc" />, <see cref="FileFormat.Docx"
-    /// />, <see cref="FileFormat.Xls" />, <see cref="FileFormat.Xlsx" />, <see cref="FileFormat.Xlsm" />, <see cref="FileFormat.Ppt" />, <see
-    /// cref="FileFormat.Pptx" />, <see cref="FileFormat.Odt" />, <see cref="FileFormat.Ods" />, <see cref="FileFormat.Odp" /> and <see cref="FileFormat.Rtf"
-    /// />.</para>
-    /// <para>
-    /// Note: this does not validate the content of source files - chain a <see cref="FileFormatValidationProcessor" /> before this processor if source
-    /// content validation is needed.</para>
+    /// Default is the full set of built-in word processing, spreadsheet and presentation formats: <see cref="FileFormat.Doc" />,
+    /// <see cref="FileFormat.Docx" />, <see cref="FileFormat.Xls" />, <see cref="FileFormat.Xlsx" />, <see cref="FileFormat.Xlsm" />,
+    /// <see cref="FileFormat.Ppt" />, <see cref="FileFormat.Pptx" />, <see cref="FileFormat.Odt" />, <see cref="FileFormat.Ods" />,
+    /// <see cref="FileFormat.Odp" /> and <see cref="FileFormat.Rtf" />.</para>
     /// </summary>
+    /// <remarks>
+    /// This does not validate the content of source files - chain a <see cref="FileFormatValidationProcessor" /> before this processor if source
+    /// content validation is needed.
+    /// </remarks>
     public IReadOnlyList<FileFormat> SourceFormats
     {
         get;
         init
         {
-            ArgumentNullException.ThrowIfNull(value);
-
             if (value.Count is 0)
-                throw new ArgumentException("At least one source format must be specified.", nameof(value));
+                throw new ArgumentException("The value is empty.", nameof(value));
+
+            if (value.Any(f => f is null))
+                throw new ArgumentException("The value contains null.", nameof(value));
 
             field = [.. value];
         }

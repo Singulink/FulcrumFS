@@ -339,6 +339,57 @@ public sealed class Tests
         ((int)pixel.B).ShouldBeInRange(86, 94);
     }
 
+    [TestMethod]
+    public void SourceValidationOptions_OutOfRange_ReportValue()
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageSourceValidationOptions { MaxWidth = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageSourceValidationOptions { MaxHeight = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageSourceValidationOptions { MaxPixels = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageSourceValidationOptions { MinWidth = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageSourceValidationOptions { MinHeight = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageSourceValidationOptions { MinPixels = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => ImageProcessingOptions.Preserve with { MaxFrames = 0 }).ParamName.ShouldBe("value");
+    }
+
+    [TestMethod]
+    public void ProcessingOptions_SourceValidationMinAboveMax_ListsEveryProblem()
+    {
+        var ex = Should.Throw<ArgumentException>(() => ImageProcessingOptions.Preserve with {
+            SourceValidation = new() { MinWidth = 200, MaxWidth = 100, MinHeight = 20, MaxHeight = 10, MinPixels = 4, MaxPixels = 2 },
+        });
+
+        ex.ParamName.ShouldBe("value");
+        ex.Message.ShouldStartWith(
+            "ImageSourceValidationOptions.MinWidth (200) is greater than MaxWidth (100). ImageSourceValidationOptions.MinHeight (20) is greater than " +
+            "MaxHeight (10). ImageSourceValidationOptions.MinPixels (4) is greater than MaxPixels (2).");
+
+        // Equal bounds, bounds of which only one is set, and no validation are valid.
+        _ = ImageProcessingOptions.Preserve with { SourceValidation = new() { MinWidth = 100, MaxWidth = 100, MinHeight = 50 } };
+        _ = ImageProcessingOptions.Preserve with { SourceValidation = null };
+    }
+
+    [TestMethod]
+    public void ResizeOptions_OutOfRange_NameTheConstructorParameter_AndValueInTheSetters()
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageResizeOptions(ImageResizeMode.FitDown, 0, 100)).ParamName.ShouldBe("width");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageResizeOptions(ImageResizeMode.FitDown, 100, 0)).ParamName.ShouldBe("height");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ImageResizeOptions((ImageResizeMode)42, 100, 100)).ParamName.ShouldBe("mode");
+
+        var resize = new ImageResizeOptions(ImageResizeMode.CropDown, 640, 480, matchSourceOrientation: true);
+        (resize.Mode, resize.Width, resize.Height, resize.MatchSourceOrientation).ShouldBe((ImageResizeMode.CropDown, 640, 480, true));
+
+        Should.Throw<ArgumentOutOfRangeException>(() => resize with { Width = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => resize with { Height = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => resize with { Mode = (ImageResizeMode)42 }).ParamName.ShouldBe("value");
+    }
+
+    [TestMethod]
+    public void ProcessingOptions_UndefinedReorientMode_Throws()
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => ImageProcessingOptions.Preserve with { ReorientMode = (ImageReorientMode)42 });
+        (ImageProcessingOptions.Preserve with { ReorientMode = ImageReorientMode.PreferNormal }).ReorientMode.ShouldBe(ImageReorientMode.PreferNormal);
+    }
+
     private static void ResetRepository()
     {
         lock (_repo)

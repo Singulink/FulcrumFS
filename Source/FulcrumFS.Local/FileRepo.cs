@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
-using Singulink.Enums;
 
 namespace FulcrumFS;
 
@@ -99,6 +98,11 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     internal bool HealthChecksActive => _healthChecksActive;
 
     /// <summary>
+    /// Gets the base directory of the repository, as configured by <see cref="FileRepoOptions.BaseDirectory"/>.
+    /// </summary>
+    public IAbsoluteDirectoryPath BaseDirectory { get; }
+
+    /// <summary>
     /// Gets the directory where files are stored.
     /// </summary>
     public IAbsoluteDirectoryPath FilesDirectory => _fs.FilesDirectory;
@@ -154,30 +158,24 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepo"/> class with the specified options.
     /// </summary>
-    /// <exception cref="ArgumentException">The base directory or the minimum format version is not set in the options.</exception>
+    /// <remarks>
+    /// The options are checked (see <see cref="FileRepoOptions.Validate"/>) and frozen (see <see cref="FileRepoOptions.IsFrozen"/>), after which they can't be
+    /// changed.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The options are not valid, such as when the base directory or the minimum format version is not set. The message
+    /// lists every problem.</exception>
     public FileRepo(FileRepoOptions options)
     {
-        if (options.BaseDirectory is null)
-            throw new ArgumentException("Base directory must be set in options.", nameof(options));
-
-        // The property is required, but options that were not created in code (for example bound from configuration) can still leave it unset. There is no
-        // fallback: the right version depends on which processes use the repository, so the application has to choose it.
-        if (!options.MinimumFormatVersion.IsDefined())
-        {
-            throw new ArgumentException(
-                $"{nameof(FileRepoOptions)}.{nameof(FileRepoOptions.MinimumFormatVersion)} must be set to {nameof(RepoFormatVersion.Version1)}, " +
-                $"{nameof(RepoFormatVersion.Version2)} or {nameof(RepoFormatVersion.Latest)}; {nameof(RepoFormatVersion.Version1)} keeps repositories " +
-                "compatible with FulcrumFS 1.0.x.",
-                nameof(options));
-        }
-
-        options.Freeze();
+        // The required properties can be unset in options that were not created in code, for example bound from configuration. There is no fallback for the
+        // minimum format version: the right version depends on which processes use the repository, so the application has to choose it.
+        options.Freeze(nameof(options));
         Options = options;
 
-        _infoFile = options.BaseDirectory.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None);
-        _lockFile = options.BaseDirectory.CombineFile(FileRepoPaths.RepoLockFileName, PathOptions.None);
-        _tempDirectory = options.BaseDirectory.CombineDirectory(FileRepoPaths.TempDirectoryName, PathOptions.None);
-        _fs = new RepoFileSystem(options.BaseDirectory, options.MarkerFileLogging)
+        BaseDirectory = options.BaseDirectory;
+        _infoFile = BaseDirectory.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None);
+        _lockFile = BaseDirectory.CombineFile(FileRepoPaths.RepoLockFileName, PathOptions.None);
+        _tempDirectory = BaseDirectory.CombineDirectory(FileRepoPaths.TempDirectoryName, PathOptions.None);
+        _fs = new RepoFileSystem(BaseDirectory, options.MarkerFileLogging)
         {
             GetCorruptionDetectedHandler = () => CorruptionDetected,
             GetDebugStepHook = () => DebugStepHook,
@@ -187,7 +185,8 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepo"/> class with the specified options.
     /// </summary>
-    /// <exception cref="ArgumentException">The base directory or the minimum format version is not set in the options.</exception>
+    /// <exception cref="ArgumentException">The options are not valid, such as when the base directory or the minimum format version is not set. The message
+    /// lists every problem.</exception>
     public FileRepo(IOptions<FileRepoOptions> options) : this(options.Value) { }
 
     /// <summary>
@@ -198,6 +197,11 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     /// <param name="minimumFormatVersion">The lowest format version the repository has once it is opened: a new repository is created at it and an older one
     /// is upgraded to it; see <see cref="FileRepoOptions.MinimumFormatVersion"/>.</param>
     /// <param name="configure">An optional action that configures additional options.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="minimumFormatVersion"/> is not <see cref="RepoFormatVersion.Version1"/>,
+    /// <see cref="RepoFormatVersion.Version2"/> or <see cref="RepoFormatVersion.Latest"/>, or an option that <paramref name="configure"/> sets is out of
+    /// range.</exception>
+    /// <exception cref="ArgumentException"><paramref name="baseDirectory"/>, or a base directory that <paramref name="configure"/> sets, has a name that is
+    /// not friendly (see <see cref="FileRepoOptions.BaseDirectory"/>).</exception>
     public FileRepo(IAbsoluteDirectoryPath baseDirectory, RepoFormatVersion minimumFormatVersion, Action<FileRepoOptions>? configure = null)
         : this(BuildOptions(baseDirectory, minimumFormatVersion, configure)) { }
 
@@ -298,20 +302,20 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
             // No marker file. Refuse to initialize a directory that already contains foreign content - this guards against accidentally pointing at the wrong
             // directory (e.g. a typo). An empty or non-existent directory is treated as a fresh repository location.
 
-            var baseDirState = Options.BaseDirectory.State;
+            var baseDirState = BaseDirectory.State;
 
             if (baseDirState is EntryState.Exists)
             {
-                if (Options.BaseDirectory.GetChildEntries().Any())
+                if (BaseDirectory.GetChildEntries().Any())
                 {
                     throw new InvalidOperationException(
-                        $"Cannot initialize a FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}': the directory contains content that does not " +
+                        $"Cannot initialize a FulcrumFS repository at '{BaseDirectory.PathDisplay}': the directory contains content that does not " +
                         $"belong to a repository. Repository directories must be empty or contain only repository-managed content on initial creation.");
                 }
             }
             else
             {
-                Options.BaseDirectory.Create();
+                BaseDirectory.Create();
             }
 
             // Write the info marker FIRST so a crash mid-creation still leaves the directory identifiable as a (partial) FulcrumFS repository, allowing the
@@ -612,11 +616,11 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
         {
             if (_infoFile.State is not EntryState.Exists)
             {
-                if (Options.BaseDirectory.State is not EntryState.Exists)
-                    throw new DirectoryNotFoundException($"The file repository base directory '{Options.BaseDirectory.PathDisplay}' was not found.");
+                if (BaseDirectory.State is not EntryState.Exists)
+                    throw new DirectoryNotFoundException($"The file repository base directory '{BaseDirectory.PathDisplay}' was not found.");
 
                 throw new DirectoryNotFoundException(
-                    $"The directory '{Options.BaseDirectory.PathDisplay}' is not a FulcrumFS repository. " +
+                    $"The directory '{BaseDirectory.PathDisplay}' is not a FulcrumFS repository. " +
                     (Options.ReadOnly ?
                         $"It cannot be created by an instance opened read-only; call '{nameof(EnsureCreated)}' on an instance with full access to create it." :
                         $"Call '{nameof(EnsureCreated)}' to create it."));
@@ -629,7 +633,7 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
             if (_fs.FilesDirectory.State is not EntryState.Exists || _fs.CleanupDirectory.State is not EntryState.Exists)
             {
                 throw new DirectoryNotFoundException(
-                    $"The FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}' is in an incomplete state. " +
+                    $"The FulcrumFS repository at '{BaseDirectory.PathDisplay}' is in an incomplete state. " +
                     (Options.ReadOnly ?
                         $"It cannot be repaired by an instance opened read-only; call '{nameof(EnsureCreated)}' on an instance with full access to repair it." :
                         $"Call '{nameof(EnsureCreated)}' to repair it."));
@@ -656,7 +660,7 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
     }
 
     private InvalidOperationException CreateReadOnlyException() =>
-        new($"The operation is not allowed because the FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}' was opened read-only.");
+        new($"The operation is not allowed because the FulcrumFS repository at '{BaseDirectory.PathDisplay}' was opened read-only.");
 
     /// <summary>
     /// Disposes of the file repository, releasing any resources and locks held by it.

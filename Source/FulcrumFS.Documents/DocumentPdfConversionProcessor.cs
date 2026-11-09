@@ -16,16 +16,17 @@ public sealed class DocumentPdfConversionProcessor : FileProcessor
     private static InterlockedFlag _libreOfficePathInitialized;
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="DocumentPdfConversionProcessor"/> class with the specified options.
+    /// </summary>
+    /// <remarks>
     /// <para>
-    /// Initializes a new instance of the <see cref="DocumentPdfConversionProcessor"/> class with the specified options.</para>
-    /// <para>
-    /// Note: you must configure the LibreOffice executable path by calling <see cref="ConfigureWithLibreOffice"/> before creating an instance of this
+    /// You must configure the LibreOffice executable path by calling <see cref="ConfigureWithLibreOffice"/> before creating an instance of this
     /// class.</para>
     /// <para>
-    /// Note: if you want to do source document validation, you need to use a <see cref="FileFormatValidationProcessor" /> configured with the appropriate
+    /// If you want to do source document validation, you need to use a <see cref="FileFormatValidationProcessor" /> configured with the appropriate
     /// document formats first and chain this after it, as this class does not perform any validation itself, it just converts the provided document to
     /// PDF.</para>
-    /// </summary>
+    /// </remarks>
     public DocumentPdfConversionProcessor(DocumentPdfConversionProcessingOptions options)
     {
         Options = options;
@@ -79,14 +80,15 @@ public sealed class DocumentPdfConversionProcessor : FileProcessor
     public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.SourceFormats.SelectMany(f => f.Extensions).Distinct()];
 
     /// <summary>
-    /// <para>
-    /// Configures the directory containing the LibreOffice program files to use for processing.</para>
+    /// Configures the directory containing the LibreOffice program files to use for processing.
+    /// </summary>
+    /// <remarks>
     /// <para>
     /// On Windows: the LibreOffice `program` directory (e.g. `C:\Program Files\LibreOffice\program`), which should contain soffice.com or soffice.exe.</para>
     /// <para>
     /// On Linux/macOS: the directory containing the soffice executable (e.g. `/usr/bin` or `/usr/lib/libreoffice/program`) with appropriate execute
     /// permissions.</para>
-    /// </summary>
+    /// </remarks>
     /// <param name="dirPath">The directory path containing the LibreOffice executables.</param>
     /// <param name="options">Configuration options for the document PDF conversion processor, such as maximum number of processes.</param>
     public static void ConfigureWithLibreOffice(IAbsoluteDirectoryPath dirPath, DocumentPdfConversionConfigurationOptions? options = null)

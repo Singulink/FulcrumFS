@@ -7,10 +7,17 @@ namespace FulcrumFS;
 /// <summary>
 /// Represents configuration options for a file repository.
 /// </summary>
-public class FileRepoOptions
+/// <remarks>
+/// <para>
+/// The <see cref="FileRepo"/> checks and freezes the options when it is constructed, after which they can't be changed, and their setters throw an
+/// <see cref="InvalidOperationException"/>.</para>
+/// <para>
+/// The members that are <see langword="required"/> have no default. The compiler requires them when the options are created in code, but not when they are
+/// bound from a configuration, so they read as not set until they are set, in any order, and the <see cref="FileRepo"/> constructor throws, with a message
+/// that names them, if one is still not set then.</para>
+/// </remarks>
+public sealed class FileRepoOptions
 {
-    private bool _frozen;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepoOptions"/> class.
     /// </summary>
@@ -25,27 +32,42 @@ public class FileRepoOptions
     /// <param name="baseDirectory">The base directory for the file repository. Must be an existing directory in the file system.</param>
     /// <param name="minimumFormatVersion">The lowest format version the repository has once it is opened: a new repository is created at it and an older one
     /// is upgraded to it; see <see cref="MinimumFormatVersion"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="minimumFormatVersion"/> is not <see cref="RepoFormatVersion.Version1"/>,
+    /// <see cref="RepoFormatVersion.Version2"/> or <see cref="RepoFormatVersion.Latest"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="baseDirectory"/> has a name that is not friendly (see <see cref="BaseDirectory"/>).</exception>
     [SetsRequiredMembers]
     public FileRepoOptions(IAbsoluteDirectoryPath baseDirectory, RepoFormatVersion minimumFormatVersion)
     {
+        CheckBaseDirectory(baseDirectory, nameof(baseDirectory));
+        CheckFormatVersion(minimumFormatVersion, nameof(minimumFormatVersion));
+
         BaseDirectory = baseDirectory;
         MinimumFormatVersion = minimumFormatVersion;
     }
 
     /// <summary>
-    /// Gets or sets the base directory for the file repository.
+    /// Gets or sets the base directory for the file repository, or <see langword="null"/> while it is not set.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The directory must be on a local file system: a local disk, or block storage that the operating system mounts as a local file system, such as an
     /// iSCSI or SAN volume. Network file systems, such as NFS mounts and SMB shares, are not supported. Transactions and the cleaner coordinate through
     /// file locks, which .NET on Linux and macOS emulates with advisory locks: it does not take the shared lock that a transaction holds on a file it is
     /// deleting when the file is on an NFS or SMB mount or on a file system it cannot identify, and takes none when its file locking is turned off
-    /// (<c>DOTNET_SYSTEM_IO_DISABLEFILELOCKING</c>), which an application that uses a repository on those platforms must not do.
+    /// (<c>DOTNET_SYSTEM_IO_DISABLEFILELOCKING</c>), which an application that uses a repository on those platforms must not do.</para>
+    /// <para>
+    /// The path must be valid for <see cref="PathOptions.NoUnfriendlyNames"/> on every platform: no name in it starts or ends with a space, ends with a dot or
+    /// contains a control character, and on Windows none is a reserved device name such as <c>CON</c>. Configuration binding reads paths with
+    /// <see cref="PathOptions.None"/>, which keeps such names, so without this check a typo such as a trailing space or dot would create a directory with that
+    /// literal name, which many tools handle badly.</para>
     /// </remarks>
+    /// <exception cref="ArgumentException">The value has a name that is not friendly (see above).</exception>
+    [MaybeNull]
     public required IAbsoluteDirectoryPath BaseDirectory {
-        get;
+        get => field ?? (IsFrozen ? throw NotSet(nameof(BaseDirectory)) : null);
         set {
             EnsureNotFrozen();
+            CheckBaseDirectory(value, nameof(value));
             field = value;
         }
     }
@@ -67,6 +89,7 @@ public class FileRepoOptions
     /// This setting does not affect immediate deletion of files when a file add operation gets rolled back, e.g. when a transaction that added a file is rolled
     /// back or the file is deleted within the same transaction that added it.</para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="FulcrumFS.DeleteMode"/> value.</exception>
     public DeleteMode DeleteMode {
         get;
         set {
@@ -81,17 +104,17 @@ public class FileRepoOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Use <see cref="FileIdMode.Sequential"/> for improved locality and indexing performance when file IDs are not exposed to untrusted parties or are only
-    /// used for publicly accessible resources. Use <see cref="FileIdMode.Secure"/> when file IDs are used for private resources or otherwise exposed to
-    /// untrusted parties and must be unpredictable.</para>
+    /// <see cref="FileIdMode.Sequential"/> IDs are ordered by creation time, which improves locality and indexing performance, and they can be
+    /// predicted: someone who knows one ID can guess others, so they give no protection to files that are accessible to anyone who knows their ID.
+    /// <see cref="FileIdMode.Secure"/> IDs are random and can't be predicted.</para>
     /// <para>
     /// If this setting is changed, existing file IDs are not affected and the repository continues to function as expected, but new file IDs are generated
     /// according to the new mode.
     /// </para>
     /// <para>
-    /// If you have a mix of public and private resources, it is good practice to use separate repositories with different <see cref="FileIdMode"/> settings to
-    /// avoid the security risks of using sequential IDs for private resources or the performance costs of using secure IDs for public resources.</para>
+    /// The mode applies to the whole repository, so files that need different modes are in separate repositories.</para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="FulcrumFS.FileIdMode"/> value.</exception>
     public FileIdMode FileIdMode {
         get;
         set {
@@ -102,17 +125,17 @@ public class FileRepoOptions
     } = FileIdMode.Secure;
 
     /// <summary>
-    /// Gets or sets the interval at which health checks on the repo volume/directory are performed. Minimum value is 1 second. Default is 15 seconds.
+    /// Gets or sets the interval at which health checks on the repo volume/directory are performed. Must be at least 1 second. Default is 15 seconds.
     /// </summary>
     /// <remarks>
-    /// A relatively short health check interval is recommended to ensure that the repository can recover quickly from any issues that may arise, such as
-    /// disconnected storage volumes, network issues, or other I/O problems. While the repository is being accessed, health checks run in the background
-    /// and never block repository operations; once the repository has been idle for the interval they stop, so an idle repository performs no I/O, and the
-    /// first operation after an idle period performs the check before proceeding. Health checks are lightweight (a single I/O sys-call). If a check fails,
-    /// the repository automatically attempts to re-initialize itself, with each repository operation waiting up to <see cref="MaxAccessWaitOrRetryTime"/>
-    /// for re-initialization before timing out (a commit or rollback of a transaction waits that long once for all of its files; see
-    /// <see cref="MaxAccessWaitOrRetryTime"/>).
+    /// The interval bounds how long it takes the repository to notice an I/O problem, such as a disconnected storage volume, and recover from it. While the
+    /// repository is being accessed, health checks run in the background and never block repository operations; once the repository has been idle for the
+    /// interval they stop, so an idle repository performs no I/O, and the first operation after an idle period performs the check before proceeding. Health
+    /// checks are lightweight (a single I/O sys-call). If a check fails, the repository automatically attempts to re-initialize itself, with each repository
+    /// operation waiting up to <see cref="MaxAccessWaitOrRetryTime"/> for re-initialization before timing out (a commit or rollback of a transaction waits that
+    /// long once for all of its files; see <see cref="MaxAccessWaitOrRetryTime"/>).
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is less than 1 second.</exception>
     public TimeSpan HealthCheckInterval {
         get;
         set {
@@ -123,9 +146,10 @@ public class FileRepoOptions
     } = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// Gets or sets the logging mode used to log information and errors to indeterminate and delete marker files. Default is <see
-    /// cref="RepoLoggingMode.HumanReadable"/>.
+    /// Gets or sets the logging mode used to log information and errors to indeterminate and delete marker files. Default is
+    /// <see cref="RepoLoggingMode.HumanReadable"/>.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="RepoLoggingMode"/> value.</exception>
     public RepoLoggingMode MarkerFileLogging {
         get;
         set {
@@ -136,8 +160,8 @@ public class FileRepoOptions
     } = RepoLoggingMode.HumanReadable;
 
     /// <summary>
-    /// Gets or sets the maximum time that repository operations will wait for successful I/O access to the repository before throwing a <see
-    /// cref="TimeoutException"/>. Must be between 1 second and 1 minute (inclusive). Default is 8 seconds.
+    /// Gets or sets the maximum time that repository operations will wait for successful I/O access to the repository before throwing a
+    /// <see cref="TimeoutException"/>. Must be between 1 second and 1 minute. Default is 8 seconds.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -154,6 +178,7 @@ public class FileRepoOptions
     /// of files returns after waiting this long once. On a version 1 repository, staging a staged transaction, which writes a marker for each file it
     /// deletes, shares one wait among its files in the same way.</para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is less than 1 second or greater than 1 minute.</exception>
     public TimeSpan MaxAccessWaitOrRetryTime {
         get;
         set {
@@ -185,15 +210,14 @@ public class FileRepoOptions
     /// </list>
     /// <para>
     /// An upgraded repository can no longer be used or cleaned by an older library, which refuses it with a <see cref="NotSupportedException"/>; FulcrumFS
-    /// 1.0.x cannot open a version 2 repository at all. Choose:</para>
+    /// 1.0.x cannot open a version 2 repository at all. The values:</para>
     /// <list type="bullet">
-    /// <item><description><see cref="RepoFormatVersion.Version1"/> while any process that uses or cleans the repositories, including a cleanup job that runs
-    /// separately from the application, still runs FulcrumFS 1.0.x. Once every one of them runs FulcrumFS 2.0 or later, set
-    /// <see cref="RepoFormatVersion.Version2"/>.</description></item>
-    /// <item><description><see cref="RepoFormatVersion.Version2"/> for delete journals, which record the deletions of a staged transaction, or of an
-    /// ordinary one that commits several, in one file, once every such process runs FulcrumFS 2.0 or later.</description></item>
-    /// <item><description><see cref="RepoFormatVersion.Latest"/> only for repositories that the application owns exclusively, so that they always have the
-    /// newest format of the library in use.</description></item>
+    /// <item><description><see cref="RepoFormatVersion.Version1"/> keeps a repository usable and cleanable by every FulcrumFS version, 1.0.x included, and
+    /// upgrades nothing.</description></item>
+    /// <item><description><see cref="RepoFormatVersion.Version2"/> adds delete journals, which record the deletions of a staged transaction, or of an
+    /// ordinary one that commits several, in one file. FulcrumFS 2.0 and later can use and clean a version 2 repository.</description></item>
+    /// <item><description><see cref="RepoFormatVersion.Latest"/> is the newest format of the library in use, so updating the library to one with a newer
+    /// format upgrades the repository the next time it is opened, after which older libraries refuse it.</description></item>
     /// </list>
     /// <para>
     /// The API behaves the same on a version 1 repository. The only difference is internal: transactions record their deletions with a marker per file
@@ -201,14 +225,22 @@ public class FileRepoOptions
     /// is never upgraded, whatever this option says.</para>
     /// <para>
     /// The requirement to set this option is enforced by the compiler only. Options bound from configuration and passed through
-    /// <see cref="Microsoft.Extensions.Options.IOptions{TOptions}"/> must include it as well: there is no fallback, and the <see cref="FileRepo"/>
-    /// constructor throws an <see cref="ArgumentException"/> that names the choices when it has not been set.</para>
+    /// <see cref="Microsoft.Extensions.Options.IOptions{TOptions}"/> must include it as well: there is no fallback. It reads as
+    /// <see cref="RepoFormatVersion.Unspecified"/> while it is not set, and the <see cref="FileRepo"/> constructor throws an <see cref="ArgumentException"/>
+    /// that names the choices when it has not been set.</para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not <see cref="RepoFormatVersion.Version1"/>, <see cref="RepoFormatVersion.Version2"/> or
+    /// <see cref="RepoFormatVersion.Latest"/>, other than <see cref="RepoFormatVersion.Unspecified"/> while it is not set.</exception>
     public required RepoFormatVersion MinimumFormatVersion {
-        get;
+        get => field is RepoFormatVersion.Unspecified && IsFrozen ? throw NotSet(nameof(MinimumFormatVersion)) : field;
         set {
             EnsureNotFrozen();
-            value.ThrowIfNotDefined();
+
+            // The binder of a configuration that lacks the value writes back what it read, which leaves the value as it was.
+            if (value == field)
+                return;
+
+            CheckFormatVersion(value, nameof(value));
             field = value;
         }
     }
@@ -240,14 +272,95 @@ public class FileRepoOptions
         }
     }
 
-    internal void Freeze()
+    /// <summary>
+    /// Gets a value indicating whether the options are in use: a <see cref="FileRepo"/> checked them (see <see cref="Validate"/>) when it was constructed with
+    /// them, and they can no longer be changed.
+    /// </summary>
+    [MemberNotNullWhen(true, nameof(BaseDirectory))]
+    public bool IsFrozen { get; private set; }
+
+    /// <summary>
+    /// Checks the options as the <see cref="FileRepo"/> constructor does. The required <see cref="BaseDirectory"/> and <see cref="MinimumFormatVersion"/> are
+    /// set.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The options are not valid. The message lists every problem.</exception>
+    [MemberNotNull(nameof(BaseDirectory))]
+    public void Validate()
     {
-        _frozen = true;
+        var problems = GetProblems();
+
+        if (problems.Count > 0 || BaseDirectory is null)
+            throw new InvalidOperationException(string.Join(" ", problems));
     }
+
+    /// <summary>
+    /// Gets the problems of the options, which <see cref="Validate"/> reports.
+    /// </summary>
+    internal List<string> GetProblems()
+    {
+        List<string> problems = [];
+
+        if (BaseDirectory is null)
+            problems.Add(NotSetMessage(nameof(BaseDirectory)));
+
+        if (MinimumFormatVersion is RepoFormatVersion.Unspecified)
+        {
+            problems.Add(
+                $"{nameof(FileRepoOptions)}.{nameof(MinimumFormatVersion)} must be set to {nameof(RepoFormatVersion.Version1)}, " +
+                $"{nameof(RepoFormatVersion.Version2)} or {nameof(RepoFormatVersion.Latest)}; {nameof(RepoFormatVersion.Version1)} keeps repositories " +
+                "compatible with FulcrumFS 1.0.x.");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// Checks the options (see <see cref="Validate"/>) and keeps them from being changed from then on, when a <see cref="FileRepo"/> is constructed with them.
+    /// Options that are frozen already stay as they are.
+    /// </summary>
+    /// <param name="paramName">The name of the parameter that the options were passed in, which the exception names.</param>
+    /// <exception cref="ArgumentException">The options are not valid. The message lists every problem.</exception>
+    [MemberNotNull(nameof(BaseDirectory))]
+    internal void Freeze(string paramName)
+    {
+        if (IsFrozen)
+            return;
+
+        var problems = GetProblems();
+
+        if (problems.Count > 0 || BaseDirectory is null)
+            throw new ArgumentException(string.Join(" ", problems), paramName);
+
+        IsFrozen = true;
+    }
+
+    private static void CheckBaseDirectory(IAbsoluteDirectoryPath value, string paramName)
+    {
+        if (!value.IsValidFor(PathOptions.NoUnfriendlyNames, out string? errorMessage))
+        {
+            throw new ArgumentException(
+                $"{nameof(FileRepoOptions)}.{nameof(BaseDirectory)} '{value.PathDisplay}' must be a path with friendly names: {errorMessage}", paramName);
+        }
+    }
+
+    private static void CheckFormatVersion(RepoFormatVersion value, string paramName)
+    {
+        if (value is RepoFormatVersion.Unspecified || !value.IsDefined())
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName,
+                value,
+                $"The value is not {nameof(RepoFormatVersion.Version1)}, {nameof(RepoFormatVersion.Version2)} or {nameof(RepoFormatVersion.Latest)}.");
+        }
+    }
+
+    private static string NotSetMessage(string property) => $"{nameof(FileRepoOptions)}.{property} is not set. It is required, and has no default.";
+
+    private static InvalidOperationException NotSet(string property) => new(NotSetMessage(property));
 
     private void EnsureNotFrozen()
     {
-        if (_frozen)
-            throw new InvalidOperationException("Cannot modify options after the repository has been initialized.");
+        if (IsFrozen)
+            throw new InvalidOperationException($"The {nameof(FileRepoOptions)} are in use by a {nameof(FileRepo)}, so they can no longer be changed.");
     }
 }

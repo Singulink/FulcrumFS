@@ -49,6 +49,41 @@ A <xref:FulcrumFS.FileRepo> is intended to live for the lifetime of the applicat
 
 Configuration is exposed through <xref:FulcrumFS.FileRepoOptions>. The most commonly set option is <xref:FulcrumFS.FileRepoOptions.DeleteMode>, which controls whether deletions take effect immediately or are deferred until a cleanup pass runs (see the [Deleting Files and Variants](deleting-files.md) guide).
 
+The <xref:FulcrumFS.FileRepo> constructor checks the options and freezes them, after which their setters throw (see <xref:FulcrumFS.FileRepoOptions.IsFrozen>). Its exception lists every problem, such as a required option that options bound from configuration leave unset, and <xref:FulcrumFS.FileRepoOptions.Validate*> makes the same check without freezing them. <xref:FulcrumFS.FileRepoCleaningOptions> work the same way with <xref:FulcrumFS.FileRepoCleaner>.
+
+#### Registering with dependency injection
+
+<xref:FulcrumFS.FileRepoServiceCollectionExtensions.AddFileRepo*> registers a repository that is created from the options system's <xref:FulcrumFS.FileRepoOptions>, as a singleton that is also the <xref:FulcrumFS.IFileRepo> and <xref:FulcrumFS.IFileRepoCleaner> of the application. The options are checked when the application starts, so that invalid options, such as a section in `appsettings.json` that leaves out the format version, stop it from starting with a message that lists every problem. The repository is created the first time it is resolved; call <xref:FulcrumFS.FileRepo.EnsureCreated*> on it at startup:
+
+```csharp
+builder.Services.AddFileRepo(options => {
+    options.BaseDirectory = DirectoryPath.ParseAbsolute(@"C:\AppData\PhotoApp\Files");
+    options.MinimumFormatVersion = RepoFormatVersion.Version2;
+    options.DeleteMode = DeleteMode.DeferredUntilClean;
+});
+
+var app = builder.Build();
+app.Services.GetRequiredService<FileRepo>().EnsureCreated();
+```
+
+<xref:FulcrumFS.FileRepoServiceCollectionExtensions.AddFileRepoCleaner*> does the same for a <xref:FulcrumFS.FileRepoCleaner>, for a process that only cleans a repository.
+
+The options can also come from configuration, such as a section in `appsettings.json`, base directory included:
+
+```json
+"FileRepo": {
+  "BaseDirectory": "C:\\AppData\\PhotoApp\\Files",
+  "MinimumFormatVersion": "Version2"
+}
+```
+
+```csharp
+builder.Services.AddFileRepo();
+builder.Services.Configure<FileRepoOptions>(builder.Configuration.GetSection("FileRepo"));
+```
+
+The reflection-based configuration binder (`Configure<T>(section)`, `Bind()` and `Get<T>()`) reads the base directory with the type converter of Singulink.IO.FileSystem, which reads a path as `ParseAbsolute` does with `PathOptions.None` and so keeps every name as written. <xref:FulcrumFS.FileRepoOptions.BaseDirectory> only accepts paths with friendly names, so a typo such as a trailing space or dot makes binding throw an <xref:System.ArgumentException> that names the option and the path, which stops the application at startup, instead of creating a directory with that literal name, which many tools handle badly. `DirectoryPath.ParseAbsolute` uses `PathOptions.NoUnfriendlyNames` by default, so the paths it parses in code meet this rule. The configuration binding source generator, which native AOT and trimmed applications use, does not use type converters and leaves the base directory unset, so those applications parse the base directory in code, in the action passed to <xref:FulcrumFS.FileRepoServiceCollectionExtensions.AddFileRepo*>, and bind the other options from configuration.
+
 #### Choosing the format version
 
 <xref:FulcrumFS.FileRepoOptions.MinimumFormatVersion> has no default, because the right version depends on which processes use the repository. It is the lowest version the repository has once it is open: a new repository is created at the version you choose, an existing one with an older version is upgraded to it when <xref:FulcrumFS.FileRepo.EnsureCreated*> opens it, and one with a newer version keeps it. Choose it as follows:

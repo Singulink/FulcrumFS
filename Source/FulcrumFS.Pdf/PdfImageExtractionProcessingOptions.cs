@@ -27,15 +27,18 @@ public sealed record PdfImageExtractionProcessingOptions
     /// <para>
     /// Gets or initializes the 1-based page number of the PDF document to extract the image from.</para>
     /// <para>
-    /// Default is <c>1</c> (the first page). If the document contains fewer pages than this value, a <see cref="FileProcessingException" /> is thrown when
-    /// processing.</para>
+    /// Must be at least <c>1</c>. Default is <c>1</c> (the first page).</para>
     /// </summary>
+    /// <remarks>
+    /// If the document contains fewer pages than this value, a <see cref="FileProcessingException" /> is thrown when processing.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int PageNumber
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1, nameof(PageNumber));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
             field = value;
         }
     } = 1;
@@ -44,12 +47,17 @@ public sealed record PdfImageExtractionProcessingOptions
     /// <para>
     /// Gets or initializes the resolution in dots per inch (DPI) to render the page at, based on the page's physical size.</para>
     /// <para>
-    /// Default is <see langword="null" />, meaning the render size is determined solely by <see cref="MaxPixelSize" />. Must be between <c>1</c> and
-    /// <c>2400</c> (inclusive) when specified. If <see cref="MaxPixelSize" /> is also specified, it caps the size of the rendered image, so that pages with
-    /// large physical dimensions do not produce excessively large images.</para>
-    /// <para>
-    /// Note: at least one of <see cref="Dpi" /> or <see cref="MaxPixelSize" /> must be specified.</para>
+    /// Must be between <c>1</c> and <c>2400</c>. Default is <see langword="null" />, which means the render size is determined solely by
+    /// <see cref="MaxPixelSize" />.</para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If <see cref="MaxPixelSize" /> is also specified, it caps the size of the rendered image, so that pages with large physical dimensions do not produce
+    /// excessively large images.</para>
+    /// <para>
+    /// At least one of <see cref="Dpi" /> or <see cref="MaxPixelSize" /> must be specified.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative or greater than 2400.</exception>
     public int? Dpi
     {
         get;
@@ -57,8 +65,8 @@ public sealed record PdfImageExtractionProcessingOptions
         {
             if (value is not null)
             {
-                ArgumentOutOfRangeException.ThrowIfLessThan(value.Value, 1, nameof(Dpi));
-                ArgumentOutOfRangeException.ThrowIfGreaterThan(value.Value, 2400, nameof(Dpi));
+                ArgumentOutOfRangeException.ThrowIfLessThan(value.Value, 1, nameof(value));
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value.Value, 2400, nameof(value));
             }
 
             field = value;
@@ -67,16 +75,22 @@ public sealed record PdfImageExtractionProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes the maximum size in pixels of the longest edge of the extracted image. The other edge is sized to preserve the page's aspect
-    /// ratio.</para>
+    /// Gets or initializes the maximum size in pixels of the longest edge of the extracted image.</para>
     /// <para>
-    /// Default is <c>2048</c>. Must be between <c>1</c> and <c>16384</c> (inclusive) when specified. If <see cref="Dpi" /> is not specified, the longest
-    /// edge of the image is always rendered at exactly this size; otherwise this acts as a cap on the size of the image rendered at <see cref="Dpi" />.
-    /// Since PDF pages are vector-based, this determines the size the page is rasterized at - chain an image processor after this processor if further
-    /// resizing or format conversion is needed.</para>
-    /// <para>
-    /// Note: at least one of <see cref="Dpi" /> or <see cref="MaxPixelSize" /> must be specified.</para>
+    /// Must be between <c>1</c> and <c>16384</c>. Default is <c>2048</c>.</para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other edge is sized to preserve the page's aspect ratio.</para>
+    /// <para>
+    /// If <see cref="Dpi" /> is not specified, the longest edge of the image is always
+    /// rendered at exactly this size; otherwise this acts as a cap on the size of the image rendered at <see cref="Dpi" />. Since PDF pages are
+    /// vector-based, this determines the size the page is rasterized at - chain an image processor after this processor if further resizing or format
+    /// conversion is needed.</para>
+    /// <para>
+    /// At least one of <see cref="Dpi" /> or <see cref="MaxPixelSize" /> must be specified.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative or greater than 16384.</exception>
     public int? MaxPixelSize
     {
         get;
@@ -84,8 +98,8 @@ public sealed record PdfImageExtractionProcessingOptions
         {
             if (value is not null)
             {
-                ArgumentOutOfRangeException.ThrowIfLessThan(value.Value, 1, nameof(MaxPixelSize));
-                ArgumentOutOfRangeException.ThrowIfGreaterThan(value.Value, 16384, nameof(MaxPixelSize));
+                ArgumentOutOfRangeException.ThrowIfLessThan(value.Value, 1, nameof(value));
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value.Value, 16384, nameof(value));
             }
 
             field = value;
@@ -104,9 +118,11 @@ public sealed record PdfImageExtractionProcessingOptions
     /// <para>
     /// Gets or initializes the password used to open the PDF document.</para>
     /// <para>
-    /// Default is <see langword="null" />, meaning no password is used. If the document is password-protected and the correct password is not provided, a
-    /// <see cref="FileProcessingException" /> is thrown when processing.</para>
+    /// Default is <see langword="null" />, which means no password is used.</para>
     /// </summary>
+    /// <remarks>
+    /// If the document is password-protected and the correct password is not provided, a <see cref="FileProcessingException" /> is thrown when processing.
+    /// </remarks>
     public string? Password { get; init; }
 
     /// <summary>
@@ -124,4 +140,20 @@ public sealed record PdfImageExtractionProcessingOptions
     /// Default is <see langword="true" />.</para>
     /// </summary>
     public bool RenderFormFields { get; init; } = true;
+
+    /// <summary>
+    /// Gets the problems of the options, which the <see cref="PdfImageExtractionProcessor" /> constructor reports in one exception.
+    /// </summary>
+    internal List<string> GetProblems()
+    {
+        List<string> problems = [];
+
+        if (Dpi is null && MaxPixelSize is null)
+        {
+            problems.Add(
+                $"{nameof(PdfImageExtractionProcessingOptions)}.{nameof(Dpi)} and {nameof(MaxPixelSize)} are both null. At least one of them must be set.");
+        }
+
+        return problems;
+    }
 }

@@ -18,17 +18,17 @@ public sealed record VideoProcessingOptions
     }
 
     /// <summary>
-    /// <para>
     /// Gets a predefined instance of <see cref="VideoProcessingOptions"/> that always re-encodes to standardized H.264 video stream/s (60fps max, 8 bits per
     /// channel, 4:2:0 chroma subsampling, SDR, square pixels, and progressive frames) and standardized AAC audio stream/s (48kHz max, stereo max) in an MP4
-    /// container, while attempting to preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.</para>
-    /// <para>
-    /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
-    /// limit) yourself via <see cref="ResizeOptions" />.</para>
+    /// container, while attempting to preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.
     /// </summary>
     /// <remarks>
-    /// Note: the result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
-    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.
+    /// <para>
+    /// To ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
+    /// limit) yourself via <see cref="ResizeOptions" />.</para>
+    /// <para>
+    /// The result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
+    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.</para>
     /// </remarks>
     public static VideoProcessingOptions StandardizedH264AACMP4 { get; } = new VideoProcessingOptions()
     {
@@ -51,17 +51,17 @@ public sealed record VideoProcessingOptions
     };
 
     /// <summary>
-    /// <para>
     /// Gets a predefined instance of <see cref="VideoProcessingOptions"/> that always re-encodes to standardized HEVC video stream/s (60fps max, 8 bits per
     /// channel, 4:2:0 chroma subsampling, SDR, square pixels, progressive frames, and hvc1 tag) and standardized AAC audio stream/s (48kHz max, stereo max) in
-    /// an MP4 container, while attempting to preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.</para>
-    /// <para>
-    /// Note: to ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
-    /// limit) yourself via <see cref="ResizeOptions" />.</para>
+    /// an MP4 container, while attempting to preserve all metadata other than thumbnails by default. Does not preserve unrecognized streams.
     /// </summary>
     /// <remarks>
-    /// Note: the result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
-    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.
+    /// <para>
+    /// To ensure you get a stream that corresponds to a real level (e.g., 6.2), you must set the appropriate resolution limit (based on your frame rate
+    /// limit) yourself via <see cref="ResizeOptions" />.</para>
+    /// <para>
+    /// The result might vary slightly from platform to platform. Hardware acceleration is disabled by default to keep this variance to a minimum - see
+    /// <see cref="HardwareAccelerationKind" /> if you want to trade more variance for processing speed.</para>
     /// </remarks>
     public static VideoProcessingOptions StandardizedHEVCAACMP4 { get; } = new VideoProcessingOptions()
     {
@@ -108,7 +108,7 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets the source video codecs for this mapping (it matches any of these, but all streams must match).</para>
+    /// Gets or initializes the source video codecs for this mapping (it matches any of these, but all streams must match).</para>
     /// <para>
     /// Default is <see cref="VideoCodec.AllSourceCodecs" />.</para>
     /// </summary>
@@ -120,13 +120,13 @@ public sealed record VideoProcessingOptions
             ImmutableArray<VideoCodec> result = [.. value];
 
             if (result.Length is 0)
-                throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+                throw new ArgumentException("The value is empty.", nameof(value));
 
             if (result.Any((x) => x is null))
-                throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+                throw new ArgumentException("The value contains null.", nameof(value));
 
             if (result.Distinct().Count() != result.Length)
-                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+                throw new ArgumentException("The value contains duplicates.", nameof(value));
 
             field = EquatableArray.Create(result);
         }
@@ -134,13 +134,14 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets the source audio codecs for this mapping (it matches any of these).</para>
-    /// <para>
-    /// Audio streams that do not match are dropped when at least one audio stream matches (e.g. the spatial-audio track iPhones record alongside the
-    /// standard AAC track) or when <see cref="RemoveAudioStreams" /> is set; otherwise the file is rejected.</para>
+    /// Gets or initializes the source audio codecs for this mapping (it matches any of these).</para>
     /// <para>
     /// Default is <see cref="AudioCodec.AllSourceCodecs" />.</para>
     /// </summary>
+    /// <remarks>
+    /// Audio streams that do not match are dropped when at least one audio stream matches (e.g. the spatial-audio track iPhones record alongside the
+    /// standard AAC track) or when <see cref="RemoveAudioStreams" /> is set; otherwise the file is rejected.
+    /// </remarks>
     public IReadOnlyList<AudioCodec> SourceAudioCodecs
     {
         get;
@@ -149,21 +150,22 @@ public sealed record VideoProcessingOptions
             ImmutableArray<AudioCodec> result = [.. value];
 
             if (result.Length is 0)
-                throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+                throw new ArgumentException("The value is empty.", nameof(value));
 
             if (result.Any((x) => x is null))
-                throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+                throw new ArgumentException("The value contains null.", nameof(value));
 
             if (result.Distinct().Count() != result.Length)
-                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+                throw new ArgumentException("The value contains duplicates.", nameof(value));
 
             field = EquatableArray.Create(result);
         }
     } = EquatableArray.Create<AudioCodec>(AudioCodec.AllSourceCodecs);
 
     /// <summary>
-    /// <para>
-    /// Gets or initializes the allowable result video codecs.</para>
+    /// Gets or initializes the allowable result video codecs.
+    /// </summary>
+    /// <remarks>
     /// <para>
     /// Any streams of the video not matching one of these codecs will be re-encoded to use one of them.</para>
     /// <para>
@@ -172,7 +174,7 @@ public sealed record VideoProcessingOptions
     /// When video streams are re-encoded, they are re-encoded to the first codec in this list.</para>
     /// <para>
     /// Providing an empty list is not allowed.</para>
-    /// </summary>
+    /// </remarks>
     public required IReadOnlyList<VideoCodec> ResultVideoCodecs
     {
         get;
@@ -181,24 +183,25 @@ public sealed record VideoProcessingOptions
             ImmutableArray<VideoCodec> result = [.. value];
 
             if (!result.Any())
-                throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+                throw new ArgumentException("The value is empty.", nameof(value));
 
             if (result.Any((x) => x is null))
-                throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+                throw new ArgumentException("The value contains null.", nameof(value));
 
             if (result.Distinct().Count() != result.Length)
-                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+                throw new ArgumentException("The value contains duplicates.", nameof(value));
 
             if (!result[0].SupportsEncoding)
-                throw new ArgumentException("The first codec in the list must support encoding.", nameof(value));
+                throw new ArgumentException("The first codec of the value does not support encoding.", nameof(value));
 
             field = EquatableArray.Create(result);
         }
     }
 
     /// <summary>
-    /// <para>
-    /// Gets or initializes the allowable result audio codecs.</para>
+    /// Gets or initializes the allowable result audio codecs.
+    /// </summary>
+    /// <remarks>
     /// <para>
     /// Any streams of the audio not matching one of these codecs will be re-encoded to use one of them.</para>
     /// <para>
@@ -207,7 +210,7 @@ public sealed record VideoProcessingOptions
     /// When audio streams are re-encoded, they are re-encoded to the first codec in this list.</para>
     /// <para>
     /// Providing an empty list is not allowed.</para>
-    /// </summary>
+    /// </remarks>
     public required IReadOnlyList<AudioCodec> ResultAudioCodecs
     {
         get;
@@ -216,16 +219,16 @@ public sealed record VideoProcessingOptions
             ImmutableArray<AudioCodec> result = [.. value];
 
             if (!result.Any())
-                throw new ArgumentException("Codecs cannot be empty.", nameof(value));
+                throw new ArgumentException("The value is empty.", nameof(value));
 
             if (result.Any((x) => x is null))
-                throw new ArgumentException("Codecs cannot contain null values.", nameof(value));
+                throw new ArgumentException("The value contains null.", nameof(value));
 
             if (result.Distinct().Count() != result.Length)
-                throw new ArgumentException("Codecs cannot contain duplicates.", nameof(value));
+                throw new ArgumentException("The value contains duplicates.", nameof(value));
 
             if (!result[0].SupportsEncoding)
-                throw new ArgumentException("The first codec in the list must support encoding.", nameof(value));
+                throw new ArgumentException("The first codec of the value does not support encoding.", nameof(value));
 
             field = EquatableArray.Create(result);
         }
@@ -233,7 +236,7 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets the source media container formats that the video processor can process.</para>
+    /// Gets or initializes the source media container formats that the video processor can process.</para>
     /// <para>
     /// Default is <see cref="MediaContainerFormat.AllSourceFormats" />.</para>
     /// </summary>
@@ -245,26 +248,26 @@ public sealed record VideoProcessingOptions
             ImmutableArray<MediaContainerFormat> result = [.. value];
 
             if (result.Length is 0)
-                throw new ArgumentException("Formats cannot be empty.", nameof(value));
+                throw new ArgumentException("The value is empty.", nameof(value));
 
             if (result.Any((x) => x is null))
-                throw new ArgumentException("Formats cannot contain null values.", nameof(value));
+                throw new ArgumentException("The value contains null.", nameof(value));
 
             if (result.Distinct().Count() != result.Length)
-                throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
+                throw new ArgumentException("The value contains duplicates.", nameof(value));
 
             field = EquatableArray.Create(result);
         }
     } = EquatableArray.Create<MediaContainerFormat>(MediaContainerFormat.AllSourceFormats);
 
     /// <summary>
-    /// <para>
-    /// Gets the result media container formats that the video processor can output.</para>
-    /// <para>
+    /// Gets or initializes the result media container formats that the video processor can output.
+    /// </summary>
+    /// <remarks>
     /// If re-encoding is required, or other modifications (e.g., metadata changes) are requested, and the source format does not support writing, the first
     /// format in the list is used, so it must be writable as per <see cref="MediaContainerFormat.SupportsWriting" /> - otherwise, non-writable formats will
-    /// only be emitted when copying the file in full with no modifications.</para>
-    /// </summary>
+    /// only be emitted when copying the file in full with no modifications.
+    /// </remarks>
     public required IReadOnlyList<MediaContainerFormat> ResultFormats
     {
         get;
@@ -273,16 +276,16 @@ public sealed record VideoProcessingOptions
             ImmutableArray<MediaContainerFormat> result = [.. value];
 
             if (result.Length is 0)
-                throw new ArgumentException("Formats cannot be empty.", nameof(value));
+                throw new ArgumentException("The value is empty.", nameof(value));
 
             if (result.Any((x) => x is null))
-                throw new ArgumentException("Formats cannot contain null values.", nameof(value));
+                throw new ArgumentException("The value contains null.", nameof(value));
 
             if (result.Distinct().Count() != result.Length)
-                throw new ArgumentException("Formats cannot contain duplicates.", nameof(value));
+                throw new ArgumentException("The value contains duplicates.", nameof(value));
 
             if (!result[0].SupportsWriting)
-                throw new ArgumentException("The first format in the list must support writing.", nameof(value));
+                throw new ArgumentException("The first format of the value does not support writing.", nameof(value));
 
             field = EquatableArray.Create(result);
         }
@@ -292,46 +295,61 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes a value indicating whether to ensure the 'moov atom' in an MP4 file is at the beginning of the file.</para>
     /// <para>
-    /// Note: this does not enable true streaming, but it does allow playback to begin before the entire streams are downloaded.</para>
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
     /// </summary>
+    /// <remarks>
+    /// This does not enable true streaming, but it does allow playback to begin before the entire streams are downloaded.
+    /// </remarks>
     public bool ForceProgressiveDownload { get; init; }
 
     /// <summary>
     /// <para>
     /// Gets or initializes a value indicating whether to try to preserve unrecognized streams in the output video.</para>
     /// <para>
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>
     /// Each unrecognised stream that is not compatible with the output container format will be dropped when <see langword="true" />, or all will be dropped
     /// when <see langword="false" />.</para>
     /// <para>
-    /// Note: unrecognized streams include attachments, subtitles, data streams, and any streams not recognized by ffmpeg. We reserve the right to recognize
+    /// Unrecognized streams include attachments, subtitles, data streams, and any streams not recognized by ffmpeg. We reserve the right to recognize
     /// additional stream types in the future, such as subtitle streams.</para>
     /// <para>
-    /// Note: some metadata might appear as unrecognized streams (e.g., as a data stream).</para>
-    /// </summary>
+    /// Some metadata might appear as unrecognized streams (e.g., as a data stream).</para>
+    /// </remarks>
     public bool TryPreserveUnrecognizedStreams { get; init; }
 
     /// <summary>
     /// <para>
-    /// Gets or initializes a value indicating whether to strip metadata and/or thumbnails from this file.</para>
+    /// Gets or initializes which metadata and thumbnails are stripped from the file.</para>
     /// <para>
-    /// Note: metadata includes container metadata, stream metadata, chapters, stream groups and programs; but does not include side data (including rotation
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Metadata includes container metadata, stream metadata, chapters, stream groups and programs; but does not include side data (including rotation
     /// info / transformation matrix), attachments, and dispositions.</para>
     /// <para>
-    /// Note: currently stream groups and programs do not always copy correctly in preserving metadata mode.</para>
+    /// Currently stream groups and programs do not always copy correctly in preserving metadata mode.</para>
     /// <para>
-    /// Note: also, not all "metadata" is successfully copied either, some fields may be missing, changed, or added, even in preserve mode.</para>
+    /// Also, not all "metadata" is successfully copied either, some fields may be missing, changed, or added, even in preserve mode.</para>
     /// <para>
-    /// Note: incompatible/unrecognized metadata may be remapped on a best-effort basis, may be lost, or might cause an exception to be thrown when remuxing.
+    /// Incompatible/unrecognized metadata may be remapped on a best-effort basis, may be lost, or might cause an exception to be thrown when remuxing.
     /// </para><para>
-    /// Note: attachments currently show up under unrecognized streams, so they are currently controlled by <see cref="TryPreserveUnrecognizedStreams" />
+    /// Attachments currently show up under unrecognized streams, so they are currently controlled by <see cref="TryPreserveUnrecognizedStreams" />
     /// between different container formats or re-encoding streams.</para>
     /// <para>
-    /// Note: metadata is correctly preserved when the source file is copied as-is, but in other cases, metadata copying is subject to the aforementioned
+    /// Metadata is correctly preserved when the source file is copied as-is, but in other cases, metadata copying is subject to the aforementioned
     /// considerations.</para>
     /// <para>
-    /// Note: some metadata might appear as unrecognized streams (e.g., as a data stream), which is controlled by
+    /// Some metadata might appear as unrecognized streams (e.g., as a data stream), which is controlled by
     /// <see cref="TryPreserveUnrecognizedStreams" />.</para>
-    /// </summary>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="VideoMetadataStrippingMode"/> value.</exception>
     public VideoMetadataStrippingMode MetadataStrippingMode
     {
         get;
@@ -343,24 +361,16 @@ public sealed record VideoProcessingOptions
     }
 
     /// <summary>
-    /// Gets or initializes the options for validating audio streams in the source video before processing. Default is <see
-    /// cref="AudioStreamValidationOptions.None" />.
+    /// Gets or initializes the options for validating audio streams in the source video before processing. Default is
+    /// <see cref="AudioStreamValidationOptions.None" />.
     /// </summary>
+    /// <exception cref="ArgumentException">A minimum of the value is greater than its maximum. The message lists every problem.</exception>
     public AudioStreamValidationOptions AudioSourceValidation
     {
         get;
         init
         {
-            if (value.MinLength.HasValue && value.MaxLength.HasValue && value.MinLength.Value > value.MaxLength.Value)
-            {
-                throw new ArgumentException("MinLength cannot be greater than MaxLength.", nameof(value));
-            }
-
-            if (value.MinStreams.HasValue && value.MaxStreams.HasValue && value.MinStreams.Value > value.MaxStreams.Value)
-            {
-                throw new ArgumentException("MinStreams cannot be greater than MaxStreams.", nameof(value));
-            }
-
+            ThrowIfProblems(value.GetProblems(), nameof(value));
             field = value;
         }
     } = AudioStreamValidationOptions.None;
@@ -371,36 +381,13 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Default is <see cref="VideoStreamValidationOptions.None" />.</para>
     /// </summary>
+    /// <exception cref="ArgumentException">A minimum of the value is greater than its maximum. The message lists every problem.</exception>
     public VideoStreamValidationOptions VideoSourceValidation
     {
         get;
         init
         {
-            if (value.MinWidth.HasValue && value.MaxWidth.HasValue && value.MinWidth.Value > value.MaxWidth.Value)
-            {
-                throw new ArgumentException("MinWidth cannot be greater than MaxWidth.", nameof(value));
-            }
-
-            if (value.MinHeight.HasValue && value.MaxHeight.HasValue && value.MinHeight.Value > value.MaxHeight.Value)
-            {
-                throw new ArgumentException("MinHeight cannot be greater than MaxHeight.", nameof(value));
-            }
-
-            if (value.MinPixels.HasValue && value.MaxPixels.HasValue && value.MinPixels.Value > value.MaxPixels.Value)
-            {
-                throw new ArgumentException("MinPixels cannot be greater than MaxPixels.", nameof(value));
-            }
-
-            if (value.MinLength.HasValue && value.MaxLength.HasValue && value.MinLength.Value > value.MaxLength.Value)
-            {
-                throw new ArgumentException("MinLength cannot be greater than MaxLength.", nameof(value));
-            }
-
-            if (value.MinStreams.HasValue && value.MaxStreams.HasValue && value.MinStreams.Value > value.MaxStreams.Value)
-            {
-                throw new ArgumentException("MinStreams cannot be greater than MaxStreams.", nameof(value));
-            }
-
+            ThrowIfProblems(value.GetProblems(), nameof(value));
             field = value;
         }
     } = VideoStreamValidationOptions.None;
@@ -409,18 +396,20 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes a value indicating whether to force validation of all streams, as opposed to assuming they're valid.</para>
     /// <para>
+    /// Default is <see langword="true" />.</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>
     /// This can be useful to catch potentially invalid streams or other issues that might cause problems during playback, or potentially indicate a malicious
     /// stream (e.g., maybe some players interpret that particular invalid sequence in a problematic way), but has a significant performance impact (i.e.,
     /// slower processing) due to requiring to decode all streams, compared to assuming they're valid and using the copy codec where possible (the performance
     /// difference is lower as a percent when re-encoding is already required).</para>
     /// <para>
-    /// Note: when enabled, duration is also validated based on the actual measured duration of each stream, rather than just the claimed duration.</para>
+    /// When enabled, duration is also validated based on the actual measured duration of each stream, rather than just the claimed duration.</para>
     /// <para>
     /// It can be safe to disable this when the source video is from a trusted source, if you prefer better performance over ensuring catching potential
     /// errors.</para>
-    /// <para>
-    /// Default is <see langword="true" />.</para>
-    /// </summary>
+    /// </remarks>
     public bool ForceValidateAllStreams { get; init; } = true;
 
     /// <summary>
@@ -435,6 +424,7 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes the behavior for re-encoding video streams.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="StreamReencodeMode"/> value.</exception>
     public required StreamReencodeMode VideoReencodeMode
     {
         get;
@@ -449,6 +439,7 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes the behavior for re-encoding audio streams.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="StreamReencodeMode"/> value.</exception>
     public required StreamReencodeMode AudioReencodeMode
     {
         get;
@@ -462,6 +453,7 @@ public sealed record VideoProcessingOptions
     /// <summary>
     /// Gets or initializes the quality to use for video encoding. Default is <see cref="VideoQuality.Medium" />.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="FulcrumFS.Videos.VideoQuality"/> value.</exception>
     public VideoQuality VideoQuality
     {
         get;
@@ -475,6 +467,7 @@ public sealed record VideoProcessingOptions
     /// <summary>
     /// Gets or initializes the quality to use for audio encoding. Default is <see cref="AudioQuality.Medium" />.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="FulcrumFS.Videos.AudioQuality"/> value.</exception>
     public AudioQuality AudioQuality
     {
         get;
@@ -488,6 +481,7 @@ public sealed record VideoProcessingOptions
     /// <summary>
     /// Gets or initializes the maximum bits per channel to use for video encoding.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="BitsPerChannel"/> value.</exception>
     public required BitsPerChannel MaximumBitsPerChannel
     {
         get;
@@ -501,6 +495,7 @@ public sealed record VideoProcessingOptions
     /// <summary>
     /// Gets or initializes the maximum chroma subsampling to use for video encoding.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="ChromaSubsampling"/> value.</exception>
     public required ChromaSubsampling MaximumChromaSubsampling
     {
         get;
@@ -513,10 +508,14 @@ public sealed record VideoProcessingOptions
 
     /// <summary>
     /// <para>
-    /// Gets or initializes the compression level to use for video encoding. Default is <see cref="VideoCompressionLevel.Medium" />.</para>
+    /// Gets or initializes the compression level to use for video encoding.</para>
     /// <para>
-    /// Note: does not affect quality, only affects file size and encoding speed trade-off.</para>
+    /// Default is <see cref="VideoCompressionLevel.Medium" />.</para>
     /// </summary>
+    /// <remarks>
+    /// Does not affect quality, only affects file size and encoding speed trade-off.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="FulcrumFS.Videos.VideoCompressionLevel"/> value.</exception>
     public VideoCompressionLevel VideoCompressionLevel
     {
         get;
@@ -542,6 +541,9 @@ public sealed record VideoProcessingOptions
     /// Gets or initializes the options for limiting the frames per second (FPS) of the video.</para>
     /// <para>
     /// If set to <see langword="null" />, the video will not be resampled.</para>
+    /// <para>
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
     /// </summary>
     public VideoFpsOptions? FpsOptions { get; init; }
 
@@ -549,18 +551,28 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes a value indicating whether to remap HDR to SDR for any HDR streams.</para>
     /// <para>
-    /// Note: this uses a basic tone-mapping algorithm and may not produce optimal results for all content.</para>
-    /// <para>
-    /// Note: if the video is re-encoded, it will always be converted to SDR regardless of this setting, as currently we do not support encoding to HDR.</para>
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This uses a basic tone-mapping algorithm and may not produce optimal results for all content.</para>
+    /// <para>
+    /// If the video is re-encoded, it will always be converted to SDR regardless of this setting, as currently we do not support encoding to HDR.</para>
+    /// </remarks>
     public bool RemapHDRToSDR { get; init; }
 
     /// <summary>
     /// <para>
     /// Gets or initializes the maximum number of audio channels to include in the output stream.</para>
     /// <para>
-    /// Note: if the source has more channels than this value, channels will be downmixed.</para>
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
     /// </summary>
+    /// <remarks>
+    /// If the source has more channels than this value, channels will be downmixed.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="AudioChannels"/> value.</exception>
     public AudioChannels MaxChannels
     {
         get;
@@ -574,7 +586,11 @@ public sealed record VideoProcessingOptions
     /// <summary>
     /// <para>
     /// Gets or initializes the maximum sample rate (in Hz) for the audio stream (any rates above this will be downsampled).</para>
+    /// <para>
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="AudioSampleRate"/> value.</exception>
     public AudioSampleRate MaxSampleRate
     {
         get;
@@ -589,23 +605,33 @@ public sealed record VideoProcessingOptions
     /// <para>
     /// Gets or initializes a value indicating whether to force square pixels in the output video streams.</para>
     /// <para>
-    /// Note: when set to <see langword="true" />, if the source video has non-square pixels (i.e., a sample aspect ratio different from 1:1), the video will
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set to <see langword="true" />, if the source video has non-square pixels (i.e., a sample aspect ratio different from 1:1), the video will
     /// be rescaled to have square pixels.</para>
     /// <para>
-    /// Note: when set to <see langword="false" />, scaling the video will preserve the original display aspect ratio by adjusting the pixel dimensions and
+    /// When set to <see langword="false" />, scaling the video will preserve the original display aspect ratio by adjusting the pixel dimensions and
     /// sample aspect ratio accordingly.</para>
-    /// </summary>
+    /// </remarks>
     public bool ForceSquarePixels { get; init; }
 
     /// <summary>
     /// <para>
     /// Gets or initializes a value indicating whether to force progressive frames in the output video streams, as opposed to interlaced frames.</para>
     /// <para>
-    /// Note: when set to <see langword="true" />, any interlaced video in the source will be deinterlaced.</para>
-    /// <para>
-    /// Note: when set to <see langword="false" />, the original video may still be deinterlaced if deemed necessary by the processing pipeline, e.g., for
-    /// scaling.</para>
+    /// The value comes from the preset that the options start from (<see cref="StandardizedH264AACMP4" />, <see cref="StandardizedHEVCAACMP4" /> or
+    /// <see cref="Preserve" />).</para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set to <see langword="true" />, any interlaced video in the source will be deinterlaced.</para>
+    /// <para>
+    /// When set to <see langword="false" />, the original video may still be deinterlaced if deemed necessary by the processing pipeline, e.g., for
+    /// scaling.</para>
+    /// </remarks>
     public bool ForceProgressiveFrames { get; init; }
 
 #if DEBUG
@@ -614,11 +640,12 @@ public sealed record VideoProcessingOptions
 #endif
 
     /// <summary>
-    /// Gets or initializes the hardware acceleration mode to use for operations (such as decode or scaling).
+    /// Gets or initializes the hardware acceleration mode to use for operations (such as decode or scaling). Default is
+    /// <see cref="HardwareAccelerationKind.None" /> (no hardware acceleration).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Defaults to <see cref="HardwareAccelerationKind.None" /> (no hardware acceleration), which keeps variation between devices to a minimum.
+    /// No hardware acceleration keeps variation between devices to a minimum.
     /// Enabling hardware acceleration allows more variation in the result to improve hardware acceleration utilisation ability.
     /// </para>
     /// <para>
@@ -627,6 +654,7 @@ public sealed record VideoProcessingOptions
     /// which would be undesirable to use over a high-power device like a GPU.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="FulcrumFS.Videos.HardwareAccelerationKind"/> value.</exception>
     public HardwareAccelerationKind HardwareAccelerationKind
     {
         get;
@@ -645,4 +673,10 @@ public sealed record VideoProcessingOptions
 #else
         = HardwareAccelerationKind.None;
 #endif
+
+    private static void ThrowIfProblems(List<string> problems, string paramName)
+    {
+        if (problems.Count > 0)
+            throw new ArgumentException(string.Join(" ", problems), paramName);
+    }
 }

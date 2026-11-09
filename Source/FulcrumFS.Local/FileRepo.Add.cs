@@ -140,10 +140,13 @@ partial class FileRepo
     }
 
     /// <summary>
-    /// Tries to add a new file variant (and any nested auto-variants declared by the pipeline) to an existing file in the repository. Returns
-    /// <see langword="null"/> if any declared variant ID in the tree already exists or if any per-variant lock cannot be acquired immediately. The operation is
-    /// strict and all-or-nothing: any collision aborts the entire add.
+    /// Tries to add a new file variant (and any nested auto-variants declared by the pipeline) to an existing file in the repository.
     /// </summary>
+    /// <remarks>
+    /// The operation is strict and all-or-nothing: any collision aborts the entire add.
+    /// </remarks>
+    /// <returns>The stored variants, or <see langword="null"/> if any declared variant ID in the tree already exists or if any per-variant lock cannot be
+    /// acquired immediately.</returns>
     /// <exception cref="InvalidOperationException">The repository was opened read-only.</exception>
     public TaskWithProgress<IReadOnlyList<RepoFileInfo>?> TryAddVariantAsync(
         FileId fileId,

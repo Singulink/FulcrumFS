@@ -13,16 +13,22 @@ public sealed class RepoFileGroupInfo : IRepoFileGroup
     public RepoFileInfo MainFile { get; }
 
     /// <summary>
-    /// Gets information about each variant of the main file. The list is empty if the file has no variants. Variants whose alias source data file is missing
-    /// are omitted from this list and surfaced via <see cref="DanglingAliases"/> instead.
+    /// Gets information about each variant of the main file.
     /// </summary>
+    /// <remarks>
+    /// The list is empty if the file has no variants. Variants whose alias source data file is missing are omitted from this list and surfaced via
+    /// <see cref="DanglingAliases"/> instead.
+    /// </remarks>
     public IReadOnlyList<RepoFileInfo> VariantFiles { get; }
 
     /// <summary>
-    /// Gets information about each variant alias in the group whose source data file is missing. Empty in a healthy repository. Per-ID fetches of these
-    /// variants throw <see cref="DanglingAliasException"/>; subsequent add operations targeting these variant IDs overwrite the dangling markers. See
-    /// <see cref="FileRepo.CorruptionDetected"/> for programmatic notification of dangling aliases as they are encountered.
+    /// Gets information about each variant alias in the group whose source data file is missing.
     /// </summary>
+    /// <remarks>
+    /// Empty in a healthy repository. Per-ID fetches of these variants throw <see cref="DanglingAliasException"/>; subsequent add operations targeting these
+    /// variant IDs overwrite the dangling markers. See <see cref="FileRepo.CorruptionDetected"/> for programmatic notification of dangling aliases as they are
+    /// encountered.
+    /// </remarks>
     public IReadOnlyList<DanglingAliasInfo> DanglingAliases { get; }
 
     /// <summary>

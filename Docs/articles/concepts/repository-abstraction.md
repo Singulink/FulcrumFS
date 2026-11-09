@@ -69,21 +69,17 @@ Creating and configuring a repository depends on where it is stored, so these me
 
 ## Using the Interface
 
-Create and configure the repository where the application is composed, and give the rest of the application the interface. With dependency injection, register the local class as a singleton and the interface as the same instance:
+Create and configure the repository where the application is composed, and give the rest of the application the interface. With dependency injection, <xref:FulcrumFS.FileRepoServiceCollectionExtensions.AddFileRepo*> registers the local class as a singleton, and <xref:FulcrumFS.IFileRepo> and <xref:FulcrumFS.IFileRepoCleaner> as the same instance. The composition root opens the repository through the local class:
 
 ```csharp
-builder.Services.AddSingleton(_ => {
-    var baseDir = DirectoryPath.ParseAbsolute(@"C:\AppData\PhotoApp\Files");
-
-    var repo = new FileRepo(baseDir, RepoFormatVersion.Version2, options => {
-        options.DeleteMode = DeleteMode.DeferredUntilClean;
-    });
-
-    repo.EnsureCreated();
-    return repo;
+builder.Services.AddFileRepo(options => {
+    options.BaseDirectory = DirectoryPath.ParseAbsolute(@"C:\AppData\PhotoApp\Files");
+    options.MinimumFormatVersion = RepoFormatVersion.Version2;
+    options.DeleteMode = DeleteMode.DeferredUntilClean;
 });
 
-builder.Services.AddSingleton<IFileRepo>(services => services.GetRequiredService<FileRepo>());
+var app = builder.Build();
+app.Services.GetRequiredService<FileRepo>().EnsureCreated();
 ```
 
 A service then takes an <xref:FulcrumFS.IFileRepo> and works with the interfaces throughout:

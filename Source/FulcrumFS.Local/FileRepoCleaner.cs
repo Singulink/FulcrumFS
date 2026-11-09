@@ -20,6 +20,11 @@ public class FileRepoCleaner : IFileRepoCleaner
     /// </summary>
     public FileRepoCleaningOptions Options { get; }
 
+    /// <summary>
+    /// Gets the base directory of the repository that the cleaner cleans, as configured by <see cref="FileRepoCleaningOptions.BaseDirectory"/>.
+    /// </summary>
+    public IAbsoluteDirectoryPath BaseDirectory { get; }
+
     private readonly RepoFileSystem _fs;
     private readonly IAbsoluteFilePath _infoFile;
     private readonly IAbsoluteFilePath _cleanLockFile;
@@ -27,22 +32,26 @@ public class FileRepoCleaner : IFileRepoCleaner
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepoCleaner"/> class with the specified options.
     /// </summary>
+    /// <remarks>
+    /// The options are checked (see <see cref="FileRepoCleaningOptions.Validate"/>) and frozen (see <see cref="FileRepoCleaningOptions.IsFrozen"/>), after
+    /// which they can't be changed.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The options are not valid, such as when the base directory is not set. The message lists every problem.</exception>
     public FileRepoCleaner(FileRepoCleaningOptions options)
     {
-        if (options.BaseDirectory is null)
-            throw new ArgumentException("Base directory must be set in options.", nameof(options));
-
-        options.Freeze();
+        options.Freeze(nameof(options));
         Options = options;
 
-        _fs = new RepoFileSystem(options.BaseDirectory, options.MarkerFileLogging);
-        _infoFile = options.BaseDirectory.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None);
+        BaseDirectory = options.BaseDirectory;
+        _fs = new RepoFileSystem(BaseDirectory, options.MarkerFileLogging);
+        _infoFile = BaseDirectory.CombineFile(FileRepoPaths.InfoFileName, PathOptions.None);
         _cleanLockFile = _fs.CleanupDirectory.CombineFile(FileRepoPaths.CleanupLockFileName, PathOptions.None);
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileRepoCleaner"/> class with the specified options.
     /// </summary>
+    /// <exception cref="ArgumentException">The options are not valid, such as when the base directory is not set. The message lists every problem.</exception>
     public FileRepoCleaner(IOptions<FileRepoCleaningOptions> options) : this(options.Value) { }
 
     /// <summary>
@@ -50,6 +59,9 @@ public class FileRepoCleaner : IFileRepoCleaner
     /// </summary>
     /// <param name="baseDirectory">The base directory of the file repository to be cleaned.</param>
     /// <param name="configure">An optional action that configures additional options.</param>
+    /// <exception cref="ArgumentOutOfRangeException">An option that <paramref name="configure"/> sets is out of range.</exception>
+    /// <exception cref="ArgumentException"><paramref name="baseDirectory"/>, or a base directory that <paramref name="configure"/> sets, has a name that is
+    /// not friendly (see <see cref="FileRepoCleaningOptions.BaseDirectory"/>).</exception>
     public FileRepoCleaner(IAbsoluteDirectoryPath baseDirectory, Action<FileRepoCleaningOptions>? configure = null)
         : this(BuildOptions(baseDirectory, configure)) { }
 
@@ -91,22 +103,22 @@ public class FileRepoCleaner : IFileRepoCleaner
             // The optimistic open failed. Diagnose what went wrong by inspecting the directory state. Order of checks: missing base dir > missing repo marker >
             // missing cleanup dir > genuine lock contention.
 
-            if (Options.BaseDirectory.State is not EntryState.Exists)
+            if (BaseDirectory.State is not EntryState.Exists)
             {
                 throw new DirectoryNotFoundException(
-                    $"The file repository base directory '{Options.BaseDirectory.PathDisplay}' was not found.", ex);
+                    $"The file repository base directory '{BaseDirectory.PathDisplay}' was not found.", ex);
             }
 
             if (_infoFile.State is not EntryState.Exists)
             {
                 throw new DirectoryNotFoundException(
-                    $"The directory '{Options.BaseDirectory.PathDisplay}' is not an initialized FulcrumFS repository.", ex);
+                    $"The directory '{BaseDirectory.PathDisplay}' is not an initialized FulcrumFS repository.", ex);
             }
 
             if (_fs.CleanupDirectory.State is not EntryState.Exists)
             {
                 throw new DirectoryNotFoundException(
-                    $"The FulcrumFS repository at '{Options.BaseDirectory.PathDisplay}' is in an incomplete state (the cleanup directory is missing).", ex);
+                    $"The FulcrumFS repository at '{BaseDirectory.PathDisplay}' is in an incomplete state (the cleanup directory is missing).", ex);
             }
 
             throw new InvalidOperationException("Another clean operation is already in progress.", ex);

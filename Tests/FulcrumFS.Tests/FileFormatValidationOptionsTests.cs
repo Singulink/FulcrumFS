@@ -26,6 +26,17 @@ public sealed class FileFormatValidationOptionsTests
     }
 
     [TestMethod]
+    public void SeveralProblems_ListsEvery()
+    {
+        var ex = Should.Throw<ArgumentException>(() => new FileFormatValidationOptions(
+            FileFormat.Jpeg, null!, FileFormat.AnyContent(".jpg"), FileFormat.AnyContent(".png"), FileFormat.Png));
+
+        ex.ParamName.ShouldBe("allowedFormats");
+        ex.Message.ShouldStartWith("The value contains null. The value contains the extension '.jpg' in more than one file format: ");
+        ex.Message.ShouldContain("The value contains the extension '.png' in more than one file format: ");
+    }
+
+    [TestMethod]
     public void ContainsNull_Throws()
     {
         Should.Throw<ArgumentException>(() => new FileFormatValidationOptions(FileFormat.Jpeg, null!));

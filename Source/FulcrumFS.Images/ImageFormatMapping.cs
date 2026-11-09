@@ -6,8 +6,8 @@ namespace FulcrumFS.Images;
 public sealed record ImageFormatMapping
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ImageFormatMapping"/> class with the specified source and result image formats. If <paramref
-    /// name="resultFormat"/> is <see langword="null"/>, <paramref name="sourceFormat"/> will be used as the result format.
+    /// Initializes a new instance of the <see cref="ImageFormatMapping"/> class with the specified source and result image formats. If
+    /// <paramref name="resultFormat"/> is <see langword="null"/>, <paramref name="sourceFormat"/> will be used as the result format.
     /// </summary>
     /// <param name="sourceFormat">The source format to use.</param>
     /// <param name="resultFormat">The result format to convert to, or <see langword="null"/> to keep the source format.</param>

@@ -16,10 +16,13 @@ public sealed class FileProcessingPipelineSelector : IFileProcessingPipelineSele
     private readonly IFileProcessingPipelineProvider? _default;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FileProcessingPipelineSelector"/> class with the specified pipelines. Each pipeline is registered for every
-    /// extension declared by its first processor's <see cref="FileProcessor.AllowedFileExtensions"/>. A single catch-all pipeline (one whose first processor
-    /// declares no extensions, or one with no processors at all) may be included to handle any extension that does not match another entry.
+    /// Initializes a new instance of the <see cref="FileProcessingPipelineSelector"/> class with the specified pipelines.
     /// </summary>
+    /// <remarks>
+    /// Each pipeline is registered for every extension declared by its first processor's <see cref="FileProcessor.AllowedFileExtensions"/>. A single
+    /// catch-all pipeline (one whose first processor declares no extensions, or one with no processors at all) may be included to handle any extension that
+    /// does not match another entry.
+    /// </remarks>
     /// <param name="pipelines">The pipelines to register. Extensions declared across pipelines must not overlap and at most one catch-all is permitted.</param>
     /// <exception cref="ArgumentException">Multiple pipelines declare the same extension, or more than one catch-all is provided.</exception>
     public FileProcessingPipelineSelector(params IEnumerable<IFileProcessingPipelineProvider> pipelines)

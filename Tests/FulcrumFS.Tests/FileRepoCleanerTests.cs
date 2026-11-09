@@ -18,11 +18,11 @@ public sealed class FileRepoCleanerTests
         var repoDir = NewRepoDir();
         var options = new FileRepoCleaningOptions(repoDir);
         var cleaner1 = new FileRepoCleaner(options);
-        cleaner1.Options.BaseDirectory.ShouldBe(repoDir);
+        cleaner1.BaseDirectory.ShouldBe(repoDir);
 
         var ioptions = Options.Create(new FileRepoCleaningOptions(repoDir));
         var cleaner2 = new FileRepoCleaner(ioptions);
-        cleaner2.Options.BaseDirectory.ShouldBe(repoDir);
+        cleaner2.BaseDirectory.ShouldBe(repoDir);
 
         var cleaner3 = new FileRepoCleaner(repoDir, o => o.MarkerFileLogging = RepoLoggingMode.None);
         cleaner3.Options.MarkerFileLogging.ShouldBe(RepoLoggingMode.None);

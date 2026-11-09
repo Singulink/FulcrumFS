@@ -21,7 +21,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
 #pragma warning disable SA1623 // Property summary documentation should match accessors
 
     /// <summary>
-    /// Gets or initializes the mode for buffering source streams to temporary repository work files. Default value is <see cref="SourceBufferingMode.Auto"/>.
+    /// Gets or initializes the mode for buffering source streams to temporary repository work files. Default is <see cref="SourceBufferingMode.Auto"/>.
     /// </summary>
     public SourceBufferingMode SourceBufferingMode
     {
@@ -34,7 +34,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
 
     /// <summary>
     /// Gets or initializes a value indicating whether a variant pipeline should produce an alias to its source variant when running the pipeline results in no
-    /// changes to the source file. Default value is <see langword="false"/>.
+    /// changes to the source file. Default is <see langword="false"/>.
     /// </summary>
     /// <remarks>
     /// <para>This property only applies to variant pipelines (the top-level pipeline passed to a variant-add method on <see cref="IFileRepo"/>, or any nested
@@ -50,8 +50,7 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
 
     /// <summary>
     /// Gets or initializes a value indicating whether the main pipeline of a transaction add call should throw a
-    /// <see cref="FileSourceUnchangedException"/> when running the pipeline results in no changes to the source file. Default value is
-    /// <see langword="false"/>.
+    /// <see cref="FileSourceUnchangedException"/> when running the pipeline results in no changes to the source file. Default is <see langword="false"/>.
     /// </summary>
     /// <remarks>
     /// This property only applies to the main pipeline of a transactional add; it has no effect on variant pipelines (use
@@ -63,13 +62,16 @@ public class FileProcessingPipeline : IFileProcessingPipelineProvider, IFileProc
 #pragma warning restore SA1623
 
     /// <summary>
-    /// Gets or initializes the collection of auto-variants produced after the main pipeline completes. Each variant pipeline receives the output of this
-    /// pipeline as its source. Variants are <see cref="IFileProcessingPipelineProvider"/>s so their nested variant trees can be enumerated ahead of execution.
+    /// Gets or initializes the collection of auto-variants produced after the main pipeline completes.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// Each variant pipeline receives the output of this pipeline as its source. Variants are <see cref="IFileProcessingPipelineProvider"/>s so their nested
+    /// variant trees can be enumerated ahead of execution.</para>
+    /// <para>
     /// Variant IDs within a single <see cref="Variants"/> list must be unique after normalization or an <see cref="ArgumentException"/> is thrown at
     /// initialization. All variant IDs in the entire stored tree under a single file ID must also be unique; cross-level collisions are detected by the add
-    /// runner at store time.
+    /// runner at store time.</para>
     /// </remarks>
     public IReadOnlyList<FileProcessingVariant> Variants
     {

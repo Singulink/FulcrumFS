@@ -13,17 +13,21 @@ public abstract partial class FileFormat
     #region Factory Methods
 
     /// <summary>
-    /// Creates a <see cref="FileFormat"/> that accepts any content for the specified extensions. No content validation is performed beyond ensuring the file's
-    /// extension is one of the specified extensions.
+    /// Creates a <see cref="FileFormat"/> that accepts any content for the specified extensions.
     /// </summary>
+    /// <remarks>
+    /// No content validation is performed beyond ensuring the file's extension is one of the specified extensions.
+    /// </remarks>
     /// <param name="extensions">The file extensions (including the leading dot, e.g., ".log") this file format applies to. Must contain at least one entry.
     /// The first extension is the <see cref="PrimaryExtension"/> that all other extensions are normalized to.</param>
     public static FileFormat AnyContent(params ReadOnlySpan<string> extensions) => new AnyContentFileFormat(extensions);
 
     /// <summary>
-    /// Creates a <see cref="FileFormat"/> that validates files are valid ASCII text for the specified extensions. All bytes in the file must be in the range
-    /// [0, 127] (i.e. <see cref="Ascii.IsValid(ReadOnlySpan{byte})"/> must return <see langword="true"/>).
+    /// Creates a <see cref="FileFormat"/> that validates files are valid ASCII text for the specified extensions.
     /// </summary>
+    /// <remarks>
+    /// All bytes in the file must be in the range [0, 127] (i.e. <see cref="Ascii.IsValid(ReadOnlySpan{byte})"/> must return <see langword="true"/>).
+    /// </remarks>
     /// <param name="extensions">The file extensions (including the leading dot, e.g., ".txt") this file format applies to. Must contain at least one entry.
     /// The first extension is the <see cref="PrimaryExtension"/> that all other extensions are normalized to.</param>
     public static FileFormat TextAscii(params ReadOnlySpan<string> extensions) => new TextAsciiFileFormat(extensions);
@@ -41,8 +45,8 @@ public abstract partial class FileFormat
     /// </summary>
     /// <remarks>
     /// Files with a UTF-8, UTF-16 LE, UTF-16 BE, UTF-32 LE or UTF-32 BE BOM are validated against the encoding indicated by the BOM (which must be one of the
-    /// <paramref name="allowedEncodings"/>). Files without a BOM are validated as UTF-8 if <see cref="UnicodeEncodings.Utf8"/> is included in <paramref
-    /// name="allowedEncodings"/>; otherwise validation fails.
+    /// <paramref name="allowedEncodings"/>). Files without a BOM are validated as UTF-8 if <see cref="UnicodeEncodings.Utf8"/> is included in
+    /// <paramref name="allowedEncodings"/>; otherwise validation fails.
     /// </remarks>
     /// <param name="allowedEncodings">The Unicode encodings that are accepted. Must specify at least one encoding.</param>
     /// <param name="extensions">The file extensions (including the leading dot) this file format applies to. Must contain at least one entry.

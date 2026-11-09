@@ -8,9 +8,9 @@
 /// Each <see cref="FileFormat"/> represents one specific file format with a fixed set of extensions. The base library provides built-in singletons for common
 /// formats accessible via static properties (<see cref="Jpeg"/>, <see cref="Png"/>, <see cref="Pdf"/>, etc.).</para>
 /// <para>
-/// Content-agnostic and text-based file formats can be created using the factory methods (<see cref="AnyContent(ReadOnlySpan{string})"/>, <see
-/// cref="TextAscii(ReadOnlySpan{string})"/>, <see cref="TextUnicode(ReadOnlySpan{string})"/>, <see cref="TextEncoding(System.Text.Encoding,
-/// ReadOnlySpan{string})"/>) where the caller specifies the applicable extensions.</para>
+/// Content-agnostic and text-based file formats can be created using the factory methods (<see cref="AnyContent(ReadOnlySpan{string})"/>,
+/// <see cref="TextAscii(ReadOnlySpan{string})"/>, <see cref="TextUnicode(ReadOnlySpan{string})"/>,
+/// <see cref="TextEncoding(System.Text.Encoding, ReadOnlySpan{string})"/>) where the caller specifies the applicable extensions.</para>
 /// <para>
 /// Custom file formats can be created by deriving from <see cref="FileFormat"/> and implementing <see cref="ValidateAsync(Stream, CancellationToken)"/>.</para>
 /// <para>

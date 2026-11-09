@@ -26,30 +26,37 @@ public sealed class FileFormatValidationOptions
     /// </summary>
     /// <param name="allowedFormats">The file formats that are allowed by the validation processor. Each extension may only appear in one file format across the
     /// collection.</param>
+    /// <exception cref="ArgumentException"><paramref name="allowedFormats"/> is empty, contains <see langword="null"/>, or has an extension in more than one
+    /// file format. The message lists every problem.</exception>
     public FileFormatValidationOptions(IEnumerable<FileFormat> allowedFormats)
     {
         var list = allowedFormats.ToArray();
 
         if (list.Length is 0)
-            throw new ArgumentException("At least one file format must be specified.", nameof(allowedFormats));
+            throw new ArgumentException("The value is empty.", nameof(allowedFormats));
 
         var extToFormat = new Dictionary<string, FileFormat>(StringComparer.Ordinal);
+        List<string> problems = [];
+
+        if (list.Any(f => f is null))
+            problems.Add("The value contains null.");
 
         foreach (FileFormat type in list)
         {
             if (type is null)
-                throw new ArgumentException("File formats must not be null.", nameof(allowedFormats));
+                continue;
 
             foreach (string ext in type.Extensions)
             {
                 if (extToFormat.TryGetValue(ext, out FileFormat? existing))
-                    throw new ArgumentException(
-                        $"Extension '{ext}' is associated with multiple file formats: '{existing.Name}' and '{type.Name}'.",
-                        nameof(allowedFormats));
-
-                extToFormat.Add(ext, type);
+                    problems.Add($"The value contains the extension '{ext}' in more than one file format: '{existing.Name}' and '{type.Name}'.");
+                else
+                    extToFormat.Add(ext, type);
             }
         }
+
+        if (problems.Count > 0)
+            throw new ArgumentException(string.Join(" ", problems), nameof(allowedFormats));
 
         AllowedFormats = list;
         _extensionToFormat = extToFormat;

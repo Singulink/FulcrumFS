@@ -11,12 +11,18 @@ namespace FulcrumFS;
 public enum RepoFormatVersion
 {
     /// <summary>
+    /// Not a format version: the value of <see cref="FileRepoOptions.MinimumFormatVersion"/> while it is not set. Passing it to a constructor, or setting it
+    /// once a version is set, throws; setting it while no version is set leaves the version not set.
+    /// </summary>
+    Unspecified = 0,
+
+    /// <summary>
     /// The newest format this library supports, whichever version that is. New repositories are created at it and older repositories are upgraded to it when
     /// they are initialized, including after the library is updated to a version with a newer format.
     /// </summary>
     /// <remarks>
-    /// Use this only for repositories that the application owns exclusively. Never use it when a process running an older version of FulcrumFS, or a cleanup
-    /// job deployed separately from the application, uses or cleans the repositories: updating the library would upgrade them and lock those processes out.
+    /// Updating the library to a version with a newer format upgrades the repositories when they are next initialized, which locks out any process that runs an
+    /// older version of FulcrumFS and uses or cleans them, such as a cleanup job deployed separately from the application.
     /// </remarks>
     Latest = int.MaxValue,
 

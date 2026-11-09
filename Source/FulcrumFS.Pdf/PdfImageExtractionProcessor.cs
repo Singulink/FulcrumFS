@@ -21,23 +21,23 @@ public sealed class PdfImageExtractionProcessor : FileProcessor
     private const int MaxInMemoryCopySize = 20 * 1024 * 1024;
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="PdfImageExtractionProcessor"/> class with the specified options.
+    /// </summary>
+    /// <remarks>
     /// <para>
-    /// Initializes a new instance of the <see cref="PdfImageExtractionProcessor"/> class with the specified options.</para>
-    /// <para>
-    /// Note: if you want to do source PDF validation, you need to use a <see cref="FileFormatValidationProcessor" /> configured with <see
-    /// cref="FileFormat.Pdf" /> first and chain this after it, as this class does not perform any validation itself, it just extracts an image from the
+    /// If you want to do source PDF validation, you need to use a <see cref="FileFormatValidationProcessor" /> configured with
+    /// <see cref="FileFormat.Pdf" /> first and chain this after it, as this class does not perform any validation itself, it just extracts an image from the
     /// provided PDF document.</para>
     /// <para>
-    /// Note: PDF rendering is serialized process-wide because the underlying PDFium library is not thread-safe, so only one PDF page can be rendered at a
+    /// PDF rendering is serialized process-wide because the underlying PDFium library is not thread-safe, so only one PDF page can be rendered at a
     /// time within the process.</para>
-    /// </summary>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Both <see cref="PdfImageExtractionProcessingOptions.Dpi" /> and
+    /// <see cref="PdfImageExtractionProcessingOptions.MaxPixelSize" /> of the options are <see langword="null" />.</exception>
     public PdfImageExtractionProcessor(PdfImageExtractionProcessingOptions options)
     {
-        if (options.Dpi is null && options.MaxPixelSize is null)
-        {
-            throw new ArgumentException(
-                $"At least one of {nameof(options.Dpi)} or {nameof(options.MaxPixelSize)} must be specified in the options.", nameof(options));
-        }
+        if (options.GetProblems() is { Count: > 0 } problems)
+            throw new ArgumentException(string.Join(" ", problems), nameof(options));
 
         Options = options;
     }

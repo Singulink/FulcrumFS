@@ -11,15 +11,16 @@ namespace FulcrumFS.Videos;
 public sealed class VideoFrameExtractionProcessor : FileProcessor
 {
     /// <summary>
+    /// Initializes a new instance of the <see cref="VideoFrameExtractionProcessor"/> class with the specified options.
+    /// </summary>
+    /// <remarks>
     /// <para>
-    /// Initializes a new instance of the <see cref="VideoFrameExtractionProcessor"/> class with the specified options.</para>
-    /// <para>
-    /// Note: you must configure the ffmpeg executable paths by calling <see cref="VideoProcessor.ConfigureWithFFmpegExecutables"/> before creating an instance
+    /// You must configure the ffmpeg executable paths by calling <see cref="VideoProcessor.ConfigureWithFFmpegExecutables"/> before creating an instance
     /// of this class.</para>
     /// <para>
-    /// Note: if you want to do source video validation, you need to use <see cref="VideoProcessor" /> first and chain this after it, as this class does not
+    /// If you want to do source video validation, you need to use <see cref="VideoProcessor" /> first and chain this after it, as this class does not
     /// perform any validation itself, it just extracts a video frame from the provided video.</para>
-    /// </summary>
+    /// </remarks>
     public VideoFrameExtractionProcessor(VideoFrameExtractionProcessingOptions options)
     {
         Options = options;

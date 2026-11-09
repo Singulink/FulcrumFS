@@ -62,6 +62,15 @@ await cleaner.CleanAsync(TimeSpan.FromHours(24));
 
 <xref:FulcrumFS.FileRepoCleaner> implements <xref:FulcrumFS.IFileRepoCleaner> and exposes the same <xref:FulcrumFS.FileRepoCleaner.CleanAsync*> overloads, including the indeterminate-resolution callbacks. Configure it with <xref:FulcrumFS.FileRepoCleaningOptions> when defaults are not enough.
 
+With dependency injection, <xref:FulcrumFS.FileRepoServiceCollectionExtensions.AddFileRepoCleaner*> registers a <xref:FulcrumFS.FileRepoCleaner> created from the options system's <xref:FulcrumFS.FileRepoCleaningOptions> as a singleton that is also the <xref:FulcrumFS.IFileRepoCleaner>, and checks the options when the application starts. The options can be bound from configuration, base directory included, as described for the repository in [Getting Started](getting-started.md#registering-with-dependency-injection):
+
+```csharp
+builder.Services.AddFileRepoCleaner();
+builder.Services.Configure<FileRepoCleaningOptions>(builder.Configuration.GetSection("FileRepo"));
+```
+
+Cleanup code written against <xref:FulcrumFS.IFileRepoCleaner> then runs unchanged in the application, where <xref:FulcrumFS.FileRepoServiceCollectionExtensions.AddFileRepo*> makes the repository the cleaner, and in a separate cleaning process.
+
 The cleaner never changes a repository's [format version](../concepts/repository-layout.md#format-version). It cleans every repository whose format it can clean, and refuses one that needs a newer version of FulcrumFS with a <xref:System.NotSupportedException> without touching it. A cleaner deployed separately from the application therefore has to be updated before the application upgrades the repositories it cleans.
 
 ## Scheduling

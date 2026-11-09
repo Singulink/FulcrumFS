@@ -40,7 +40,7 @@ public sealed record VideoFrameExtractionProcessingOptions
     /// <para>
     /// Gets or initializes a value indicating whether video streams marked as thumbnail streams should be considered for video frame extraction.</para>
     /// <para>
-    /// Default is <see langword="false" />, meaning this option is not used.</para>
+    /// Default is <see langword="false" />, which means this option is not used.</para>
     /// </summary>
     public bool IncludeThumbnailVideoStreams { get; init; }
 
@@ -48,14 +48,15 @@ public sealed record VideoFrameExtractionProcessingOptions
     /// <para>
     /// Gets or initializes the timestamp within the video at which to capture the video frame.</para>
     /// <para>
-    /// Default is <see langword="null" />, meaning this option is not used.</para>
+    /// Must be at least zero. Default is <see langword="null" />, which means this option is not used.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public TimeSpan? ImageTimestamp
     {
         get;
         init
         {
-            if (value is not null) ArgumentOutOfRangeException.ThrowIfLessThan(value.Value, TimeSpan.Zero, nameof(ImageTimestamp));
+            if (value is not null) ArgumentOutOfRangeException.ThrowIfLessThan(value.Value, TimeSpan.Zero, nameof(value));
             field = value;
         }
     }
@@ -64,8 +65,9 @@ public sealed record VideoFrameExtractionProcessingOptions
     /// <para>
     /// Gets or initializes the fraction of the video's duration at which to capture the video frame.</para>
     /// <para>
-    /// Default is <see langword="null" />, meaning this option is not used.</para>
+    /// Must be between zero and one. Default is <see langword="null" />, which means this option is not used.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is less than 0 or greater than 1.</exception>
     public double? ImageTimestampFraction
     {
         get;
@@ -74,7 +76,7 @@ public sealed record VideoFrameExtractionProcessingOptions
             if (value is not null)
             {
                 if (value < 0.0 || value > 1.0)
-                    throw new ArgumentOutOfRangeException(nameof(ImageTimestampFraction), "ImageTimestampFraction must be between 0.0 and 1.0 inclusive.");
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "The value is less than 0 or greater than 1.");
             }
 
             field = value;
@@ -85,12 +87,15 @@ public sealed record VideoFrameExtractionProcessingOptions
     /// <para>
     /// Gets or initializes a value indicating whether to remap HDR to SDR for the video frame.</para>
     /// <para>
-    /// Note: this uses a basic tone-mapping algorithm and may not produce optimal results for all content.</para>
-    /// <para>
-    /// Note: color profile, transfer, and matrix information will be updated if needed to reflect the remapping (but the file will still have color metadata).
-    /// </para><para>
     /// Default is <see langword="true" />.</para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This uses a basic tone-mapping algorithm and may not produce optimal results for all content.</para>
+    /// <para>
+    /// Color profile, transfer, and matrix information will be updated if needed to reflect the remapping (but the file will still have color metadata).
+    /// </para>
+    /// </remarks>
     public bool RemapHDRToSDR { get; init; } = true;
 
     /// <summary>
@@ -98,15 +103,17 @@ public sealed record VideoFrameExtractionProcessingOptions
     /// Gets or initializes a value indicating whether to force square pixels in the output video streams.</para>
     /// <para>
     /// Default is <see langword="true" />.</para>
+    /// </summary>
+    /// <remarks>
     /// <para>
-    /// Note: when set to <see langword="true" />, if the source video has non-square pixels (i.e., a sample aspect ratio different from 1:1), the frame will
+    /// When set to <see langword="true" />, if the source video has non-square pixels (i.e., a sample aspect ratio different from 1:1), the frame will
     /// be rescaled to have square pixels.</para>
     /// <para>
-    /// Note: when set to <see langword="false" />, scaling the frame will preserve the original display aspect ratio by adjusting the pixel dimensions and
+    /// When set to <see langword="false" />, scaling the frame will preserve the original display aspect ratio by adjusting the pixel dimensions and
     /// sample aspect ratio accordingly.</para>
     /// <para>
-    /// Note: most photo viewers and web browsers expect images to have square pixels, so keeping this as <see langword="true" /> may improve compatibility.
+    /// Most photo viewers and web browsers expect images to have square pixels, so keeping this as <see langword="true" /> may improve compatibility.
     /// </para>
-    /// </summary>
+    /// </remarks>
     public bool ForceSquarePixels { get; init; } = true;
 }

@@ -9,11 +9,11 @@ namespace FulcrumFS.Videos;
 public sealed record VideoStreamValidationOptions
 {
     /// <summary>
-    /// <para>
-    /// Initializes a new instance of the <see cref="VideoStreamValidationOptions"/> class.</para>
-    /// <para>
-    /// By default, validates that there is exactly 1 video stream only.</para>
+    /// Initializes a new instance of the <see cref="VideoStreamValidationOptions"/> class.
     /// </summary>
+    /// <remarks>
+    /// By default, validates that there is exactly 1 video stream only.
+    /// </remarks>
     public VideoStreamValidationOptions()
     {
     }
@@ -36,14 +36,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the maximum width of the source video in pixels.</para>
     /// <para>
-    /// Default is no maximum.</para>
+    /// Must be at least 1. Default is <see langword="null" />, which means no maximum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MaxWidth
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxWidth));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(value));
             field = value;
         }
     }
@@ -52,14 +53,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the maximum height of the source video in pixels.</para>
     /// <para>
-    /// Default is no maximum.</para>
+    /// Must be at least 1. Default is <see langword="null" />, which means no maximum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MaxHeight
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxHeight));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(value));
             field = value;
         }
     }
@@ -68,14 +70,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the maximum number of pixels in the source video.</para>
     /// <para>
-    /// Default is no maximum.</para>
+    /// Must be at least 1. Default is <see langword="null" />, which means no maximum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MaxPixels
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MaxPixels));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(value));
             field = value;
         }
     }
@@ -84,14 +87,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the maximum number of video streams in the source video file.</para>
     /// <para>
-    /// Default is 1.</para>
+    /// Must be at least zero. Default is 1.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public int? MaxStreams
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(value ?? 0, nameof(MaxStreams));
+            ArgumentOutOfRangeException.ThrowIfNegative(value ?? 0, nameof(value));
             field = value;
         }
     } = 1;
@@ -100,14 +104,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the maximum length of each video stream in the source video file.</para>
     /// <para>
-    /// Default is no maximum.</para>
+    /// Must be greater than zero. Default is <see langword="null" />, which means no maximum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public TimeSpan? MaxLength
     {
         get;
         init
         {
-            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MaxLength));
+            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(value));
             field = value;
         }
     }
@@ -116,14 +121,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the minimum width of the source video in pixels.</para>
     /// <para>
-    /// Default is no minimum.</para>
+    /// Must be at least 1. Default is <see langword="null" />, which means no minimum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MinWidth
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MinWidth));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(value));
             field = value;
         }
     }
@@ -132,14 +138,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the minimum height of the source video in pixels.</para>
     /// <para>
-    /// Default is no minimum.</para>
+    /// Must be at least 1. Default is <see langword="null" />, which means no minimum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MinHeight
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MinHeight));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(value));
             field = value;
         }
     }
@@ -148,14 +155,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the minimum number of pixels in the source video.</para>
     /// <para>
-    /// Default is no minimum.</para>
+    /// Must be at least 1. Default is <see langword="null" />, which means no minimum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MinPixels
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MinPixels));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(value));
             field = value;
         }
     }
@@ -164,14 +172,15 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the minimum number of video streams in the source video file.</para>
     /// <para>
-    /// Default is 1.</para>
+    /// Must be at least 1. Default is 1.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MinStreams
     {
         get;
         init
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(MinStreams));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value ?? 1, 1, nameof(value));
             field = value;
         }
     } = 1;
@@ -180,15 +189,41 @@ public sealed record VideoStreamValidationOptions
     /// <para>
     /// Gets or initializes the minimum length of each video stream in the source video file.</para>
     /// <para>
-    /// Default is no minimum.</para>
+    /// Must be greater than zero. Default is <see langword="null" />, which means no minimum.</para>
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public TimeSpan? MinLength
     {
         get;
         init
         {
-            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(MinLength));
+            if (value != null) ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero, nameof(value));
             field = value;
         }
+    }
+
+    /// <summary>
+    /// Gets the problems of the options, where a minimum is greater than its maximum, which <see cref="VideoProcessingOptions"/> reports in one exception.
+    /// </summary>
+    internal List<string> GetProblems()
+    {
+        List<string> problems = [];
+
+        if (MinWidth > MaxWidth)
+            problems.Add($"{nameof(VideoStreamValidationOptions)}.{nameof(MinWidth)} ({MinWidth}) is greater than {nameof(MaxWidth)} ({MaxWidth}).");
+
+        if (MinHeight > MaxHeight)
+            problems.Add($"{nameof(VideoStreamValidationOptions)}.{nameof(MinHeight)} ({MinHeight}) is greater than {nameof(MaxHeight)} ({MaxHeight}).");
+
+        if (MinPixels > MaxPixels)
+            problems.Add($"{nameof(VideoStreamValidationOptions)}.{nameof(MinPixels)} ({MinPixels}) is greater than {nameof(MaxPixels)} ({MaxPixels}).");
+
+        if (MinLength > MaxLength)
+            problems.Add($"{nameof(VideoStreamValidationOptions)}.{nameof(MinLength)} ({MinLength}) is greater than {nameof(MaxLength)} ({MaxLength}).");
+
+        if (MinStreams > MaxStreams)
+            problems.Add($"{nameof(VideoStreamValidationOptions)}.{nameof(MinStreams)} ({MinStreams}) is greater than {nameof(MaxStreams)} ({MaxStreams}).");
+
+        return problems;
     }
 }

@@ -63,11 +63,13 @@ public sealed class FileProcessingContext : IAsyncDisposable
     public Func<double, ValueTask>? ProgressCallback { get; internal set; }
 
     /// <summary>
-    /// Gets a value that represents the callback function to report an optional informative display message for the current processing stage. The callback
-    /// function takes a string (or <see langword="null"/> to clear the message) and returns a <see cref="ValueTask" /> to await. The message is combined with
-    /// the most recently reported progress fraction when reported to the caller.
+    /// Gets a value that represents the callback function to report an optional informative display message for the current processing stage.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The callback function takes a string (or <see langword="null"/> to clear the message) and returns a <see cref="ValueTask" /> to await. The message is
+    /// combined with the most recently reported progress fraction when reported to the caller.
+    /// </para>
     /// <para>
     /// This value is only meant to be read by the <see cref="FileProcessor"/> instances in the pipeline. It is set by the <see cref="FileProcessingPipeline" />
     /// before each processor is executed and is not intended to be used outside of this.
@@ -157,9 +159,11 @@ public sealed class FileProcessingContext : IAsyncDisposable
 
     /// <summary>
     /// Gets a new non-existent file path that can be used for any intermediate work required by a <see cref="FileProcessor"/> or to store the final result.
+    /// </summary>
+    /// <remarks>
     /// The file is not created automatically. Work files are automatically cleaned up after the processing pipeline completes but file processors can clean up
     /// intermediate work files earlier if they are no longer needed.
-    /// </summary>
+    /// </remarks>
     /// <param name="extension">The file extension to use for the work file. Must be empty for no extension or start with a dot (e.g., ".jpg", ".png").</param>
     public IAbsoluteFilePath GetNewWorkFile(string extension)
     {
@@ -170,9 +174,12 @@ public sealed class FileProcessingContext : IAsyncDisposable
 
     /// <summary>
     /// Gets a new non-existent directory path that can be used for any intermediate work required by a <see cref="FileProcessor"/> or to store the final
-    /// result. The directory is not created automatically. Work directories are automatically cleaned up after the processing pipeline completes but file
-    /// processors can clean up intermediate work directories or their contents earlier if they are no longer needed.
+    /// result.
     /// </summary>
+    /// <remarks>
+    /// The directory is not created automatically. Work directories are automatically cleaned up after the processing pipeline completes but file processors
+    /// can clean up intermediate work directories or their contents earlier if they are no longer needed.
+    /// </remarks>
     public IAbsoluteDirectoryPath GetNewWorkDirectory()
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
@@ -198,9 +205,12 @@ public sealed class FileProcessingContext : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the source as an <see cref="IAbsoluteFilePath"/>. If the source is a non-file stream, it will be copied to a new work file and returned. If the
-    /// source is already an <see cref="IAbsoluteFilePath"/>, it will be returned directly.
+    /// Gets the source as an <see cref="IAbsoluteFilePath"/>.
     /// </summary>
+    /// <remarks>
+    /// If the source is a non-file stream, it will be copied to a new work file and returned. If the source is already an <see cref="IAbsoluteFilePath"/>, it
+    /// will be returned directly.
+    /// </remarks>
     public async ValueTask<IAbsoluteFilePath> GetSourceAsFileAsync()
     {
         ObjectDisposedException.ThrowIf(_source is null, this);
@@ -239,9 +249,9 @@ public sealed class FileProcessingContext : IAsyncDisposable
     /// <summary>
     /// Gets the source as a seekable <see cref="Stream"/>.
     /// </summary>
-    /// <param name="preferInMemory">If <see langword="true"/>, a memory stream will always be returned as long as the source is smaller than <paramref
-    /// name="maxInMemoryCopySize"/>. If <see langword="false"/>, different stream types can be returned depending on what the source is, but it will always be
-    /// a seekable stream.</param>
+    /// <param name="preferInMemory">If <see langword="true"/>, a memory stream will always be returned as long as the source is smaller than
+    /// <paramref name="maxInMemoryCopySize"/>. If <see langword="false"/>, different stream types can be returned depending on what the source is, but it will
+    /// always be a seekable stream.</param>
     /// <param name="maxInMemoryCopySize">The maximum number of bytes that will be copied from the source stream to a memory stream. If the source stream
     /// exceeds this size, it will be copied to a new work file instead.</param>
     public async ValueTask<Stream> GetSourceAsSeekableStreamAsync(bool preferInMemory, long maxInMemoryCopySize)

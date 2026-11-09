@@ -6,13 +6,16 @@ namespace FulcrumFS.Documents;
 /// <summary>
 /// Extended options for initializing the document PDF conversion processor configuration.
 /// </summary>
-public sealed record DocumentPdfConversionConfigurationOptions()
+public sealed record DocumentPdfConversionConfigurationOptions
 {
     /// <summary>
-    /// Gets or initializes the maximum number of concurrent LibreOffice processes to allow. Default is currently
-    /// <see cref="Environment.ProcessorCount" />. Note: each LibreOffice process can consume a significant amount of memory, so consider lowering this on
-    /// machines with many processors if memory is constrained.
+    /// Gets or initializes the maximum number of concurrent LibreOffice processes to allow. Must be at least 1. Default is <see langword="null" />, which
+    /// uses <see cref="Environment.ProcessorCount" />.
     /// </summary>
+    /// <remarks>
+    /// Each LibreOffice process can use a significant amount of memory, so the memory that conversions use grows with this limit.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int? MaxConcurrentProcesses
     {
         get;
@@ -20,7 +23,7 @@ public sealed record DocumentPdfConversionConfigurationOptions()
         {
             if (value < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(value), "Maximum concurrent processes must be at least 1 (or null for default).");
+                throw new ArgumentOutOfRangeException(nameof(value), value, "The value is less than 1.");
             }
 
             field = value;
@@ -28,17 +31,20 @@ public sealed record DocumentPdfConversionConfigurationOptions()
     }
 
     /// <summary>
-    /// Gets or initializes the processor affinity for the LibreOffice processes. Default is <see langword="null" /> which means no affinity is set.
+    /// Gets or initializes the processor affinity for the LibreOffice processes. Must not be zero. Default is <see langword="null" />, which means no
+    /// affinity is set.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// See <see cref="Process.ProcessorAffinity" /> for more details.
+    /// See <see cref="Process.ProcessorAffinity" /> for more details. Processor affinity is supported only on Windows and Linux.
     /// </para>
     /// <para>
-    /// Note: you should not set this value with an invalid bit set (on some platforms) (e.g., if you have 4 hardware threads, you cannot set the affinity to
-    /// 0x1F).
+    /// On some platforms a mask with a bit for a processor that the machine doesn't have (e.g., 0x1F with 4 hardware threads) is not valid, and the
+    /// processes that the library starts fail when it sets the mask on them.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero.</exception>
+    /// <exception cref="PlatformNotSupportedException">The value is set on a platform other than Windows or Linux.</exception>
     public IntPtr? ProcessorAffinity
     {
         get;
@@ -54,7 +60,7 @@ public sealed record DocumentPdfConversionConfigurationOptions()
 
             if (value == 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(value), "Processor affinity cannot be zero.");
+                throw new ArgumentOutOfRangeException(nameof(value), value, "The value is zero.");
             }
 
             field = value;
@@ -62,14 +68,15 @@ public sealed record DocumentPdfConversionConfigurationOptions()
     }
 
     /// <summary>
-    /// Gets or initializes the process priority class for the LibreOffice processes. Default is currently <see langword="null" /> which means LibreOffice
-    /// will run at the default priority.
+    /// Gets or initializes the process priority class for the LibreOffice processes. Default is <see langword="null" />, which means LibreOffice will run
+    /// at the default priority.
     /// </summary>
     /// <remarks>
     /// <para>
     /// See <see cref="Process.PriorityClass" /> for more details.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="System.Diagnostics.ProcessPriorityClass"/> value.</exception>
     public ProcessPriorityClass? ProcessPriorityClass
     {
         get;
@@ -77,7 +84,8 @@ public sealed record DocumentPdfConversionConfigurationOptions()
         {
             if (value is not null && !Enum.IsDefined(value.Value))
             {
-                throw new ArgumentOutOfRangeException(nameof(value), "Invalid process priority class.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(value), value, $"The value is not a defined {nameof(System.Diagnostics.ProcessPriorityClass)} value.");
             }
 
             field = value;

@@ -22,8 +22,11 @@ public abstract class MediaContainerFormat
     public static MediaContainerFormat MP4Loose { get; } = new Impl(FileFormat.Mp4Loose, IsoBmffName, supportsWriting: false, static () => FFprobeUtils.Configuration.SupportsMovGroupDemuxing);
 
     /// <summary>
-    /// Gets the MP4 media container format. Extension: <c>.mp4</c>. This is currently the only format that supports muxing (writing) output.
+    /// Gets the MP4 media container format. Extension: <c>.mp4</c>.
     /// </summary>
+    /// <remarks>
+    /// This is currently the only format that supports muxing (writing) output.
+    /// </remarks>
     public static MediaContainerFormat MP4 { get; } = new Impl(FileFormat.Mp4, IsoBmffName, supportsWriting: true, static () => FFprobeUtils.Configuration.SupportsMovGroupDemuxing);
 
     /// <summary>

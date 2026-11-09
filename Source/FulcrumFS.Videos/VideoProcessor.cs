@@ -24,12 +24,11 @@ public sealed class VideoProcessor : FileProcessor
     private static InterlockedFlag _ffmpegPathInitialized;
 
     /// <summary>
-    /// <para>
-    /// Initializes a new instance of the <see cref="VideoProcessor"/> class with the specified options.</para>
-    /// <para>
-    /// Note: you must configure the ffmpeg executable paths by calling <see cref="ConfigureWithFFmpegExecutables"/> before creating an instance of this class.
-    /// </para>
+    /// Initializes a new instance of the <see cref="VideoProcessor"/> class with the specified options.
     /// </summary>
+    /// <remarks>
+    /// You must configure the ffmpeg executable paths by calling <see cref="ConfigureWithFFmpegExecutables"/> before creating an instance of this class.
+    /// </remarks>
     public VideoProcessor(VideoProcessingOptions options)
     {
         Options = options;
@@ -208,13 +207,14 @@ public sealed class VideoProcessor : FileProcessor
     public override IReadOnlyList<string> AllowedFileExtensions => field ??= [.. Options.SourceFormats.SelectMany(f => f.Extensions).Distinct()];
 
     /// <summary>
-    /// <para>
-    /// Configures the directory containing ffmpeg binaries to use for processing.</para>
+    /// Configures the directory containing ffmpeg binaries to use for processing.
+    /// </summary>
+    /// <remarks>
     /// <para>
     /// On Windows: should contain ffmpeg.exe and ffprobe.exe.</para>
     /// <para>
     /// On Linux/macOS: should contain ffmpeg and ffprobe executables with appropriate execute permissions.</para>
-    /// </summary>
+    /// </remarks>
     /// <param name="dirPath">The directory path containing the ffmpeg executables.</param>
     /// <param name="options">Configuration options for the video processor, such as maximum number of processes.</param>
     public static void ConfigureWithFFmpegExecutables(IAbsoluteDirectoryPath dirPath, VideoProcessorConfigurationOptions? options = null)

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.Versioning;
 using PrefixClassName.MsTest;
 using Shouldly;
 using Singulink.IO;
@@ -125,13 +127,46 @@ public sealed class Tests
     }
 
     [TestMethod]
+    public void ConfigurationOptionsOutOfRange_ReportValue()
+    {
+        var ex = Should.Throw<ArgumentOutOfRangeException>(() => new DocumentPdfConversionConfigurationOptions { MaxConcurrentProcesses = 0 });
+        ex.ParamName.ShouldBe("value");
+        ex.Message.ShouldStartWith("The value is less than 1. (Parameter 'value')");
+
+        ex = Should.Throw<ArgumentOutOfRangeException>(() => new DocumentPdfConversionConfigurationOptions { ProcessPriorityClass = (ProcessPriorityClass)42 });
+        ex.ParamName.ShouldBe("value");
+        ex.Message.ShouldStartWith("The value is not a defined ProcessPriorityClass value. (Parameter 'value')");
+
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
+        {
+            ex = Should.Throw<ArgumentOutOfRangeException>(SetProcessorAffinityToZero);
+            ex.ParamName.ShouldBe("value");
+            ex.Message.ShouldStartWith("The value is zero. (Parameter 'value')");
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("linux")]
+    private static void SetProcessorAffinityToZero() => _ = new DocumentPdfConversionConfigurationOptions { ProcessorAffinity = 0 };
+
+    [TestMethod]
+    public void NullSourceFormat()
+    {
+        var ex = Should.Throw<ArgumentException>(() => new DocumentPdfConversionProcessingOptions {
+            SourceFormats = [FileFormat.Docx, null!],
+        });
+
+        ex.Message.ShouldStartWith("The value contains null.");
+    }
+
+    [TestMethod]
     public void EmptySourceFormats()
     {
         var ex = Should.Throw<ArgumentException>(() => new DocumentPdfConversionProcessingOptions {
             SourceFormats = [],
         });
 
-        ex.Message.ShouldStartWith("At least one source format must be specified.");
+        ex.Message.ShouldStartWith("The value is empty.");
     }
 
     private static void ResetRepository()

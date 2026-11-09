@@ -127,7 +127,20 @@ public sealed class Tests
             MaxPixelSize = null,
         }));
 
-        ex.Message.ShouldStartWith("At least one of Dpi or MaxPixelSize must be specified in the options.");
+        ex.ParamName.ShouldBe("options");
+        ex.Message.ShouldStartWith("PdfImageExtractionProcessingOptions.Dpi and MaxPixelSize are both null. At least one of them must be set.");
+    }
+
+    [TestMethod]
+    public void OptionsOutOfRange_ReportValue()
+    {
+        var options = PdfImageExtractionProcessingOptions.Standard;
+
+        Should.Throw<ArgumentOutOfRangeException>(() => options with { PageNumber = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => options with { Dpi = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => options with { Dpi = 2401 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => options with { MaxPixelSize = 0 }).ParamName.ShouldBe("value");
+        Should.Throw<ArgumentOutOfRangeException>(() => options with { MaxPixelSize = 16385 }).ParamName.ShouldBe("value");
     }
 
     [TestMethod]

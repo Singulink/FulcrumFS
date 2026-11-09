@@ -40,16 +40,17 @@ public abstract class VideoCodec
         hasSupportedDecoder: static () => FFprobeUtils.Configuration.SupportsH264Decoder);
 
     /// <summary>
-    /// <para>
-    /// Gets the H.265 (HEVC) video codec. Supports encoding.</para>
-    /// <para>
-    /// Note: this instance corresponds only to the 'hvc1' tag (which is more compatible); to refer to the 'hev1' tag or others, use <see cref="H265AnyTag" />.
-    /// </para><para>
-    /// Note: a video file can be losslessly converted to this tag without re-encoding, but would require remuxing.</para>
-    /// <para>
-    /// Note: these tags are only relevant when muxing into MP4 container formats - this instance won't correspond to any stream outside of an mp4 container.
-    /// </para>
+    /// Gets the H.265 (HEVC) video codec. Supports encoding.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This instance corresponds only to the 'hvc1' tag (which is more compatible); to refer to the 'hev1' tag or others, use <see cref="H265AnyTag" />.
+    /// </para><para>
+    /// A video file can be losslessly converted to this tag without re-encoding, but would require remuxing.</para>
+    /// <para>
+    /// These tags are only relevant when muxing into MP4 container formats - this instance won't correspond to any stream outside of an mp4 container.
+    /// </para>
+    /// </remarks>
     public static VideoCodec H265 { get; } = new Impl(
         name: "hevc",
         writableFileExtension: ".mp4",
@@ -59,13 +60,14 @@ public abstract class VideoCodec
         tagName: "hvc1");
 
     /// <summary>
-    /// <para>
-    /// Gets the H.265 (HEVC) video codec. Supports encoding.</para>
-    /// <para>
-    /// Note: this instance corresponds to any hevc tag (e.g., 'hev1' or 'hvc1'), and does not change tag when used as output.</para>
-    /// <para>
-    /// Note: these tags are only relevant when muxing into MP4 container formats - this instance will match all H.265 streams in any container.</para>
+    /// Gets the H.265 (HEVC) video codec. Supports encoding.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This instance corresponds to any hevc tag (e.g., 'hev1' or 'hvc1'), and does not change tag when used as output.</para>
+    /// <para>
+    /// These tags are only relevant when muxing into MP4 container formats - this instance will match all H.265 streams in any container.</para>
+    /// </remarks>
     public static VideoCodec H265AnyTag { get; } = new Impl(
         name: "hevc",
         writableFileExtension: ".mp4",

@@ -1,7 +1,7 @@
 namespace FulcrumFS;
 
-/// <content> Contains the implementations of clean functionality for the file repository. These instance methods forward to a lazily-constructed <see
-/// cref="FileRepoCleaner"/> using the repository's base directory and <see cref="FileRepoOptions.MarkerFileLogging"/> mode. </content>
+/// <content> Contains the implementations of clean functionality for the file repository. These instance methods forward to a lazily-constructed
+/// <see cref="FileRepoCleaner"/> using the repository's base directory and <see cref="FileRepoOptions.MarkerFileLogging"/> mode. </content>
 partial class FileRepo : IFileRepoCleaner
 {
     /// <summary>
@@ -58,5 +58,5 @@ partial class FileRepo : IFileRepoCleaner
     }
 
     private FileRepoCleaner GetCleaner() =>
-        _cleaner ??= new FileRepoCleaner(new FileRepoCleaningOptions(Options.BaseDirectory) { MarkerFileLogging = Options.MarkerFileLogging });
+        _cleaner ??= new FileRepoCleaner(new FileRepoCleaningOptions(BaseDirectory) { MarkerFileLogging = Options.MarkerFileLogging });
 }
