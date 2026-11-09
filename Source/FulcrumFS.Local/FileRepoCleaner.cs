@@ -137,12 +137,9 @@ public class FileRepoCleaner : IFileRepoCleaner
 
             var elc = new ExceptionListCapture(ex => ex is IOException);
 
-            // The listing is taken in full before anything is processed. The pass deletes entries of this directory as it goes (a delete hint or a committed
-            // journal takes the indeterminate markers of its files with it), and on Unix enumerating an entry deleted after the directory was read throws.
-            // Entries that disappear after the listing are skipped below like any other marker that is gone.
-            var markerInfos = _fs.CleanupDirectory.GetChildFilesInfo().ToList();
-
-            foreach (var markerInfo in markerInfos)
+            // The pass deletes entries of this directory as it goes (a delete hint or a committed journal takes the indeterminate markers of its files with
+            // it). An entry that is gone by the time it is processed is skipped below like any other marker that is gone.
+            foreach (var markerInfo in _fs.CleanupDirectory.GetChildFilesInfo())
             {
                 cancellationToken.ThrowIfCancellationRequested();
 

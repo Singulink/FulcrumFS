@@ -19,6 +19,7 @@ The repository options now work with the .NET options system: they can be bound 
 - `ImageProcessingOptions.SourceValidation` with a minimum greater than its maximum made every image fail; setting it now throws
 - The options' `BaseDirectory` is annotated as nullable, matching that it is `null` while it is not set
 - `ImageProcessingOptions.ReorientMode` rejects undefined values, and `DocumentPdfConversionProcessingOptions.SourceFormats` rejects `null` entries
+- On Linux and macOS, enumerating a repository while files were being deleted could leave other files out, and a cleanup pass could fail when a transaction ended during it
 
 ### New
 
@@ -28,7 +29,7 @@ The repository options now work with the .NET options system: they can be bound 
 - New `FileRepo.BaseDirectory` and `FileRepoCleaner.BaseDirectory`
 - New `RepoFormatVersion.Unspecified`, the value of `MinimumFormatVersion` while it is not set
 
-Requires Singulink.IO.FileSystem 3.2 or later.
+Requires Singulink.IO.FileSystem 3.2.1 or later.
 
 ## Version 2.1
 
