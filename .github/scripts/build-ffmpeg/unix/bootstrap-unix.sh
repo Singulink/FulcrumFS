@@ -14,6 +14,13 @@ build_script="$script_dir/../../../../Tools/FFmpeg/build-ffmpeg.sh"
 # Fail early if the workflow did not provide the output directory.
 : "${FFMPEG_OUTPUT_DIR:?FFMPEG_OUTPUT_DIR must be set by the workflow}"
 
+# ffmpeg.org is slow to accept connections and sometimes doesn't within the 10 seconds that the build script's release lookup allows, so runners fail it
+# now and then, and macOS ones have failed it three times in a row. A curl config file that only this build sees makes each of its curl requests retry a
+# timeout or a refused connection a few times over a few minutes. Options on curl's command line still take precedence over it.
+curl_home="$(mktemp -d)"
+printf '%s\n' 'retry = 8' 'retry-delay = 15' 'retry-connrefused' > "$curl_home/.curlrc"
+export CURL_HOME="$curl_home"
+
 # Total number of attempts (1 initial + 2 retries).
 max_attempts=3
 
