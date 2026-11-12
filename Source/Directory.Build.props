@@ -18,9 +18,32 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
+  <!--
+    The packages carry the repository's README.md with its header block replaced. nuget.org shows HTML as text and renders images only from absolute URLs on
+    its allowed hosts, so the block between the nuget-exclude-start and nuget-exclude-end comments is removed, the content of a nuget-include comment is
+    shown in its place, and the result is packed from obj/.
+  -->
+  <PropertyGroup>
+    <PackageReadmeSource>$(MSBuildThisFileDirectory)../README.md</PackageReadmeSource>
+    <GeneratedPackageReadme>$(MSBuildProjectDirectory)/obj/README.md</GeneratedPackageReadme>
+  </PropertyGroup>
+
   <ItemGroup>
-    <None Include="..\README.md" Link="README.md" Pack="true" PackagePath="\" />
+    <None Include="$(GeneratedPackageReadme)" Link="README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
+
+  <Target Name="GeneratePackageReadme" BeforeTargets="BeforeBuild;GenerateNuspec" Inputs="$(PackageReadmeSource);$(MSBuildThisFileFullPath)" Outputs="$(GeneratedPackageReadme)">
+    <PropertyGroup>
+      <_PackageReadmeText>$([System.IO.File]::ReadAllText('$(PackageReadmeSource)'))</_PackageReadmeText>
+      <_PackageReadmeText>$([System.Text.RegularExpressions.Regex]::Replace($(_PackageReadmeText), '(?s)&lt;!--\s*nuget-exclude-start.*?--&gt;.*?&lt;!--\s*nuget-exclude-end\s*--&gt;\s*', ''))</_PackageReadmeText>
+      <_PackageReadmeText>$([System.Text.RegularExpressions.Regex]::Replace($(_PackageReadmeText), '&lt;!--\s*nuget-include:\s*(.*?)\s*--&gt;', '$1'))</_PackageReadmeText>
+    </PropertyGroup>
+
+    <Error Condition="$(_PackageReadmeText.Contains('nuget-exclude')) Or $(_PackageReadmeText.Contains('nuget-include')) Or $(_PackageReadmeText.Contains('&lt;div'))" Text="The header block of README.md was not replaced in the package README. Check its nuget-exclude-start, nuget-exclude-end and nuget-include comments." />
+
+    <MakeDir Directories="$(MSBuildProjectDirectory)/obj" />
+    <WriteLinesToFile File="$(GeneratedPackageReadme)" Lines="$([MSBuild]::Escape($(_PackageReadmeText.TrimEnd())))" Overwrite="true" />
+  </Target>
 
   <PropertyGroup Label="AOT Compatibility" Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net6.0'))">
     <IsAotCompatible>true</IsAotCompatible>

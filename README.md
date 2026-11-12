@@ -1,5 +1,4 @@
-<!-- NOTE: A simplified copy of this file (no logo/images, which do not render on nuget.org) is packaged into the NuGet packages from Source/README.md. Keep the content of the two files in sync when editing. -->
-
+<!-- nuget-exclude-start: This file is also the README of the NuGet packages. nuget.org shows HTML as text and renders images only from absolute URLs on its allowed hosts. So the packaged copy leaves this block out and shows the image in the nuget-include comment below in its place (see Source/Directory.Build.props). Everything else must render on both sites. -->
 <div align="center">
 <picture>
     <source media="(prefers-color-scheme: dark)" srcset="/Resources/Fulcrum%20Logo%20366x128%20Dark.png">
@@ -7,6 +6,8 @@
     <img src="/Resources/Fulcrum%20Logo%20400x150 LightBg.png" alt="Singulink Fulcrum Logo"/>
 </picture>
 </div>
+<!-- nuget-exclude-end -->
+<!-- nuget-include: ![Singulink Fulcrum Logo](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/Fulcrum%20Logo%20400x150%20LightBg.png) -->
 
 # FulcrumFS
 
@@ -21,15 +22,15 @@ When your application commits its database transaction before the repository tra
 
 Details of each component are provided below:
 
-|| Library | Status | Package |
+| | Library | Status | Package |
 | --- | --- | --- | --- |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Core** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Documents** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Documents.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Documents/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Images** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Local** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Local.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Local/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Pdf** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
-| <img src="/Resources/FulcrumFS%20Icon%20128x128.png" alt="FulcrumFS Icon" width="32" height="32"/> | **Singulink.FulcrumFS.Videos** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
+| ![FulcrumFS Icon](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/FulcrumFS%20Icon%2032x32.png) | **Singulink.FulcrumFS** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS/) |
+| ![FulcrumFS Icon](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/FulcrumFS%20Icon%2032x32.png) | **Singulink.FulcrumFS.Core** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Core.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Core/) |
+| ![FulcrumFS Icon](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/FulcrumFS%20Icon%2032x32.png) | **Singulink.FulcrumFS.Documents** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Documents.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Documents/) |
+| ![FulcrumFS Icon](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/FulcrumFS%20Icon%2032x32.png) | **Singulink.FulcrumFS.Images** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Images.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Images/) |
+| ![FulcrumFS Icon](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/FulcrumFS%20Icon%2032x32.png) | **Singulink.FulcrumFS.Local** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Local.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Local/) |
+| ![FulcrumFS Icon](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/FulcrumFS%20Icon%2032x32.png) | **Singulink.FulcrumFS.Pdf** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Pdf.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Pdf/) |
+| ![FulcrumFS Icon](https://raw.githubusercontent.com/Singulink/FulcrumFS/main/Resources/FulcrumFS%20Icon%2032x32.png) | **Singulink.FulcrumFS.Videos** | Public | [![View nuget package](https://img.shields.io/nuget/v/Singulink.FulcrumFS.Videos.svg)](https://www.nuget.org/packages/Singulink.FulcrumFS.Videos/) |
 
 **Supported Runtimes**: .NET 10.0+
 
