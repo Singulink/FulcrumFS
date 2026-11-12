@@ -172,6 +172,8 @@ using var readStream = info.MainFile.Open(FileAccessPattern.Sequential);
 
 The commit ordering is what guarantees consistency. If a crash occurs after `dbTxn.CommitAsync()` but before `fileTxn.CommitAsync()`, the added file is still on disk and reachable through the FileId stored in the database. If a crash occurs before `dbTxn.CommitAsync()`, the file is left in an indeterminate state on disk with no database reference to it, and the next clean operation will reclaim it.
 
+The same holds when an exception skips `fileTxn.CommitAsync()`. Disposing a file transaction that was neither committed nor rolled back does not discard its files, because the database commit may have taken effect even though the call threw (a connection lost before the server's answer arrived, for example). The files are left indeterminate, and the next clean operation with a resolution callback keeps the ones a database row references and reclaims the rest. When you know the database did not commit, call `fileTxn.RollbackAsync()` to discard them at once.
+
 ## Repository Layout
 
 Files are stored in standard directories under the repository base directory and remain fully browsable in any file manager:
@@ -191,7 +193,7 @@ Files are stored in standard directories under the repository base directory and
 
 Each `FileId` maps deterministically to a sharded subdirectory under `files/`, keeping any one directory at a manageable file count even when the repository contains millions of entries. The main file is always stored as `$main` plus its original extension and variants live alongside it as named siblings (`thumbnail.jpg`, `scaled.mp4`, etc.).
 
-Periodic `FileRepoCleaner.CleanAsync` calls (e.g. on a nightly schedule) reclaim files marked indeterminate by failed or interrupted commits, along with files marked for deferred deletion past their grace period.
+Periodic `FileRepoCleaner.CleanAsync` calls (e.g. on a nightly schedule) reclaim files left indeterminate by failed or interrupted commits and by transactions that were disposed without a commit, along with files marked for deferred deletion past their grace period.
 
 ## Why Not Just Store Files Directly?
 

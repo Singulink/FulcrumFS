@@ -5,8 +5,9 @@ namespace FulcrumFS;
 /// the stage commits the transaction.
 /// </summary>
 /// <remarks>
-/// A stage belongs to its transaction and is not disposable on its own: disposing the transaction before the stage has been committed rolls the transaction
-/// back.
+/// A stage belongs to its transaction and is not disposable on its own: disposing the transaction before the stage has been committed leaves the files the
+/// transaction added and the deletions it staged indeterminate for the cleaner to resolve (see <see cref="FileRepoStagedTransaction.DisposeAsync"/>), and
+/// <see cref="FileRepoStagedTransaction.RollbackAsync(CancellationToken)"/> rolls the transaction back.
 /// </remarks>
 public sealed class FileRepoStage : IFileRepoStage
 {
@@ -51,8 +52,10 @@ public sealed class FileRepoStage : IFileRepoStage
     /// disk, it is committed although the call threw, and the cleaner deletes its files without asking. The added files are resolved through the callback
     /// in both cases. An exception thrown by a <see cref="FileRepo.TransactionCompletionFailed"/> handler propagates once the transaction is committed.</para>
     /// <para>
-    /// An <see cref="OperationCanceledException"/> is thrown before the commit has started: the transaction is still staged, and disposing it rolls it back.
-    /// Pass <see cref="CancellationToken.None"/> here, since the application's database has committed.</para>
+    /// An <see cref="OperationCanceledException"/> is thrown before the commit has started: the transaction is still staged, and the call can be made
+    /// again. Disposing the transaction instead does not roll it back: it leaves the record of the deletions and the added files for the cleaner, which
+    /// resolves them through the resolution callback. Pass <see cref="CancellationToken.None"/> here, since the application's database has committed, so that a
+    /// cancellation does not leave to the cleaner what the commit would have finished.</para>
     /// <para>
     /// On a version 1 repository, which has no journal (see <see cref="FileRepoStagedTransaction"/>), the added files are committed first and then each
     /// deletion is committed as by <see cref="FileRepoTransaction.CommitAsync(CancellationToken)"/>; every failure is reported rather than thrown.</para>

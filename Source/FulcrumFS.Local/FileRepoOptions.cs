@@ -168,8 +168,8 @@ public sealed class FileRepoOptions
     /// An operation waits when it finds the repository inaccessible, for example after a health check has found that its volume stopped answering (see
     /// <see cref="HealthCheckInterval"/>): it retries initializing the repository once a second until it succeeds or this time is up.</para>
     /// <para>
-    /// A commit or a rollback of a transaction, including the rollback made by disposing one, needs access for each of its files, and its files share this wait
-    /// instead of having one each. Only time spent getting access counts (waiting for it, and the attempts to reach a volume that does not answer), not the
+    /// A commit or a rollback of a transaction needs access for each of its files, and its files share this wait instead of having one each (disposing a
+    /// transaction rolls nothing back and does not wait for access). Only time spent getting access counts (waiting for it, and the attempts to reach a volume that does not answer), not the
     /// time the files take to commit, so a large commit on slow but healthy storage is never cut short, and an outage is ridden out wherever in the commit it
     /// happens, as long as the commit's waits for its outages together stay within this time. Once the time is used up, each further file is attempted once
     /// without waiting and, if the repository is still inaccessible, fails with the same <see cref="TimeoutException"/>, which the commit or rollback reports

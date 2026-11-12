@@ -6,7 +6,7 @@ Cleanup is the background maintenance pass that reclaims deferred deletions, swe
 
 ### Why cleanup is required
 
-FulcrumFS intentionally defers physical deletions and tolerates orphaned files from the commit ordering rule, so a repository relies on a periodic cleaner to reclaim space and finish recovery work. Without it, deleted files would accumulate on disk indefinitely, and any file orphaned by a crash between the database and repository commits would never be reclaimed.
+FulcrumFS intentionally defers physical deletions and tolerates orphaned files from the commit ordering rule, so a repository relies on a periodic cleaner to reclaim space and finish recovery work. Without it, deleted files would accumulate on disk indefinitely, and any file orphaned by a crash between the database and repository commits would never be reclaimed. Neither would the files of a transaction that was disposed without a commit, for example because a request failed: disposal does not roll a transaction back, it leaves its files for the cleaner to resolve.
 
 > [!NOTE]
 > The cleaner is safe to run as often as you like because every step is idempotent and forward-only. Overlapping runs, extra runs, and runs against a quiescent repository are all harmless. See [Crash Recovery and Invariants](../concepts/crash-recovery.md).
@@ -32,7 +32,7 @@ A pass also applies delete journals, which [staged transactions](../concepts/com
 
 ## Resolving Indeterminate Files
 
-When a commit or rollback fails (typically because of a transient file system error), affected files are marked indeterminate and kept accessible so a reader holding the <xref:FulcrumFS.FileId> can still serve them. Resolution decides whether each one should ultimately survive or be reclaimed; that decision belongs to the application, because only the application knows whether the owning database row still exists.
+When a commit or rollback fails (typically because of a transient file system error), affected files are marked indeterminate and kept accessible so a reader holding the <xref:FulcrumFS.FileId> can still serve them. The files of a transaction that ended without a commit or a rollback are indeterminate too: one that was open when the process ended, and one that was disposed without either, typically because an exception skipped its commit. Disposal does not roll such a transaction back, because the database commit may have taken effect although its call threw (see [A Database Commit with an Unknown Outcome](../concepts/commit-model.md#a-database-commit-with-an-unknown-outcome)). Resolution decides whether each file should ultimately survive or be reclaimed; that decision belongs to the application, because only the application knows whether the owning database row still exists.
 
 Pass a callback to <xref:FulcrumFS.FileRepo.CleanAsync*> that decides, per <xref:FulcrumFS.FileId>, what to do. Both synchronous and asynchronous callback overloads are available.
 
@@ -50,6 +50,8 @@ await repo.CleanAsync(
 
 > [!IMPORTANT]
 > The resolution callback must consult the same database (or other source of truth) that owns the file references. Returning <xref:FulcrumFS.IndeterminateResolution.Delete> for a file that a live database row references would orphan the row's reference. When in doubt, return <xref:FulcrumFS.IndeterminateResolution.Keep>; an extra orphan file costs disk but never breaks correctness.
+
+A pass without a callback leaves indeterminate files exactly as they are. Since every transaction that is disposed without a commit or a rollback leaves its files indeterminate, a repository that is only ever cleaned without a callback keeps the files of every request that failed before its commit, and never carries out the deletions of such a request either. Schedule the pass with a callback, as in [Scheduling](#scheduling) below. An application that knows its database did not commit can also discard a transaction's files at once with <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> instead of leaving them to the cleaner (see [Rolling Back](adding-files.md#rolling-back)).
 
 ## Cleaning Without a Repository Instance
 

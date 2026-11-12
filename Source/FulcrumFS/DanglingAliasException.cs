@@ -5,8 +5,10 @@ namespace FulcrumFS;
 /// <summary>
 /// The exception that is thrown when a variant alias is encountered whose source data file is missing from the repository. This always indicates repository
 /// corruption: in normal operation every code path that could remove the source (deletion, retirement, rollback) is coordinated against the aliases pointing
-/// at it so this state is unreachable. See the <see cref="IFileRepo.CorruptionDetected"/> event for programmatic discovery of these (and other) corruption
-/// conditions across all fetch and add operations.
+/// at it so this state is unreachable. A fetch does not throw it for an alias that a retirement of its source is promoting or re-pointing at that moment:
+/// it follows the retirement to the content the variant resolves to, and throws only for an alias that still has no source data file, whether or not its
+/// source is retired. See the <see cref="IFileRepo.CorruptionDetected"/> event for programmatic discovery of these (and other) corruption conditions across
+/// all fetch and add operations.
 /// </summary>
 public class DanglingAliasException : RepoFileNotFoundException
 {

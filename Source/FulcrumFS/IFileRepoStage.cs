@@ -5,8 +5,9 @@ namespace FulcrumFS;
 /// Committing the stage commits the transaction.
 /// </summary>
 /// <remarks>
-/// A stage belongs to its transaction and is not disposable on its own: disposing the transaction before the stage has been committed rolls the transaction
-/// back.
+/// A stage belongs to its transaction and is not disposable on its own: disposing the transaction before the stage has been committed leaves the files the
+/// transaction added and the deletions it staged for a cleanup pass to resolve (see <see cref="IFileRepoStagedTransaction"/>), and
+/// <see cref="IFileRepoStagedTransaction.RollbackAsync(CancellationToken)"/> rolls the transaction back.
 /// </remarks>
 public interface IFileRepoStage
 {
@@ -30,8 +31,9 @@ public interface IFileRepoStage
     /// a <see cref="IFileRepo.TransactionCompletionFailed"/> handler throws propagates once the transaction is committed, and changes nothing about
     /// that.</para>
     /// <para>
-    /// An <see cref="OperationCanceledException"/> is different: it means that the commit was not started, so the transaction is still staged, and disposing
-    /// it rolls it back. Pass <see cref="CancellationToken.None"/> here, or a cancellation could discard deletions that the database has committed.</para>
+    /// An <see cref="OperationCanceledException"/> is different: it means that the commit was not started, so the transaction is still staged and the call
+    /// can be made again. Disposing the transaction instead does not roll it back but leaves its files for a cleanup pass to resolve through the resolution
+    /// callback. Pass <see cref="CancellationToken.None"/> here, or a cancellation leaves to the cleanup pass what the commit would have finished.</para>
     /// </remarks>
     /// <exception cref="IOException">The deletions could not be committed.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled before the commit had started. Nothing has been committed.</exception>

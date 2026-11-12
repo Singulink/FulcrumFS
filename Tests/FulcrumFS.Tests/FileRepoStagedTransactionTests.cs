@@ -371,15 +371,13 @@ public sealed class FileRepoStagedTransactionTests
     }
 
     // ---------------------------------------------------------------------------------------------------------------
-    // Rolling back
+    // Rolling back, and disposing without a commit or a rollback
     // ---------------------------------------------------------------------------------------------------------------
 
     [TestMethod]
-    [DataRow(false, RepoFormatVersion.Version1)]
-    [DataRow(false, RepoFormatVersion.Version2)]
-    [DataRow(true, RepoFormatVersion.Version1)]
-    [DataRow(true, RepoFormatVersion.Version2)]
-    public async Task RollbackAfterStage_RemovesDeletionRecordAndAdds_LeavesFilesIntact(bool byDispose, RepoFormatVersion formatVersion)
+    [DataRow(RepoFormatVersion.Version1)]
+    [DataRow(RepoFormatVersion.Version2)]
+    public async Task RollbackAfterStage_RemovesDeletionRecordAndAdds_LeavesFilesIntact(RepoFormatVersion formatVersion)
     {
         var repoDir = NewRepoDir();
         var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
@@ -398,17 +396,9 @@ public sealed class FileRepoStagedTransactionTests
             var stage = await txn.StageAsync(TestContext.CancellationToken);
             ShouldBeStaged(repoDir, formatVersion, fileIds);
 
-            if (byDispose)
-            {
-                await txn.DisposeAsync();
-                await Should.ThrowAsync<ObjectDisposedException>(async () => await stage.CommitAsync(TestContext.CancellationToken));
-            }
-            else
-            {
-                await txn.RollbackAsync(TestContext.CancellationToken);
-                await Should.ThrowAsync<InvalidOperationException>(async () => await stage.CommitAsync(TestContext.CancellationToken));
-                await txn.DisposeAsync();
-            }
+            await txn.RollbackAsync(TestContext.CancellationToken);
+            await Should.ThrowAsync<InvalidOperationException>(async () => await stage.CommitAsync(TestContext.CancellationToken));
+            await txn.DisposeAsync();
 
             CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
             FileDir(repoDir, added).State.ShouldNotBe(EntryState.Exists);
@@ -416,6 +406,76 @@ public sealed class FileRepoStagedTransactionTests
             foreach (var fileId in fileIds)
                 FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
 
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Disposing a staged transaction whose stage was never committed is not a rollback: the application may have committed its database after staging,
+    /// so the record of the deletions and the added file are released and left for the cleaner, as they are when the process ends there (see
+    /// <see cref="CrashBetweenStageAndCommit_CleanerResolvesTheUnheldRecordThroughTheCallback"/>). The stage can no longer be committed.
+    /// </summary>
+    [TestMethod]
+    [DataRow(RepoFormatVersion.Version1)]
+    [DataRow(RepoFormatVersion.Version2)]
+    public async Task DisposeAfterStage_WithoutCommitOrRollback_LeavesTheDeletionRecordAndTheAddsForTheCleaner(RepoFormatVersion formatVersion)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileIds = await AddSampleFilesAsync(repo, 2);
+
+            var txn = await repo.BeginStagedTransactionAsync();
+            var added = await AddSampleFileAsync(txn);
+
+            foreach (var fileId in fileIds)
+                await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+            var stage = await txn.StageAsync(TestContext.CancellationToken);
+            ShouldBeStaged(repoDir, formatVersion, fileIds);
+
+            await txn.DisposeAsync();
+            await Should.ThrowAsync<ObjectDisposedException>(async () => await stage.CommitAsync(TestContext.CancellationToken));
+
+            // Nothing was rolled back: the record of the deletions and the marker of the add are still there, and nobody holds them.
+            ShouldBeStaged(repoDir, formatVersion, fileIds, held: false);
+            IndeterminateMarker(repoDir, added).State.ShouldBe(EntryState.Exists);
+            IsHeld(IndeterminateMarker(repoDir, added)).ShouldBeFalse();
+            FileDir(repoDir, added).State.ShouldBe(EntryState.Exists);
+
+            foreach (var fileId in fileIds)
+                FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+
+            var entries = await CollectAsync(repo);
+            entries.Select(e => e.FileId).ShouldBe([.. fileIds, added], ignoreOrder: true);
+            entries.ShouldAllBe(e => e.IsIndeterminate && !e.IsPendingDeletion);
+
+            // The application's database did commit, so the callback keeps the added file and deletes the others.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return id == added ? IndeterminateResolution.Keep : IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([.. fileIds, added], ignoreOrder: true);
+
+            foreach (var fileId in fileIds)
+                FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+
+            FileDir(repoDir, added).State.ShouldBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
             failures.ShouldBeEmpty();
         }
         finally

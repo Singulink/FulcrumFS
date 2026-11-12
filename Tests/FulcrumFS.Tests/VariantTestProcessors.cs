@@ -49,6 +49,40 @@ internal sealed class RewriteProcessor : FileProcessor
 }
 
 /// <summary>
+/// A processor that runs an action and then produces a changed data file like <see cref="RewriteProcessor"/>. The action runs while the add that uses the
+/// processor is between checking its variants and storing them, with its locks held, so a test can change the repository there as something that does not
+/// take those locks (a cleanup pass) can.
+/// </summary>
+internal sealed class ActingRewriteProcessor : FileProcessor
+{
+    private readonly Action _action;
+    private readonly byte[] _content;
+
+    public ActingRewriteProcessor(Action action, byte[] content)
+    {
+        _action = action;
+        _content = content;
+    }
+
+    public override IReadOnlyList<string> AllowedFileExtensions => [];
+
+    protected override async Task<FileProcessingResult> ProcessAsync(FileProcessingContext context)
+    {
+        _action();
+
+        var workFile = context.GetNewWorkFile(context.Extension);
+        workFile.ParentDirectory.Create();
+
+        var stream = workFile.OpenAsyncStream(FileMode.CreateNew, FileAccess.Write, FileShare.None);
+
+        await using (stream.ConfigureAwait(false))
+            await stream.WriteAsync(_content).ConfigureAwait(false);
+
+        return FileProcessingResult.File(workFile, hasChanges: true);
+    }
+}
+
+/// <summary>
 /// A processor that reports a stage display message followed by a progress fraction (passing the source through unchanged), used to test message reporting
 /// through the pipeline.
 /// </summary>

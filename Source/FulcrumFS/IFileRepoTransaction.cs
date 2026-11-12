@@ -10,7 +10,15 @@ namespace FulcrumFS;
 /// <see cref="IFileRepoCleaner.CleanAsync(TimeSpan, Func{FileId, Task{IndeterminateResolution}}?, CancellationToken)"/>, and so does a file whose deletion
 /// did not finish committing.</para>
 /// <para>
-/// Disposing the transaction rolls it back unless it has been committed.</para>
+/// A transaction ends with <see cref="CommitAsync(CancellationToken)"/> or <see cref="RollbackAsync(CancellationToken)"/>. Disposing it without either does
+/// not roll it back. A transaction is disposed that way when something failed before its commit, and it cannot know whether that was before or after the
+/// application's database committed: a database commit that has taken effect on the server still throws if, for example, the connection is lost before the
+/// answer arrives. Implementations must therefore leave the files the transaction added and the files it deleted in the state that a process which ended at
+/// that point leaves them in: readable, reported as indeterminate by <see cref="IFileRepo.EnumerateFilesAsync(CancellationToken)"/>, and resolved by a
+/// cleanup pass through the resolution callback, which keeps the files the database references and deletes the others. A pass without a callback leaves
+/// them as they are. An application that knows that its database did not commit calls <see cref="RollbackAsync(CancellationToken)"/> before the transaction
+/// is disposed, which discards them at once. Disposing a transaction that has been committed or rolled back, or that added and deleted nothing, does
+/// nothing, and disposal does not throw.</para>
 /// </remarks>
 public interface IFileRepoTransaction : IAsyncDisposable
 {
@@ -52,7 +60,8 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// <remarks>
     /// <para>
     /// The repository generates the new file's ID. The file is durable once the add returns: an implementation must not lose it after that, because the
-    /// application may commit a database row that references it next. If the transaction is rolled back instead of committed, the file is deleted.</para>
+    /// application may commit a database row that references it next. If the transaction is rolled back instead of committed, the file is deleted; if it is
+    /// disposed without either, the file is left indeterminate for a cleanup pass to resolve.</para>
     /// <para>
     /// The files of the returned group know their sizes without storage access or a network round trip (see
     /// <see cref="IRepoFile.GetLengthAsync(CancellationToken)"/>).</para>
@@ -146,18 +155,21 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// therefore committed or indeterminate, and none has been rolled back.</para>
     /// <para>
     /// What has happened when this method throws depends on the exception. An <see cref="OperationCanceledException"/> means that nothing has been
-    /// committed: the transaction is still open, and disposing it rolls it back. So once the application's database has committed, pass
-    /// <see cref="CancellationToken.None"/>, or a cancellation could discard files that the database references. Any other exception comes from a
+    /// committed: the transaction is still open and can be committed again. Disposing it instead does not roll it back but leaves its files indeterminate
+    /// for a cleanup pass to resolve, so once the application's database has committed, pass <see cref="CancellationToken.None"/>, or a cancellation
+    /// leaves to the cleanup pass what the commit would have finished. Any other exception comes from a
     /// <see cref="IFileRepo.TransactionCompletionFailed"/> handler that threw, once every file had been attempted, or from the repository having been
     /// disposed. Neither means that the transaction was rolled back: every file is committed or left indeterminate as above, and disposing the transaction
     /// rolls nothing back.</para>
     /// <para>
     /// Committing a transaction that has itself been disposed is an error of the caller and throws an <see cref="ObjectDisposedException"/> as well: the
-    /// call commits nothing, and a transaction that was disposed without having been committed was rolled back by its disposal.</para>
+    /// call commits nothing, and a transaction that was disposed without having been committed or rolled back left its files indeterminate when it was
+    /// disposed.</para>
     /// </remarks>
     /// <exception cref="OperationCanceledException">The token was cancelled before the commit had started. Nothing has been committed.</exception>
-    /// <exception cref="ObjectDisposedException">The transaction has been disposed: nothing is committed. Or the repository has been disposed: the files that
-    /// had not been committed yet are left indeterminate.</exception>
+    /// <exception cref="ObjectDisposedException">The transaction has been disposed: nothing is committed, and what it had not committed or rolled back was
+    /// left indeterminate when it was disposed. Or the repository has been disposed: the files that had not been committed yet are left
+    /// indeterminate.</exception>
     Task CommitAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -165,9 +177,14 @@ public interface IFileRepoTransaction : IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">A cancellation token that cancels the operation.</param>
     /// <remarks>
+    /// <para>
+    /// The files the transaction added are deleted now, and the files it deleted stay in the repository as if the transaction had not deleted them. Rolling
+    /// back is how an application that knows that its database did not commit discards the transaction's files at once: disposing the transaction without
+    /// rolling it back does not discard them but leaves them indeterminate for a cleanup pass to resolve (see <see cref="IFileRepoTransaction"/>). Do not
+    /// roll back once the database commit has been attempted and its outcome is not known, or files that a committed row references are deleted.</para>
+    /// <para>
     /// A failure to roll back an individual file is not thrown: the file stays accessible in an indeterminate state for the next cleanup pass to resolve, and
-    /// the failure is reported through <see cref="IFileRepo.TransactionCompletionFailed"/>. Disposing the transaction without committing it rolls it back as
-    /// well.
+    /// the failure is reported through <see cref="IFileRepo.TransactionCompletionFailed"/>.</para>
     /// </remarks>
     Task RollbackAsync(CancellationToken cancellationToken = default);
 }

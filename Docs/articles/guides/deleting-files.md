@@ -26,7 +26,9 @@ await dbTxn.CommitAsync();   // Database first.
 await txn.CommitAsync();     // Repository second.
 ```
 
-If the transaction rolls back instead of committing, the deletion is abandoned and the file remains.
+If the transaction is rolled back with <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> instead of committed, the deletion is abandoned and the file remains.
+
+If the transaction is disposed without a commit or a rollback, for example because the database commit threw, the deletion is neither made nor abandoned. The repository cannot know whether the database committed, so the file stays in place, readable and indeterminate, with its deletion still on record, and the next cleanup pass with a resolution callback deletes it if its row is gone and keeps it if the row is still there. See [A Database Commit with an Unknown Outcome](../concepts/commit-model.md#a-database-commit-with-an-unknown-outcome).
 
 #### When the file may be missing
 
@@ -71,7 +73,7 @@ await dbTxn.CommitAsync();            // Database first.
 await stage.CommitAsync();            // Repository second.
 ```
 
-<xref:FulcrumFS.FileRepoStagedTransaction.DeleteAsync*> and <xref:FulcrumFS.FileRepoStagedTransaction.TryDeleteAsync*> behave like their ordinary counterparts, including the exception for a file that is not there. Once the stage is committed, the journal is the delete record of all of its files: in the deferred delete modes the cleaner deletes them once the journal is older than the delete delay, and in <xref:FulcrumFS.DeleteMode.Immediate> mode the commit deletes them straight away. See [Staged Transactions](../concepts/commit-model.md#staged-transactions) for the full model.
+<xref:FulcrumFS.FileRepoStagedTransaction.DeleteAsync*> and <xref:FulcrumFS.FileRepoStagedTransaction.TryDeleteAsync*> behave like their ordinary counterparts, including the exception for a file that is not there. Once the stage is committed, the journal is the delete record of all of its files: in the deferred delete modes the cleaner deletes them once the journal is older than the delete delay, and in <xref:FulcrumFS.DeleteMode.Immediate> mode the commit deletes them straight away. <xref:FulcrumFS.FileRepoStagedTransaction.RollbackAsync*> removes the journal and abandons the deletions. A transaction that is disposed after staging without its stage having been committed, or the transaction rolled back, leaves the journal staged, and the cleaner resolves each file it lists through the resolution callback; one that is disposed before staging has recorded nothing, and its deletions are forgotten. See [Staged Transactions](../concepts/commit-model.md#staged-transactions) for the full model.
 
 #### Deleting a file another transaction is adding
 

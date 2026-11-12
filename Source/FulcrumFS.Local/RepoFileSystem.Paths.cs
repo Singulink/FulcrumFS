@@ -83,18 +83,6 @@ partial class RepoFileSystem
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> if an in-group delete marker (<c>{variantId}.del</c>) exists for the variant. A delete marker marks the variant as
-    /// permanently retired. Prefer the <c>IsRetired</c> flag returned by <c>FindDataFileAsync</c> when also retrieving the data file; this helper is for
-    /// cases where only the delete marker state is needed (e.g. checking whether an alias's source variant has been retired) and a single-file existence
-    /// probe is cheaper than a directory glob enumeration.
-    /// </summary>
-    public bool IsVariantRetired(FileId fileId, string variantId)
-    {
-        Debug.Assert(VariantId.IsValidAndNormalized(variantId), "variantId must be normalized.");
-        return GetInGroupDeleteMarker(fileId, variantId).State is EntryState.Exists;
-    }
-
-    /// <summary>
     /// Attempts to parse a rebase marker filename of the form <c>{sourceVariantId}.{chosenVariantId}.rebase</c>.
     /// </summary>
     public static bool TryParseRebaseMarker(

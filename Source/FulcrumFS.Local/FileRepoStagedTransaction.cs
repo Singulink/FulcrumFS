@@ -16,12 +16,14 @@ namespace FulcrumFS;
 /// <para>
 /// The commit ordering rule is the same as for an ordinary transaction: call <see cref="StageAsync(CancellationToken)"/>, commit the database, then commit
 /// the <see cref="FileRepoStage"/> it returned. A staged transaction has no commit method of its own, so it cannot be committed without being staged first.
-/// When nothing needs to happen between the two steps, <see cref="StageAndCommitAsync(CancellationToken)"/> performs both. Disposing the transaction before
-/// its stage has been committed rolls it back.</para>
+/// When nothing needs to happen between the two steps, <see cref="StageAndCommitAsync(CancellationToken)"/> performs both.</para>
 /// <para>
 /// Files added by a staged transaction are tracked per file, as in an ordinary transaction, and are committed or rolled back together with its deletions. If
 /// the process ends after staging and before the stage has been committed, the cleaner resolves the files listed in the journal through the callback passed
-/// to <see cref="FileRepo.CleanAsync(TimeSpan, Func{FileId, Task{IndeterminateResolution}}?, CancellationToken)"/>, as it does for indeterminate files.</para>
+/// to <see cref="FileRepo.CleanAsync(TimeSpan, Func{FileId, Task{IndeterminateResolution}}?, CancellationToken)"/>, as it does for indeterminate files.
+/// Disposing the transaction after staging and before its stage has been committed leaves the same state and does not roll the transaction back, because
+/// the transaction cannot know whether the application's database committed before it was disposed (see <see cref="DisposeAsync"/>); only
+/// <see cref="RollbackAsync(CancellationToken)"/> rolls it back.</para>
 /// <para>
 /// Other repository operations do not consult journals, except <see cref="FileRepo.EnumerateFilesAsync(CancellationToken)"/>: it reports a file whose
 /// deletion is staged as indeterminate, and one whose deletion a staged transaction committed in a deferred delete mode as pending deletion. Another
@@ -233,7 +235,9 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// the stage only commits the files it added.</para>
     /// <para>
     /// A failure to write the journal is thrown, and so is a cancellation. Nothing has been staged in that case, and the journal that could not be completed
-    /// is removed: the transaction can be staged again or rolled back, disposing it rolls it back, and the application must not commit its database.</para>
+    /// is removed: the transaction can be staged again or rolled back, and the application must not commit its database. Disposing the transaction then
+    /// records nothing for its deletions, which it still holds only in memory, and leaves the files it added indeterminate (see
+    /// <see cref="DisposeAsync"/>); roll it back first to discard them at once.</para>
     /// <para>
     /// On a version 1 repository the per-file markers described on <see cref="FileRepoStagedTransaction"/> are written instead of a journal. A failure to
     /// write one is thrown in the same way, after the markers written before it have been removed again. The marker of a file that another transaction has
@@ -288,9 +292,10 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// returned stage, and fails in the same ways.</para>
     /// <para>
     /// The stage is not returned, so a commit that failed cannot be made again, and calling this method again then throws an
-    /// <see cref="InvalidOperationException"/> because the transaction is staged. When this method throws, dispose the transaction: that rolls it back,
-    /// unless the commit had started and failed, in which case it leaves the transaction's files for the cleaner as described on
-    /// <see cref="FileRepoStage.CommitAsync(CancellationToken)"/>. Call the two methods separately if a failed commit is to be retried.</para>
+    /// <see cref="InvalidOperationException"/> because the transaction is staged. When this method throws, dispose the transaction: that leaves its
+    /// files for the cleaner, as described on <see cref="DisposeAsync"/>, and on <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> if the commit
+    /// had started and failed. A caller that wants them discarded at once calls <see cref="RollbackAsync(CancellationToken)"/> first, which rolls the
+    /// transaction back unless the commit had started. Call the two methods separately if a failed commit is to be retried.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
     /// <exception cref="RepoFileBusyException">The transaction could not be staged, as described on <see cref="StageAsync(CancellationToken)"/>. Nothing has
@@ -315,6 +320,11 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     /// nothing, because the application has committed its database by then: a commit that failed can still be retried, and if it is not, disposing the
     /// transaction leaves its files indeterminate for the cleaner to resolve.</para>
     /// <para>
+    /// Rolling back is how an application that knows that its database did not commit discards the transaction's files at once: disposing the transaction
+    /// without rolling it back does not discard them but leaves them for the cleaner to resolve (see <see cref="DisposeAsync"/>). Do not roll back once
+    /// the database commit has been attempted and its outcome is not known, or files that a committed row references are deleted and deletions that it
+    /// committed are abandoned.</para>
+    /// <para>
     /// Failures to roll back individual files or to delete the journal are not thrown; they are reported through
     /// <see cref="FileRepo.TransactionCompletionFailed"/>, as for an ordinary transaction, and the affected files are left for the cleaner. If the repository
     /// cannot be accessed, the rollback waits for it for up to <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of its files, as the
@@ -323,29 +333,54 @@ public sealed class FileRepoStagedTransaction : IFileRepoStagedTransaction
     public Task RollbackAsync(CancellationToken cancellationToken = default) => RollbackAsync(Repository, cancellationToken);
 
     /// <summary>
-    /// Disposes the transaction, rolling it back unless its stage has been committed.
+    /// Disposes the transaction. A transaction that was neither committed nor rolled back is not rolled back: the files it added and the deletions it
+    /// staged are left indeterminate for the cleaner to resolve.
     /// </summary>
     /// <remarks>
-    /// If <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> started the commit and failed, the transaction is not rolled back: its handles are
-    /// released and its files are left for the cleaner, which resolves them through the resolution callback, or deletes the files the journal lists without
-    /// asking if the journal had already been renamed to committed when the commit failed.
+    /// <para>
+    /// A transaction is disposed without having been committed when something failed before its commit, and it cannot know whether that was before or after
+    /// the application's database committed: a database commit that has taken effect on the server still throws if, for example, the connection is lost
+    /// before the answer arrives. Rolling back then would delete files that a committed row references and discard the record of deletions that the
+    /// database has committed. So disposal only releases what the transaction holds, which is exactly the state that a process which ended at this point
+    /// leaves:</para>
+    /// <list type="bullet">
+    /// <item><description>Each file the transaction added keeps its indeterminate marker, which nobody holds any more.</description></item>
+    /// <item><description>If the transaction was staged, its staged journal stays in place with nobody holding it. On a version 1 repository, which has no
+    /// journals, each deleted file keeps its indeterminate marker instead.</description></item>
+    /// <item><description>If the transaction was not staged, its deletions exist only in memory: nothing was recorded for them, so nothing happens to
+    /// those files and they are not indeterminate. The application cannot have committed its database in the order the transaction requires, since staging
+    /// comes first.</description></item>
+    /// </list>
+    /// <para>
+    /// The files stay readable, <see cref="FileRepo.EnumerateFilesAsync(CancellationToken)"/> reports the added files and the files whose deletion was
+    /// staged as indeterminate, and the next cleanup pass that is given a resolution callback (see
+    /// <see cref="FileRepo.CleanAsync(TimeSpan, Func{FileId, Task{IndeterminateResolution}}?, CancellationToken)"/>) asks it about each of them: it keeps
+    /// the files the database references and deletes the others. A pass without a callback leaves them as they are, so a repository that is never cleaned
+    /// with a callback keeps the files of every transaction that was disposed this way.</para>
+    /// <para>
+    /// An application that knows that its database did not commit calls <see cref="RollbackAsync(CancellationToken)"/> before the transaction is
+    /// disposed, which discards the added files, the recorded deletions and the journal at once. Disposing a transaction that has been committed or rolled
+    /// back, or that added and deleted nothing, does nothing.</para>
+    /// <para>
+    /// If <see cref="FileRepoStage.CommitAsync(CancellationToken)"/> started the commit and failed, the files are left for the cleaner in the same way,
+    /// which resolves them through the resolution callback, or deletes the files the journal lists without asking if the journal had already been renamed
+    /// to committed when the commit failed.</para>
+    /// <para>
+    /// Disposal waits for a call on the transaction that is still running. It does not throw and reports nothing through
+    /// <see cref="FileRepo.TransactionCompletionFailed"/>, and it needs no access to the repository.</para>
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
         if (_isDisposed)
             return;
 
-        var repository = Repository;
         _isDisposed = true;
 
-        try
-        {
-            await RollbackAsync(repository, default).ConfigureAwait(false);
-        }
-        catch { }
-
-        // Release whatever is still held: everything after a commit that failed and was not retried, or anything a failed rollback did not release.
-        // Releasing without completing leaves the files indeterminate, which the cleaner resolves.
+        // Release whatever is still held without completing it, which leaves the files indeterminate for the cleaner to resolve: everything of a
+        // transaction that was neither committed nor rolled back, everything after a commit that failed and was not retried, or anything a failed rollback
+        // did not release. The transaction cannot tell whether the application's database committed, so it must not delete the added files or discard the
+        // record of the deletions. Releasing the handles is also what lets the cleaner in: while they are held it takes the transaction for an active one.
+        // Deletions that were never staged are only in memory, so there is nothing to release for them.
         using (await _sync.LockAsync().ConfigureAwait(false))
         {
             await _adds.ReleaseIndeterminateMarkersAsync().ConfigureAwait(false);

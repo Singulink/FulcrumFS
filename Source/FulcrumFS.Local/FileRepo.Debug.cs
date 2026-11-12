@@ -1,9 +1,10 @@
 namespace FulcrumFS;
 
 /// <summary>
-/// Identifies a checkpoint in the delete/rebase flow (or in repository initialization, health checking, and the deletions and commits of transactions) at
-/// which a test may observe progress or inject a simulated crash or failure by throwing from <see cref="FileRepo.DebugStepHook"/>. The hook is
-/// <see langword="internal"/> and is never set in production use; it is exercised only by the test assembly via <c>InternalsVisibleTo</c>. Because the
+/// Identifies a checkpoint in the delete/rebase flow (or in repository initialization, health checking, the deletions and commits of transactions, and the
+/// fetches of variants) at which a test may observe progress or inject a simulated crash or failure by throwing from <see cref="FileRepo.DebugStepHook"/>,
+/// or change the repository as a concurrent operation would. The hook is <see langword="internal"/> and is never set in production use; it is exercised
+/// only by the test assembly via <c>InternalsVisibleTo</c>. Because the
 /// delete/rebase flow is strictly forward-only (every step persists a marker and never compensates on failure), throwing from the hook at a checkpoint
 /// leaves exactly the on-disk state a real crash would, which lets recovery (cleaner rollforward, or the add/delete optimistic rollforward) be tested
 /// faithfully.
@@ -91,6 +92,30 @@ internal enum DebugStep
     /// finished as the journal's.
     /// </summary>
     DeleteJournalWritten,
+
+    /// <summary>
+    /// A fetch of a variant, or an add, has read an alias marker from a variant's slot and is about to look at the data file of its source: every read of
+    /// a slot until it is steady raises it for an alias marker, and so does an add for the marker of its source variant before it looks at the root. A
+    /// fetch calls the hook with no lock held, so it can run a whole retirement of the source; an add calls it with its variant locks held, which a cleanup
+    /// pass does not take, so it can run a pass that finishes an interrupted retirement of the source. Either way the caller then goes on with a marker
+    /// that is no longer on disk, which is what the same thing running at this moment on another thread leaves it with.
+    /// </summary>
+    VariantAliasMarkerRead,
+
+    /// <summary>
+    /// A fetch of a variant, or an add, has found the source data file of an alias marker it read missing, and is about to read the variant's slot
+    /// again. A test can change the slot in the hook, as a retirement that finished just before does, or leave it alone. Not raised when the same marker
+    /// is found with its source still missing, which ends the reading: the slot is read once more than this step is raised, counting a read that an add
+    /// made before it started reading the slot until steady.
+    /// </summary>
+    VariantAliasSourceMissing,
+
+    /// <summary>
+    /// A fetch of a file group has listed alias markers whose source data file is not in the same listing, at least one of them not in the listing before
+    /// under the same name, and is about to list the group again. A test can change the group in the hook or leave it alone. Not raised when the fetch
+    /// reports the dangling aliases instead of listing again, so the fetch lists the group once more than this step is raised.
+    /// </summary>
+    GroupAliasSourceMissing,
 }
 
 /// <content>

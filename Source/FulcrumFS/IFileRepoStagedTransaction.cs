@@ -12,9 +12,16 @@ namespace FulcrumFS;
 /// staged transaction has no commit method of its own, so it cannot be committed without being staged first. When nothing needs to happen between the two
 /// steps, <see cref="StageAndCommitAsync(CancellationToken)"/> performs both.</para>
 /// <para>
-/// Disposing the transaction before its stage has been committed rolls it back. If the process ends after staging and before the stage has been committed, the
-/// files the transaction added or deleted are resolved by a cleanup pass through the callback passed to
-/// <see cref="IFileRepoCleaner.CleanAsync(TimeSpan, Func{FileId, Task{IndeterminateResolution}}?, CancellationToken)"/>.</para>
+/// If the process ends after staging and before the stage has been committed, the files the transaction added or deleted are resolved by a cleanup pass
+/// through the callback passed to <see cref="IFileRepoCleaner.CleanAsync(TimeSpan, Func{FileId, Task{IndeterminateResolution}}?, CancellationToken)"/>.
+/// Disposing the transaction before its stage has been committed must leave the same state and not roll the transaction back, for the reason given on
+/// <see cref="IFileRepoTransaction"/>: the transaction cannot know whether the application's database committed before it was disposed. The files it added,
+/// and once it is staged the files whose deletion it recorded, stay readable, are reported as indeterminate by
+/// <see cref="IFileRepo.EnumerateFilesAsync(CancellationToken)"/> and are resolved by a cleanup pass through the callback; a pass without a callback leaves
+/// them as they are. Deletions of a transaction that was disposed before it was staged were never made durable, so nothing happens to those files and they
+/// are not indeterminate. An application that knows that its database did not commit calls <see cref="RollbackAsync(CancellationToken)"/> before the
+/// transaction is disposed, which discards the added files and the recorded deletions at once. Disposing a transaction that has been committed or rolled
+/// back, or that added and deleted nothing, does nothing, and disposal does not throw.</para>
 /// <para>
 /// How the deletions are made durable is up to the implementation, and the behavior described here does not depend on it. The local
 /// <c>FileRepo</c> writes them to one journal file, except on a repository whose format version is 1, which has no journals: there it writes and holds
@@ -151,7 +158,8 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// Once the transaction is staged, files can no longer be added to it or deleted by it.</para>
     /// <para>
     /// A failure to stage is thrown, and so is a cancellation. Nothing has been staged in that case and the transaction is as it was before the call: it can
-    /// be staged again or rolled back, disposing it rolls it back, and the application must not commit its database.</para>
+    /// be staged again or rolled back, and the application must not commit its database. Disposing it then records nothing for its deletions and leaves the
+    /// files it added indeterminate (see <see cref="IFileRepoStagedTransaction"/>); roll it back first to discard them at once.</para>
     /// <para>
     /// An implementation that does not accept the deletion of a file that another transaction is adding, and finds that out when it stages, may wait
     /// briefly for that transaction to finish before it throws a <see cref="RepoFileBusyException"/> (see
@@ -176,9 +184,10 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// This is equivalent to calling <see cref="StageAsync(CancellationToken)"/> and then <see cref="IFileRepoStage.CommitAsync(CancellationToken)"/> on the
     /// returned stage, and fails in the same ways.</para>
     /// <para>
-    /// The stage is not returned, so a commit that failed cannot be made again. When this method throws, dispose the transaction: that rolls it back, unless
-    /// the commit had started and failed, in which case it leaves the transaction's files for a cleanup pass as described on
-    /// <see cref="IFileRepoStage.CommitAsync(CancellationToken)"/>. Call the two methods separately if a failed commit is to be retried.</para>
+    /// The stage is not returned, so a commit that failed cannot be made again. When this method throws, dispose the transaction: that leaves its files
+    /// for a cleanup pass, as described on <see cref="IFileRepoStagedTransaction"/>, and on <see cref="IFileRepoStage.CommitAsync(CancellationToken)"/> if
+    /// the commit had started and failed. A caller that wants them discarded at once calls <see cref="RollbackAsync(CancellationToken)"/> first, which
+    /// rolls the transaction back unless the commit had started. Call the two methods separately if a failed commit is to be retried.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The transaction has already been staged, or it has been rolled back.</exception>
     /// <exception cref="IOException">The transaction could not be staged or committed.</exception>
@@ -195,6 +204,11 @@ public interface IFileRepoStagedTransaction : IAsyncDisposable
     /// <para>
     /// Rolling back is possible before and after staging. Once <see cref="IFileRepoStage.CommitAsync(CancellationToken)"/> has been called, this method does
     /// nothing, because the application has committed its database by then.</para>
+    /// <para>
+    /// Rolling back is how an application that knows that its database did not commit discards the transaction's files at once: disposing the transaction
+    /// without rolling it back does not discard them but leaves them for a cleanup pass to resolve (see <see cref="IFileRepoStagedTransaction"/>). Do not
+    /// roll back once the database commit has been attempted and its outcome is not known, or files that a committed row references are deleted and
+    /// deletions that it committed are abandoned.</para>
     /// <para>
     /// A failure to roll back an individual file is not thrown: the file is left for the cleaner and the failure is reported through
     /// <see cref="IFileRepo.TransactionCompletionFailed"/>.</para>

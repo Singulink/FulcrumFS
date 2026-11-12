@@ -38,6 +38,12 @@ A cleanup hint with no matching in-group delete marker means the operation never
 
 An in-group delete marker means the deletion committed. The cleaner completes any remaining physical reclamation and survivor promotion, then removes the hint. Re-running this is idempotent because the survivor is chosen deterministically.
 
+## Transactions That End Without a Commit
+
+A transaction holds the indeterminate marker of every file it has added or deleted open until it commits or rolls back, which is how the cleaner tells that the transaction is still active. If the process ends first, the markers stay on disk with nobody holding them. Whether the application's database had committed by then is unknown, so the cleaner asks the resolution callback about each file: <xref:FulcrumFS.IndeterminateResolution.Keep> removes the marker and leaves the file, and <xref:FulcrumFS.IndeterminateResolution.Delete> deletes the file.
+
+Disposing a transaction that was neither committed nor rolled back leaves exactly that state on purpose, and for the same reason: the transaction cannot know whether the database committed, because a database commit can take effect although its call throws (see [A Database Commit with an Unknown Outcome](commit-model.md#a-database-commit-with-an-unknown-outcome)). Disposal therefore releases the markers without removing them or the files, and recovery is the same as after a crash. Only <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> deletes the added files and removes the markers of the deleted ones.
+
 ## Delete Journals
 
 A [staged transaction](commit-model.md#staged-transactions) records its deletions in one journal file in the cleanup directory instead of one marker per file, on a repository of [format version](repository-layout.md#format-version) 2 or later. On a version 1 repository it writes the same per-file markers as an ordinary transaction instead, and after a crash the cleaner resolves its files like any other [indeterminate](commit-model.md#the-indeterminate-state) file. The journal is written and flushed to disk before staging returns and is held open by the transaction. When the transaction commits, the journal is renamed from `{journalId}.staged` to `{journalId}.journal`, a single atomic operation however many files it lists, and the rename is flushed to disk too. The journal ends with the number of file IDs it lists and a checksum of them, so a journal that a crash left half-written, or that was damaged on disk, is never taken for a valid one.
@@ -52,7 +58,7 @@ The transaction that wrote the journal is still running and can still commit or 
 
 #### Staged and not held
 
-The process ended between staging and committing (or while an ordinary transaction was writing its journal), so whether the application committed its database is unknown. The cleaner treats every listed file that still exists like an indeterminate file and asks the resolution callback: <xref:FulcrumFS.IndeterminateResolution.Keep> leaves the file alone, and <xref:FulcrumFS.IndeterminateResolution.Delete> deletes it (or, with a delete delay, gives it a delete marker that starts the delay). Once every file is resolved the journal is removed; a pass without a callback leaves it for one that has one.
+The process ended between staging and committing (or while an ordinary transaction was writing its journal), or the transaction was disposed after staging without its stage having been committed and without having been rolled back, so whether the application committed its database is unknown. The cleaner treats every listed file that still exists like an indeterminate file and asks the resolution callback: <xref:FulcrumFS.IndeterminateResolution.Keep> leaves the file alone, and <xref:FulcrumFS.IndeterminateResolution.Delete> deletes it (or, with a delete delay, gives it a delete marker that starts the delay). Once every file is resolved the journal is removed; a pass without a callback leaves it for one that has one.
 
 #### Staged and torn
 

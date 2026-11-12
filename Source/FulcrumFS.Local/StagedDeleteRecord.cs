@@ -12,7 +12,8 @@ namespace FulcrumFS;
 /// either way; the markers cost a flush and a file handle per file.</para>
 /// <para>
 /// Holding the record open is what keeps the cleaner from resolving its files while the transaction can still commit or roll back. Releasing it without
-/// finishing leaves them indeterminate for the cleaner to resolve through the resolution callback.</para>
+/// finishing, as a transaction does that is disposed without having been committed or rolled back, leaves them indeterminate for the cleaner to resolve
+/// through the resolution callback.</para>
 /// </remarks>
 internal abstract class StagedDeleteRecord : IAsyncDisposable
 {
@@ -159,13 +160,13 @@ internal abstract class StagedDeleteRecord : IAsyncDisposable
                 await elc.TryRunAsync(repository.TxnRollbackDeleteAsync(entry.FileId, entry.Marker, waitBudget)).ConfigureAwait(false);
         }
 
+        // Each marker is from here on the only record of its deletion, which the application's database may have committed, so it is released as an
+        // ordinary transaction that is disposed without having finished releases its markers: the rollback of another transaction's deletion of the
+        // same file leaves it for the cleaner.
         public override async ValueTask DisposeAsync()
         {
             while (_markers.TryDequeue(out var entry))
-            {
-                try { await entry.Marker.DisposeAsync().ConfigureAwait(false); }
-                catch { }
-            }
+                await repository.TxnReleaseDeleteAsync(entry.FileId, entry.Marker).ConfigureAwait(false);
         }
     }
 }

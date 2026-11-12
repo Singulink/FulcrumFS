@@ -3,6 +3,11 @@ namespace FulcrumFS;
 /// <summary>
 /// Represents a transaction for a file repository, allowing changes to be committed or rolled back.
 /// </summary>
+/// <remarks>
+/// A transaction ends with <see cref="CommitAsync(CancellationToken)"/> or <see cref="RollbackAsync(CancellationToken)"/>. Disposing it without either does
+/// not roll it back: the files it added and the files it deleted are left indeterminate for the cleaner to resolve, because the transaction cannot know
+/// whether the application's database committed before it was disposed (see <see cref="DisposeAsync"/>).
+/// </remarks>
 public sealed class FileRepoTransaction : IFileRepoTransaction
 {
     private readonly TransactionAddSet _adds;
@@ -207,13 +212,14 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// in two cases only: a <see cref="FileRepo.TransactionCompletionFailed"/> handler threw, which happens after every file has been attempted, or the
     /// repository has been disposed, which leaves the files not yet committed indeterminate. Neither means that the transaction was rolled back, and
     /// disposing it afterwards rolls nothing back. An <see cref="OperationCanceledException"/> is thrown before the commit has started: nothing has been
-    /// committed, the transaction is still open, and disposing it rolls it back. Pass <see cref="CancellationToken.None"/> once the application's database
-    /// has committed.</para>
+    /// committed and the transaction is still open. It can be committed again; disposing it instead does not roll it back but leaves its files
+    /// indeterminate for the cleaner to resolve (see <see cref="DisposeAsync"/>). Pass <see cref="CancellationToken.None"/> once the application's
+    /// database has committed, so that a cancellation does not leave to the cleaner what the commit would have finished.</para>
     /// </remarks>
     /// <exception cref="OperationCanceledException">The token was cancelled before the commit had started. Nothing has been committed.</exception>
     /// <exception cref="ObjectDisposedException">The transaction has been disposed: nothing is committed, and a transaction that was disposed without
-    /// having been committed was rolled back by its disposal. Or the repository has been disposed: the files that had not been committed yet are left
-    /// indeterminate.</exception>
+    /// having been committed or rolled back left its files indeterminate when it was disposed. Or the repository has been disposed: the files that had
+    /// not been committed yet are left indeterminate.</exception>
     public async Task CommitAsync(CancellationToken cancellationToken = default)
     {
         var elc = new ExceptionListCapture(ex => ex is not ObjectDisposedException);
@@ -221,8 +227,8 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
 
         using (await _sync.LockAsync(cancellationToken).ConfigureAwait(false))
         {
-            // Disposal rolled the transaction back, so there is nothing left to commit: returning normally would tell the caller that its files are in the
-            // repository when they are gone.
+            // Disposal released the transaction's files without committing them, so there is nothing left to commit: returning normally would tell the
+            // caller that its files are committed when they are indeterminate, or were rolled back before the disposal.
             ObjectDisposedException.ThrowIf(_isDisposed, this);
 
             // The files share one wait for access to the repository, so that on a volume that has stopped answering the commit fails after one wait
@@ -285,18 +291,42 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
     /// Rolls back the transaction, discarding any file additions or deletions made during the transaction.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The files the transaction added are deleted now, and the files it deleted stay in the repository as if the transaction had not deleted them. Rolling
+    /// back is how an application that knows that its database did not commit discards the transaction's files at once: disposing the transaction without
+    /// rolling it back does not discard them but leaves them indeterminate for the cleaner to resolve (see <see cref="DisposeAsync"/>). Do not roll back
+    /// once the database commit has been attempted and its outcome is not known, or files that a committed row references are deleted.</para>
+    /// <para>
     /// Failures to roll back individual files are not thrown: they are reported through <see cref="FileRepo.TransactionCompletionFailed"/>, and the affected
     /// files are left for the cleaner. If the repository cannot be accessed, the rollback waits for it for up to
-    /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of its files, as <see cref="CommitAsync(CancellationToken)"/> does.
+    /// <see cref="FileRepoOptions.MaxAccessWaitOrRetryTime"/> once for all of its files, as <see cref="CommitAsync(CancellationToken)"/> does.</para>
     /// </remarks>
     public Task RollbackAsync(CancellationToken cancellationToken = default) => RollbackAsync(Repository, cancellationToken);
 
     /// <summary>
-    /// Disposes the transaction, rolling back any changes that were not already committed.
+    /// Disposes the transaction. Changes that were neither committed nor rolled back are not rolled back: the files the transaction added and the files it
+    /// deleted are left indeterminate for the cleaner to resolve.
     /// </summary>
     /// <remarks>
-    /// The rollback is made as by <see cref="RollbackAsync(CancellationToken)"/>, which describes how failures are reported and how long it waits for access
-    /// to the repository.
+    /// <para>
+    /// A transaction is disposed without having been committed when something failed before its commit, and it cannot know whether that was before or after
+    /// the application's database committed: a database commit that has taken effect on the server still throws if, for example, the connection is lost
+    /// before the answer arrives. Rolling back then would delete files that a committed row references and abandon deletions that the database has
+    /// committed. So disposal only releases what the transaction holds, which is exactly the state that a process which ended at this point leaves: each
+    /// file the transaction added, and each file it deleted, keeps its indeterminate marker, which nobody holds any more.</para>
+    /// <para>
+    /// The files stay readable, <see cref="FileRepo.EnumerateFilesAsync(CancellationToken)"/> reports them as indeterminate, and the next cleanup pass that
+    /// is given a resolution callback (see
+    /// <see cref="FileRepo.CleanAsync(TimeSpan, Func{FileId, Task{IndeterminateResolution}}?, CancellationToken)"/>) asks it about each of them: it keeps
+    /// the files the database references and deletes the others. A pass without a callback leaves them as they are, so a repository that is never cleaned
+    /// with a callback keeps the files of every transaction that was disposed this way.</para>
+    /// <para>
+    /// An application that knows that its database did not commit calls <see cref="RollbackAsync(CancellationToken)"/> before the transaction is
+    /// disposed, which discards the added files and abandons the deletions at once. Disposing a transaction that has been committed or rolled back, or
+    /// that added and deleted nothing, does nothing.</para>
+    /// <para>
+    /// Disposal waits for a call on the transaction that is still running. It does not throw and reports nothing through
+    /// <see cref="FileRepo.TransactionCompletionFailed"/>, and it needs no access to the repository.</para>
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
@@ -306,27 +336,25 @@ public sealed class FileRepoTransaction : IFileRepoTransaction
         var repository = Repository;
         _isDisposed = true;
 
-        try
+        // Whatever the transaction still holds is released without being committed or rolled back, which leaves its files indeterminate: what is left
+        // after a commit that threw, after a rollback that could not release everything, and all of it when the transaction was neither committed nor
+        // rolled back. The transaction cannot tell whether the application's database committed in that last case, so it must not delete the added files
+        // or abandon the deletions; the cleaner resolves both through the resolution callback. Releasing the handles is also what lets the cleaner in:
+        // while they are held it takes the transaction for an active one and skips its markers. The lock makes the disposal wait for a call that is still
+        // running, such as an add, whose marker would otherwise never be released.
+        using (await _sync.LockAsync().ConfigureAwait(false))
         {
-            await RollbackAsync(repository, default).ConfigureAwait(false);
-        }
-        catch { }
+            await _adds.ReleaseIndeterminateMarkersAsync().ConfigureAwait(false);
 
-        // Defensive: ensure any remaining marker handles are released even if RollbackAsync failed to do so. This avoids leaking exclusive file handles
-        // that would block cleanup from resolving the markers later.
-
-        await _adds.ReleaseIndeterminateMarkersAsync().ConfigureAwait(false);
-
-        if (_deleteMarkers.Count > 0)
-        {
-            var remainingHandles = _deleteMarkers.Values.ToArray();
-            _deleteMarkers.Clear();
-
-            foreach (var handle in remainingHandles)
+            // The marker of a deletion is from here on the only record of it, so it stops being the pending deletions' own as it is released: the rollback
+            // of another transaction's deletion of the same file must not remove it.
+            foreach (var (fileId, handle) in _deleteMarkers.ToArray())
             {
-                try { await handle.DisposeAsync().ConfigureAwait(false); }
-                catch { }
+                _deleteMarkers.Remove(fileId);
+                await repository.TxnReleaseDeleteAsync(fileId, handle).ConfigureAwait(false);
             }
+
+            _deleted.Clear();
         }
     }
 

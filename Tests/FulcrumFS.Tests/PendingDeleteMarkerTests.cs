@@ -378,6 +378,74 @@ public sealed class PendingDeleteMarkerTests
     }
 
     /// <summary>
+    /// A transaction that is disposed without having committed or rolled back its deletion lets go of the file's marker, which is from then on the only
+    /// record of a deletion that its application's database may have committed (the database commit can have taken effect although its call threw). Another
+    /// pending deletion of the file that is rolled back, before or after that, must leave the marker for the cleaner, although no deletion is pending
+    /// through it any more. One that commits records the deletion itself and removes the marker, as always.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, false, false)]
+    [DataRow(false, false, true)]
+    [DataRow(false, true, false)]
+    [DataRow(false, true, true)]
+    [DataRow(true, false, false)]
+    [DataRow(true, false, true)]
+    [DataRow(true, true, false)]
+    [DataRow(true, true, true)]
+    public async Task PendingDeletion_WhoseTransactionIsDisposedUnfinished_KeepsTheMarker_WhenAnotherIsRolledBack(
+        bool staged, bool disposedFirst, bool otherCommits)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, staged ? RepoFormatVersion.Version1 : RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileId = await AddSampleFileAsync(repo);
+            var marker = IndeterminateMarker(repoDir, fileId);
+
+            var disposed = await DeleteInNewTransactionAsync(repo, staged, fileId);
+            await using var other = await DeleteInNewTransactionAsync(repo, staged, fileId);
+
+            if (disposedFirst)
+            {
+                // The other deletion still holds the marker.
+                await disposed.DisposeAsync();
+                IsHeld(marker).ShouldBeTrue();
+            }
+
+            if (otherCommits)
+            {
+                await other.CommitAsync();
+                await disposed.DisposeAsync();
+
+                ShouldBeDeleted(repoDir, fileId, DeleteMode.Immediate);
+                failures.ShouldBeEmpty();
+                return;
+            }
+
+            await other.RollbackAsync();
+            await disposed.DisposeAsync();
+
+            // No deletion is pending any more, but the marker records the deletion of the transaction that was disposed, so it stays for the cleaner.
+            marker.State.ShouldBe(EntryState.Exists);
+            IsHeld(marker).ShouldBeFalse();
+            FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+
+            // The file's row is gone, so the application's answer is to delete the file.
+            (await CleanAnsweringAsync(repo, IndeterminateResolution.Delete)).ShouldBe([fileId]);
+
+            FileDir(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
     /// A marker that was on disk before a deletion of this instance opened it, here left by a process that ended with the deletion of the file pending after
     /// its database had committed, records something that none of this instance's deletions knows about. Their rollbacks leave it for the cleaner, which asks
     /// about the file. A deletion that commits records the deletion itself and removes the marker, as always.

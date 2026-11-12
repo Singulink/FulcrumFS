@@ -51,10 +51,12 @@ partial class FileRepo
     /// <para>
     /// The marker can also record something that none of the pending deletions knows about, and then the rollback of the last of them must leave it for the
     /// cleaner: a marker that was on disk before the first of them opened it (left by a process that ended with a deletion or an add of the file unfinished,
-    /// by a commit that failed, or by an add that could not remove it), and a marker that has become the only record of a deletion whose commit failed after
-    /// its application's database had committed. So the marker is theirs only if one of them created it and none of them has failed to commit since. It is
-    /// the marker of the file's pending deletions together, not of the one that created it: whichever of them is rolled back last removes a marker that is
-    /// theirs. A deletion that commits records the deletion and removes the marker in every case.</para>
+    /// by a commit that failed, or by an add that could not remove it), a marker that has become the only record of a deletion whose commit failed after
+    /// its application's database had committed, and a marker that a transaction let go of when it was disposed without having committed or rolled back
+    /// its deletion, which its application's database may have committed (see <see cref="TxnReleaseDeleteAsync(FileId, IAsyncDisposable)"/>). So the marker
+    /// is theirs only if one of them created it and none of them has failed to commit or been released unfinished since. It is the marker of the file's
+    /// pending deletions together, not of the one that created it: whichever of them is rolled back last removes a marker that is theirs. A deletion that
+    /// commits records the deletion and removes the marker in every case.</para>
     /// </remarks>
     private readonly Dictionary<FileId, PendingDeletes> _pendingDeletes = [];
     private readonly Lock _pendingDeletesSync = new();
@@ -331,8 +333,8 @@ partial class FileRepo
 
     /// <summary>
     /// Records that a file's indeterminate marker is no longer the own of the deletions pending through it, because it has become the record of a deletion
-    /// whose commit failed: their rollbacks leave it for the cleaner. Nothing needs recording if none is pending, since the next deletion to open the marker
-    /// finds it on disk.
+    /// whose commit failed, or of one that its transaction let go of without committing or rolling it back: their rollbacks leave it for the cleaner.
+    /// Nothing needs recording if none is pending, since the next deletion to open the marker finds it on disk.
     /// </summary>
     private void DisownMarker(FileId fileId)
     {
@@ -545,6 +547,28 @@ partial class FileRepo
             if (removeMarker)
                 await _fs.TryClearIndeterminateStateAsync(fileId).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Releases a transaction's handle on the indeterminate marker of a file it deleted without committing or rolling back the deletion, as a transaction
+    /// does that is disposed without having finished. The marker stays on disk with this deletion no longer holding it, which leaves the file indeterminate
+    /// for the cleaner to resolve through the resolution callback: the state a process that ended at this point leaves. A failure to release the handle is
+    /// ignored.
+    /// </summary>
+    /// <remarks>
+    /// The application of the transaction may have committed the deletion in its database (its database commit can have succeeded although the call threw),
+    /// so the marker is from here on the only record of a deletion that may have to be made. It therefore stops being the pending deletions' own before
+    /// the handle is released (see <see cref="_pendingDeletes"/>): releasing the handle takes this deletion out of the count, and the rollback of another
+    /// transaction's deletion of the file would otherwise count itself as the last one and remove the marker. Disowning the marker only takes the count's
+    /// own synchronization, and it comes first, so there is no moment at which that rollback finds itself the last deletion of a marker that is still
+    /// theirs. The file's lock is not needed and is not taken, which also makes this work once the repository has been disposed.
+    /// </remarks>
+    internal async ValueTask TxnReleaseDeleteAsync(FileId fileId, IAsyncDisposable indeterminateMarker)
+    {
+        DisownMarker(fileId);
+
+        try { await indeterminateMarker.DisposeAsync().ConfigureAwait(false); }
+        catch { }
     }
 
     /// <summary>

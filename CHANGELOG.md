@@ -1,5 +1,22 @@
 # FulcrumFS Version History
 
+## Version 2.3
+
+Disposing a transaction no longer rolls it back. A database commit can take effect although its call throws, for example when the connection is lost before the server's answer arrives; the exception then skips the repository commit, and the rollback that disposal made deleted files that a committed row references. A transaction that is disposed without having been committed or rolled back now leaves its files indeterminate for cleanup to resolve, as a crash at that point does. Apps that relied on disposal to discard files should call `RollbackAsync` where they know that their database did not commit, and must run cleanup with a resolution callback.
+
+### Changes
+
+- Disposing a `FileRepoTransaction` or a `FileRepoStagedTransaction` that was neither committed nor rolled back no longer rolls it back: the files it added, the files an ordinary transaction deleted and the files whose deletion a staged transaction staged stay readable and are left indeterminate
+- The next `CleanAsync` with a resolution callback keeps the files the callback keeps and deletes the others; a pass without a callback leaves them, so a repository that is never cleaned with a callback keeps the files of every transaction that was disposed without a commit
+- To discard a transaction's files at once, as disposal did, call `RollbackAsync` before the transaction is disposed, and only where the database commit has certainly not been attempted; `RollbackAsync` itself is unchanged
+- A commit that is cancelled before it starts still leaves the transaction open, but disposing that transaction now leaves its files indeterminate instead of rolling it back
+- Disposing a transaction no longer waits for access to the repository and no longer raises `TransactionCompletionFailed`
+- `IFileRepoTransaction` and `IFileRepoStagedTransaction` require the same of every implementation
+
+### Fixes
+
+- Variant aliases are more resilient under rare conditions: an alias stays readable while the variant it points to is being retired, and fetches and adds no longer fail or report a dangling alias when a retirement or a cleanup pass changes the alias at the same moment
+
 ## Version 2.2
 
 The repository options now work with the .NET options system: they can be bound from configuration, registered with `AddFileRepo` and `AddFileRepoCleaner`, and validated when the application starts. The breaking changes only affect apps that subclass the options classes or use a base directory whose names are not friendly.

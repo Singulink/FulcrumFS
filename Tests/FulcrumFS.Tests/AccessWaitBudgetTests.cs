@@ -135,7 +135,7 @@ public sealed class AccessWaitBudgetTests
     [DataRow(false, true)]
     [DataRow(true, false)]
     [DataRow(true, true)]
-    public async Task Rollback_OnAVolumeThatStoppedAnswering_FailsAfterOneWait_AndLeavesTheFilesForTheCleaner(bool staged, bool byDisposal)
+    public async Task RollbackOrDisposal_OnAVolumeThatStoppedAnswering_LeavesTheFilesForTheCleaner_AndOnlyTheRollbackWaits(bool staged, bool byDisposal)
     {
         // A staged transaction is staged on a version 1 repository, where it holds a marker for each deletion and rolls each of them back on its own, as an
         // ordinary transaction does.
@@ -179,11 +179,23 @@ public sealed class AccessWaitBudgetTests
             }
 
             await volume.StopAnsweringOnceIdleAsync();
-            ShouldHaveWaitedOnce(await TimeAsync(byDisposal ? () => txn.DisposeAsync().AsTask() : rollback));
-            await txn.DisposeAsync();
 
-            ShouldHaveReportedTimeouts(failures, RepoTransactionCompletionOperation.Rollback, FileCount);
+            if (byDisposal)
+            {
+                // Disposing a transaction that was neither committed nor rolled back rolls nothing back: it lets go of the files' markers, which needs no
+                // access to the repository, so it does not wait for the volume and has no failure to report.
+                (await TimeAsync(() => txn.DisposeAsync().AsTask())).ShouldBeLessThan(_wait * 0.5);
+                failures.ShouldBeEmpty();
+            }
+            else
+            {
+                ShouldHaveWaitedOnce(await TimeAsync(rollback));
+                await txn.DisposeAsync();
 
+                ShouldHaveReportedTimeouts(failures, RepoTransactionCompletionOperation.Rollback, FileCount);
+            }
+
+            // Either way no file was rolled back: each is indeterminate, with a marker that nobody holds.
             foreach (var fileId in added.Concat(deleted))
                 ShouldBeIndeterminate(repoDir, fileId);
 

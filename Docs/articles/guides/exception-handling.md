@@ -42,10 +42,13 @@ try
 }
 catch (FileProcessingException ex)
 {
-    // The upload was rejected. The transaction will be rolled back on dispose.
+    // The upload was rejected. An add that fails leaves nothing behind, so there is
+    // nothing of it to roll back.
     return Results.BadRequest(new { error = ex.Message });
 }
 ```
+
+An add that throws cleans up after itself: it stores no file and leaves the transaction usable. Files that earlier adds of the same transaction stored are a different matter. They are discarded by <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*>, not by disposing the transaction, which leaves them indeterminate for cleanup (see [Rolling Back](adding-files.md#rolling-back)).
 
 > [!TIP]
 > Place format validation as the first step in a pipeline so invalid content is rejected before any expensive transformation runs. See [Validating File Formats](file-formats.md).
@@ -78,8 +81,10 @@ try
 }
 catch (RepoFileBusyException)
 {
-    // The upload of this document is still being committed. Nothing was recorded,
-    // and disposing the transactions rolls them back: the client can try again.
+    // The upload of this document is still being committed. Nothing was recorded, and
+    // the database commit has not been attempted, so the repository transaction can be
+    // rolled back to discard whatever else it holds. The client can try again.
+    await txn.RollbackAsync();
     return Results.Conflict();
 }
 ```
@@ -90,7 +95,7 @@ A staged transaction accepts such a deletion instead, on a repository of [format
 
 Commit and rollback do not throw on failure. Instead, the affected files are marked indeterminate and remain readable, and the failure is reported through a single event:
 
-- <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> fires when either a <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> or a rollback (explicit or via disposal) cannot fully complete. The handler receives a <xref:FulcrumFS.RepoTransactionCompletionFailureInfo> exposing the failed <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> (a <xref:FulcrumFS.RepoTransactionCompletionOperation> value of `Commit` or `Rollback`) and the underlying <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Exception> (an <xref:System.AggregateException> if multiple errors occurred during the step).
+- <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> fires when either a <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> or a <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> cannot fully complete. Disposing a transaction rolls nothing back (it leaves the files of a transaction that was neither committed nor rolled back indeterminate), so it never raises the event. The handler receives a <xref:FulcrumFS.RepoTransactionCompletionFailureInfo> exposing the failed <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> (a <xref:FulcrumFS.RepoTransactionCompletionOperation> value of `Commit` or `Rollback`) and the underlying <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Exception> (an <xref:System.AggregateException> if multiple errors occurred during the step).
 
 Subscribe to log or alert. If you want throwing behavior at the call site, the handler can raise an exception itself - handler exceptions are not caught and will propagate out of the completion call. The event is raised once the commit or rollback has done all it can, so such an exception arrives after the fact and undoes nothing: thrown from a commit, it does not mean that the transaction was rolled back, and disposing the transaction afterwards rolls nothing back. See [What a Failed Commit Means](../concepts/commit-model.md#what-a-failed-commit-means) for what each exception from a commit says about the files.
 
@@ -109,7 +114,7 @@ repo.TransactionCompletionFailed += failure =>
 ```
 
 > [!IMPORTANT]
-> Indeterminate files left by these failures are resolved later during cleanup, where a callback decides per <xref:FulcrumFS.FileId> whether to <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> each one. This is what closes the loop on commit failures, so make sure cleanup is scheduled in any environment that runs the repository. See [Repository Cleanup](cleanup.md) and [Transactional Commit Model](../concepts/commit-model.md).
+> Indeterminate files left by these failures, and by transactions that were disposed without a commit or a rollback because an exception skipped it, are resolved later during cleanup, where a callback decides per <xref:FulcrumFS.FileId> whether to <xref:FulcrumFS.IndeterminateResolution.Keep> or <xref:FulcrumFS.IndeterminateResolution.Delete> each one. This is what closes the loop on commit failures and on requests that failed midway, so make sure cleanup with a resolution callback is scheduled in any environment that runs the repository. See [Repository Cleanup](cleanup.md) and [Transactional Commit Model](../concepts/commit-model.md).
 
 ## Corruption Detection
 

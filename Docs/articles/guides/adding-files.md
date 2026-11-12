@@ -10,13 +10,13 @@ Every add goes through a <xref:FulcrumFS.FileRepoTransaction>. A transaction can
 
 ## Beginning a Transaction
 
-Create a transaction with <xref:FulcrumFS.FileRepo.BeginTransactionAsync*>. The returned <xref:FulcrumFS.FileRepoTransaction> is an <xref:System.IAsyncDisposable>, so an `await using` block guarantees it is finalized.
+Create a transaction with <xref:FulcrumFS.FileRepo.BeginTransactionAsync*>. The returned <xref:FulcrumFS.FileRepoTransaction> is an <xref:System.IAsyncDisposable>, so an `await using` block guarantees that it lets go of its files.
 
 ```csharp
 await using var txn = await repo.BeginTransactionAsync();
 ```
 
-If the block exits without a successful <xref:FulcrumFS.FileRepoTransaction.CommitAsync*>, disposal rolls the transaction back automatically. This means an exception thrown anywhere inside the block cleans up any tentatively added files without further effort on your part.
+A transaction ends with <xref:FulcrumFS.FileRepoTransaction.CommitAsync*> or <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*>. If the block exits without either, for example because an exception was thrown inside it, disposal does not roll the transaction back: the files it added are left indeterminate, still readable, and the next cleanup pass that is given a resolution callback deletes the ones that no database row references. Disposal cannot discard them itself, because it cannot know whether your database committed before the exception was thrown. When you know that it did not, call <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> to discard them at once (see [Rolling Back](#rolling-back)).
 
 ## Adding Files
 
@@ -94,7 +94,7 @@ await txn.CommitAsync();     // 2. Repository second.
 
 ## Rolling Back
 
-To abandon a transaction explicitly, call <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*>. Otherwise, disposing without committing rolls back automatically. Tentatively added files are discarded; if rollback itself cannot complete cleanly, the affected files become indeterminate and the same <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> event fires with <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> set to <xref:FulcrumFS.RepoTransactionCompletionOperation.Rollback>.
+To abandon a transaction, call <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*>. The tentatively added files are discarded at once; if rollback itself cannot complete cleanly, the affected files become indeterminate and the same <xref:FulcrumFS.FileRepo.TransactionCompletionFailed> event fires with <xref:FulcrumFS.RepoTransactionCompletionFailureInfo.Operation> set to <xref:FulcrumFS.RepoTransactionCompletionOperation.Rollback>. Roll back when you know that the database did not commit, which you do whenever the failure comes before the database commit is attempted:
 
 ```csharp
 await using var txn = await repo.BeginTransactionAsync();
@@ -102,8 +102,8 @@ var added = await txn.AddAsync(source, ".jpg", leaveOpen: true, pipeline);
 
 if (!await TrySaveDocumentRowAsync(added.FileId))
 {
-    // The database refused the row (for example a unique-constraint violation).
-    // Roll back so the just-added file does not become an orphan.
+    // The database refused the row (for example a unique-constraint violation),
+    // so nothing references the just-added file: discard it now.
     await txn.RollbackAsync();
     return Results.Conflict();
 }
@@ -111,8 +111,41 @@ if (!await TrySaveDocumentRowAsync(added.FileId))
 await txn.CommitAsync();
 ```
 
+#### Disposing without a commit or a rollback
+
+Disposing a transaction that was neither committed nor rolled back is not a rollback. The files it added are left indeterminate and readable, and the next cleanup pass with a resolution callback deletes those that no database row references (see [Resolving Indeterminate Files](cleanup.md#resolving-indeterminate-files)). This is deliberate. When an exception skips the repository commit, the transaction cannot tell a database commit that never happened from one that took effect although its call threw, for example because the connection was lost before the server's answer arrived. Discarding the files in the second case would leave a committed row pointing at a file that is gone. See [A Database Commit with an Unknown Outcome](../concepts/commit-model.md#a-database-commit-with-an-unknown-outcome).
+
+So an upload handler with error handling rolls back around the work that precedes the database commit, and not around the database commit itself:
+
+```csharp
+await using var source = uploadedFile.OpenReadStream();
+await using var txn = await repo.BeginTransactionAsync();
+await using var dbTxn = await dbContext.Database.BeginTransactionAsync();
+
+try
+{
+    var added = await txn.AddAsync(source, ".pdf", leaveOpen: true, pipeline);
+
+    dbContext.Documents.Add(new Document { Id = documentId, FileId = added.FileId });
+    await dbContext.SaveChangesAsync();
+}
+catch
+{
+    // The database commit has not been attempted, so no row can reference
+    // the added file: discard it now instead of leaving it for cleanup.
+    await txn.RollbackAsync();
+    throw;
+}
+
+await dbTxn.CommitAsync();   // 1. Database first. If this throws, its outcome is unknown: no rollback.
+await txn.CommitAsync();     // 2. Repository second.
+```
+
+> [!IMPORTANT]
+> Do not call <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> in a handler that an exception from the database commit can reach. Let the transaction be disposed instead: cleanup then decides from what the database actually contains.
+
 > [!NOTE]
-> The explicit rollback call is rarely needed in practice; letting the `await using` block dispose the transaction is enough. Reach for <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> when you want to release the tentative state before later code runs, or to make the abandonment intent obvious at the call site.
+> Rolling back is never required for correctness. A transaction that is only disposed leaves its added files for cleanup, which removes them if no row references them; the explicit rollback reclaims them immediately instead of at the next cleanup pass. Such a pass needs a resolution callback, so make sure one is scheduled (see [Repository Cleanup](cleanup.md)): a repository that never runs cleanup with a callback keeps these files.
 
 ## Next Steps
 

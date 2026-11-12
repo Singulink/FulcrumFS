@@ -4,13 +4,27 @@ namespace FulcrumFS;
 /// Exercises crash recovery of the multi-step variant retirement / rebase flow by injecting a simulated crash at precise checkpoints via
 /// <see cref="FileRepo.DebugStepHook"/>, then verifying that recovery (cleaner rollforward, or the delete-path optimistic rollforward) converges on the same
 /// final state a non-crashed run would produce. Because the flow is strictly forward-only, throwing at a checkpoint leaves exactly the on-disk state a real
-/// crash would.
+/// crash would. The same checkpoints are used to fetch the variants of a retirement that is not interrupted: what a fetch sees at a checkpoint is what a
+/// concurrent fetch can see, and what every fetch sees after a crash there.
 /// </summary>
 [PrefixTestClass]
 public sealed class VariantCrashRecoveryTests
 {
+    // The name of the point after a retirement has returned, which follows its checkpoints in the points that fetches are recorded at.
+    private const string ReturnedPoint = "Returned";
+
     private static readonly IAbsoluteDirectoryPath _appDir = DirectoryPath.GetAppBase();
     private static readonly IAbsoluteDirectoryPath _sampleDir = _appDir.CombineDirectory("SampleFiles");
+
+    // The checkpoints of a retirement from its commit point on. DeleteHintsWritten comes before it: the listed variants are still live there.
+    private static readonly DebugStep[] _committedRetirementSteps =
+    [
+        DebugStep.DeleteMarkersWritten,
+        DebugStep.RebaseMarkerWritten,
+        DebugStep.RebaseMaterialized,
+        DebugStep.RebaseRepointed,
+        DebugStep.DeleteResidueAboutToDelete,
+    ];
 
     private static int _counter;
 
@@ -24,6 +38,10 @@ public sealed class VariantCrashRecoveryTests
     }
 
 #pragma warning restore RCS1194
+
+    // What GetVariantAsync and GetGroupAsync answered for a variant at one point of a retirement: the bytes each of them led to (null when GetVariantAsync
+    // threw Error, or GetGroupAsync did not list the variant), and whether GetGroupAsync reported the variant as a dangling alias.
+    private sealed record VariantFetch(string At, string VariantId, byte[]? Data, RepoFileNotFoundException? Error, byte[]? GroupData, bool IsListedAsDangling);
 
     [TestMethod]
     public async Task Crash_AfterRebaseMarker_BeforeMaterialize_CleanerResumes()
@@ -359,6 +377,301 @@ public sealed class VariantCrashRecoveryTests
         DataFiles(groupDir, "a").ShouldBeEmpty();
     }
 
+    [TestMethod]
+    [DataRow(DeleteMode.Immediate)]
+    [DataRow(DeleteMode.DeferredFilesOnly)]
+    [DataRow(DeleteMode.DeferredUntilClean)]
+    public async Task RetiringASource_ItsSurvivingAliasStaysReadableAtEveryStep(DeleteMode deleteMode)
+    {
+        using var repo = CreateRepo(deleteMode);
+        var corruption = TrackCorruption(repo);
+        var (fileId, originalData) = await AddRealWithOneAliasAsync(repo);
+
+        // 'b' is not listed, so it survives: between the commit point and its promotion it is a live alias of a retired source.
+        var fetches = await RetireAndFetchAtEveryStepAsync(repo, fileId, ["a"], "b");
+
+        fetches.Select(f => f.At).ShouldBe(RetirementPoints(deleteMode, rebases: true));
+
+        foreach (var fetch in fetches)
+            ShouldBeReadable(fetch, originalData);
+
+        corruption.ShouldBeEmpty();
+    }
+
+    [TestMethod]
+    [DataRow(DeleteMode.Immediate)]
+    [DataRow(DeleteMode.DeferredFilesOnly)]
+    [DataRow(DeleteMode.DeferredUntilClean)]
+    public async Task RetiringASource_BothSurvivingAliasesStayReadableAtEveryStep(DeleteMode deleteMode)
+    {
+        using var repo = CreateRepo(deleteMode);
+        var corruption = TrackCorruption(repo);
+        var (fileId, originalData) = await AddRealWithTwoAliasesAsync(repo);
+        var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
+
+        // One survivor is promoted and the other is re-pointed at it, so the one that is not chosen still aliases the retired source after the chosen one
+        // has been materialized, until it is re-pointed.
+        var fetches = await RetireAndFetchAtEveryStepAsync(repo, fileId, ["a"], "b", "c");
+
+        foreach (string survivor in (string[])["b", "c"])
+            fetches.Where(f => f.VariantId == survivor).Select(f => f.At).ShouldBe(RetirementPoints(deleteMode, rebases: true));
+
+        foreach (var fetch in fetches)
+            ShouldBeReadable(fetch, originalData);
+
+        corruption.ShouldBeEmpty();
+        await AssertSurvivorsResolvedAsync(repo, fileId, originalData, groupDir);
+    }
+
+    [TestMethod]
+    public Task Crash_AfterDeleteMarkers_BeforeRebase_SurvivorsStayReadableUntilTheCleanerFinishes() =>
+        CrashAndFetchSurvivorsAsync(DebugStep.DeleteMarkersWritten);
+
+    [TestMethod]
+    public Task Crash_AfterRebaseMarker_BeforeMaterialize_SurvivorsStayReadableUntilTheCleanerFinishes() =>
+        CrashAndFetchSurvivorsAsync(DebugStep.RebaseMarkerWritten);
+
+    [TestMethod]
+    [DataRow(DeleteMode.Immediate, false)]
+    [DataRow(DeleteMode.DeferredFilesOnly, false)]
+    [DataRow(DeleteMode.DeferredUntilClean, false)]
+    [DataRow(DeleteMode.Immediate, true)]
+    [DataRow(DeleteMode.DeferredFilesOnly, true)]
+    [DataRow(DeleteMode.DeferredUntilClean, true)]
+    public async Task RetiringASourceWithItsAlias_TheAliasIsNotFoundAtEveryStep(DeleteMode deleteMode, bool anotherAliasSurvives)
+    {
+        using var repo = CreateRepo(deleteMode);
+        var corruption = TrackCorruption(repo);
+        var (fileId, _) = anotherAliasSurvives ? await AddRealWithTwoAliasesAsync(repo) : await AddRealWithOneAliasAsync(repo);
+
+        // 'b' is listed, so it is retired with its source rather than preserved. With 'c' surviving, the retirement also goes through the steps of a rebase,
+        // during which 'b' is an alias of a retired source as the survivor is, but one that is retired itself.
+        var fetches = await RetireAndFetchAtEveryStepAsync(repo, fileId, ["a", "b"], "b");
+
+        fetches.Select(f => f.At).ShouldBe(RetirementPoints(deleteMode, rebases: anotherAliasSurvives));
+
+        foreach (var fetch in fetches)
+            ShouldBeNotFound(fetch);
+
+        corruption.ShouldBeEmpty();
+    }
+
+    [TestMethod]
+    [DataRow(DeleteMode.Immediate)]
+    [DataRow(DeleteMode.DeferredFilesOnly)]
+    [DataRow(DeleteMode.DeferredUntilClean)]
+    public async Task RetiringASource_TheSourceIsNotFoundAtEveryStep(DeleteMode deleteMode)
+    {
+        using var repo = CreateRepo(deleteMode);
+        var corruption = TrackCorruption(repo);
+        var (fileId, _) = await AddRealWithTwoAliasesAsync(repo);
+
+        // The survivors read the retired source's data until they are promoted or re-pointed; the source itself is gone from the commit point on.
+        var fetches = await RetireAndFetchAtEveryStepAsync(repo, fileId, ["a"], "a");
+
+        fetches.Select(f => f.At).ShouldBe(RetirementPoints(deleteMode, rebases: true));
+
+        foreach (var fetch in fetches)
+            ShouldBeNotFound(fetch);
+
+        corruption.ShouldBeEmpty();
+    }
+
+    [TestMethod]
+    public async Task AliasOfARetiredSourceWhoseDataIsGone_IsReportedAsDangling()
+    {
+        using var repo = CreateRepo(DeleteMode.Immediate);
+        var corruption = TrackCorruption(repo);
+        var (fileId, _) = await AddRealWithOneAliasAsync(repo);
+
+        // Built by hand, because a retirement does not leave this state: it removes the data of a retired source only once no survivor aliases it. 'a' is
+        // retired and its data is gone, while 'b' is not retired and still aliases it.
+        var a = await repo.GetVariantAsync(fileId, "a");
+        var groupDir = a.Path.ParentDirectory;
+
+        var deleteMarker = groupDir.CombineFile("a" + FileRepoPaths.DeleteMarkerExtension, PathOptions.None);
+        await File.WriteAllBytesAsync(deleteMarker.PathExport, [], TestContext.CancellationToken);
+        a.Path.Delete();
+
+        groupDir.GetChildFiles($"b.*{FileRepoPaths.AliasMarkerExtension}").ShouldHaveSingleItem();
+
+        // The delete marker of 'a' does not account for its missing data, which a retirement keeps for as long as an alias that is not retired names it. So
+        // 'b' is a dangling alias like that of a source that is not retired, and each fetch reports it, once.
+        var ex = await Should.ThrowAsync<DanglingAliasException>(async () => await repo.GetVariantAsync(fileId, "b"));
+        ex.VariantId.ShouldBe("b");
+        ex.SourceVariantId.ShouldBe("a");
+
+        var reported = corruption.ShouldHaveSingleItem();
+        reported.Kind.ShouldBe(RepoCorruptionKind.DanglingAlias);
+        reported.VariantId.ShouldBe("b");
+        corruption.Clear();
+
+        var group = await repo.GetGroupAsync(fileId);
+        group.VariantFiles.ShouldBeEmpty();
+        group.DanglingAliases.ShouldHaveSingleItem().VariantId.ShouldBe("b");
+
+        reported = corruption.ShouldHaveSingleItem();
+        reported.Kind.ShouldBe(RepoCorruptionKind.DanglingAlias);
+        reported.VariantId.ShouldBe("b");
+        corruption.Clear();
+
+        // The retired source itself is the plain not-found of a variant that is gone, and nothing to report.
+        var sourceEx = await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
+        sourceEx.ShouldBeOfType<RepoFileNotFoundException>();
+        corruption.ShouldBeEmpty();
+    }
+
+    // Retires 'a' of a real 'a' with the aliases 'b' and 'c', "crashes" at the given step, and opens the repository again as the restarted process would.
+    private async Task CrashAndFetchSurvivorsAsync(DebugStep crashStep)
+    {
+        IAbsoluteDirectoryPath repoDir;
+        FileId fileId;
+        byte[] originalData;
+
+        using (var crashed = CreateRepo(DeleteMode.Immediate))
+        {
+            repoDir = crashed.BaseDirectory;
+            (fileId, originalData) = await AddRealWithTwoAliasesAsync(crashed);
+
+            crashed.DebugStepHook = step =>
+            {
+                if (step == crashStep)
+                    throw new SimulatedCrashException();
+            };
+
+            await Should.ThrowAsync<SimulatedCrashException>(async () => await crashed.DeleteVariantsAsync(fileId, "a"));
+        }
+
+        // Nothing has cleaned the repository or rolled the retirement forward yet: opening a repository does neither.
+        using var repo = OpenRepo(repoDir, DeleteMode.Immediate);
+        var corruption = TrackCorruption(repo);
+        var groupDir = (await repo.GetAsync(fileId)).Path.ParentDirectory;
+
+        // Crash state: 'a' is retired (delete marker committed) with its data still in place, and both survivors still alias it.
+        groupDir.CombineFile("a" + FileRepoPaths.DeleteMarkerExtension, PathOptions.None).State.ShouldBe(EntryState.Exists);
+        DataFiles(groupDir, "a").ShouldHaveSingleItem();
+        groupDir.GetChildFiles($"*.a.*{FileRepoPaths.AliasMarkerExtension}").Count().ShouldBe(2);
+
+        ShouldBeReadable(await FetchAsync(repo, fileId, "b", "Reopened"), originalData);
+        ShouldBeReadable(await FetchAsync(repo, fileId, "c", "Reopened"), originalData);
+        ShouldBeNotFound(await FetchAsync(repo, fileId, "a", "Reopened"));
+        corruption.ShouldBeEmpty();
+
+        // The cleaner finishes the retirement, and the survivors read the same bytes from the promoted data file.
+        await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+        await AssertSurvivorsResolvedAsync(repo, fileId, originalData, groupDir);
+        ShouldBeReadable(await FetchAsync(repo, fileId, "b", "Cleaned"), originalData);
+        ShouldBeReadable(await FetchAsync(repo, fileId, "c", "Cleaned"), originalData);
+        DataFiles(groupDir, "a").ShouldBeEmpty();
+        corruption.ShouldBeEmpty();
+    }
+
+    // The points at which RetireAndFetchAtEveryStepAsync fetches, in order, for a retirement that rebases one subtree or none. A retirement that fails to
+    // reach one of them would otherwise pass for one that was fetched there.
+    private static string[] RetirementPoints(DeleteMode deleteMode, bool rebases)
+    {
+        var points = new List<string> { nameof(DebugStep.DeleteMarkersWritten) };
+
+        if (rebases)
+            points.AddRange([nameof(DebugStep.RebaseMarkerWritten), nameof(DebugStep.RebaseMaterialized), nameof(DebugStep.RebaseRepointed)]);
+
+        // Only DeferredUntilClean leaves the retired residue to the cleaner.
+        if (deleteMode is not DeleteMode.DeferredUntilClean)
+            points.Add(nameof(DebugStep.DeleteResidueAboutToDelete));
+
+        points.Add(ReturnedPoint);
+        return [.. points];
+    }
+
+    private static async Task<VariantFetch> FetchAsync(FileRepo repo, FileId fileId, string variantId, string at)
+    {
+        byte[]? data = null;
+        RepoFileNotFoundException? error = null;
+
+        try
+        {
+            data = await ReadAllAsync(await repo.GetVariantAsync(fileId, variantId));
+        }
+        catch (RepoFileNotFoundException ex)
+        {
+            error = ex;
+        }
+
+        var group = await repo.GetGroupAsync(fileId);
+        var listed = group.VariantFiles.SingleOrDefault(v => v.VariantId == variantId);
+        byte[]? groupData = listed is null ? null : await ReadAllAsync(listed);
+
+        return new VariantFetch(at, variantId, data, error, groupData, group.DanglingAliases.Any(d => d.VariantId == variantId));
+    }
+
+    // Retires the given variants and fetches each of the others at every checkpoint from the commit point on, and once more after the call has returned.
+    // The fetches run inside the retirement, which holds the locks of the variants it changes: fetches take no locks.
+    private static async Task<List<VariantFetch>> RetireAndFetchAtEveryStepAsync(FileRepo repo, FileId fileId, string[] retire, params string[] fetch)
+    {
+        var fetches = new List<VariantFetch>();
+
+        repo.DebugStepHook = step =>
+        {
+            if (!_committedRetirementSteps.Contains(step))
+                return;
+
+            foreach (string variantId in fetch)
+                fetches.Add(FetchAsync(repo, fileId, variantId, step.ToString()).GetAwaiter().GetResult());
+        };
+
+        try
+        {
+            await repo.DeleteVariantsAsync(fileId, retire);
+        }
+        finally
+        {
+            repo.DebugStepHook = null;
+        }
+
+        foreach (string variantId in fetch)
+            fetches.Add(await FetchAsync(repo, fileId, variantId, ReturnedPoint));
+
+        return fetches;
+    }
+
+    private static void ShouldBeReadable(VariantFetch fetch, byte[] expectedData)
+    {
+        string where = $"variant '{fetch.VariantId}' at {fetch.At}";
+
+        fetch.Error.ShouldBeNull($"GetVariantAsync should find {where}.");
+        fetch.Data.ShouldBe(expectedData, $"GetVariantAsync should lead to the original bytes for {where}.");
+        fetch.GroupData.ShouldNotBeNull($"GetGroupAsync should list {where}.");
+        fetch.GroupData.ShouldBe(expectedData, $"GetGroupAsync should lead to the original bytes for {where}.");
+        fetch.IsListedAsDangling.ShouldBeFalse($"GetGroupAsync should not report {where} as a dangling alias.");
+    }
+
+    // The exception must be a plain RepoFileNotFoundException: its subtype DanglingAliasException reports corruption, which a retired variant is not.
+    private static void ShouldBeNotFound(VariantFetch fetch)
+    {
+        string where = $"variant '{fetch.VariantId}' at {fetch.At}";
+
+        fetch.Error.ShouldNotBeNull($"GetVariantAsync should not find {where}.");
+        fetch.Error.ShouldBeOfType<RepoFileNotFoundException>($"GetVariantAsync should throw a plain not-found for {where}.");
+        fetch.GroupData.ShouldBeNull($"GetGroupAsync should not list {where}.");
+        fetch.IsListedAsDangling.ShouldBeFalse($"GetGroupAsync should not report {where} as a dangling alias.");
+    }
+
+    private static List<RepoCorruptionInfo> TrackCorruption(FileRepo repo)
+    {
+        var captured = new List<RepoCorruptionInfo>();
+
+        repo.CorruptionDetected += info =>
+        {
+            lock (captured)
+                captured.Add(info);
+
+            return Task.CompletedTask;
+        };
+
+        return captured;
+    }
+
     // The data files of a variant: {variantId}.{ext}, which excludes its delete marker ({variantId}.del) and the alias and rebase markers that start with
     // its ID (they have more than one dot in their names).
     private static IAbsoluteFilePath[] DataFiles(IAbsoluteDirectoryPath groupDir, string variantId) =>
@@ -376,6 +689,17 @@ public sealed class VariantCrashRecoveryTests
 
         groupDir.GetChildFiles($"*{FileRepoPaths.RebaseMarkerExtension}").ShouldBeEmpty();
         await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetVariantAsync(fileId, "a"));
+    }
+
+    private async Task<(FileId FileId, byte[] OriginalData)> AddRealWithOneAliasAsync(FileRepo repo)
+    {
+        var fileId = await AddBaseFileAsync(repo);
+
+        var pipeline = VariantPipelines.RealData().WithVariant("b", VariantPipelines.Alias());
+        await repo.AddVariantAsync(fileId, "a", pipeline, TestContext.CancellationToken);
+
+        byte[] originalData = await ReadAllAsync(await repo.GetVariantAsync(fileId, "b"));
+        return (fileId, originalData);
     }
 
     private async Task<(FileId FileId, byte[] OriginalData)> AddRealWithTwoAliasesAsync(FileRepo repo)
@@ -417,6 +741,12 @@ public sealed class VariantCrashRecoveryTests
 
         dir.Create();
 
+        return OpenRepo(dir, deleteMode);
+    }
+
+    // Opens the repository in a directory, creating it if the directory is empty. Used on its own to open a repository again after a simulated crash.
+    private static FileRepo OpenRepo(IAbsoluteDirectoryPath dir, DeleteMode deleteMode)
+    {
         var repo = new FileRepo(dir, RepoFormatVersion.Latest, options => {
             options.DeleteMode = deleteMode;
             options.MaxAccessWaitOrRetryTime = TimeSpan.FromSeconds(60);

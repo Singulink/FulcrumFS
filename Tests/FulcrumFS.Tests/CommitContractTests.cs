@@ -7,7 +7,8 @@ namespace FulcrumFS;
 /// Pins what has happened when a commit throws, reports a failure or is cancelled, for an ordinary transaction (<see cref="FileRepoTransaction.CommitAsync"/>)
 /// and for a staged one (<see cref="FileRepoStagedTransaction.StageAsync"/>, <see cref="FileRepoStage.CommitAsync"/> and
 /// <see cref="FileRepoStagedTransaction.StageAndCommitAsync"/>): the state every file of the transaction is left in, whether the caller learns of it by an
-/// exception or through <see cref="FileRepo.TransactionCompletionFailed"/>, and what disposing the transaction does afterwards.
+/// exception or through <see cref="FileRepo.TransactionCompletionFailed"/>, and what disposing the transaction does afterwards. Also pins what disposing a
+/// transaction of either kind does when it was never committed or rolled back: it leaves the files indeterminate and rolls nothing back.
 /// </summary>
 /// <remarks>
 /// An application commits its database before the repository, so whatever a commit of the repository does after that must never amount to "the add was rolled
@@ -325,7 +326,8 @@ public sealed class CommitContractTests
 
             await txn.DisposeAsync();
 
-            // A commit that returned normally here would tell the caller of a transaction that was rolled back that its files are in the repository.
+            // A commit that returned normally here would tell the caller of a transaction that was disposed without being committed that its files are
+            // committed.
             var ex = await Should.ThrowAsync<ObjectDisposedException>(() => txn.CommitAsync(TestContext.CancellationToken));
             ex.ObjectName.ShouldBe(typeof(FileRepoTransaction).FullName);
 
@@ -333,15 +335,17 @@ public sealed class CommitContractTests
             {
                 ShouldBeCommitted(repoDir, added);
                 ShouldBeDeleted(repoDir, existing, DeleteMode.Immediate);
+                CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
             }
             else
             {
-                // Disposal rolled the transaction back, and the commit did not bring anything of it back.
-                FileDir(repoDir, added).State.ShouldNotBe(EntryState.Exists);
-                ShouldBeCommitted(repoDir, existing);
+                // Disposal left the transaction's files indeterminate, neither committed nor rolled back, and the commit did not change anything of that:
+                // the add is not committed and the deletion has not happened.
+                ShouldBeIndeterminate(repoDir, added);
+                ShouldBeIndeterminate(repoDir, existing);
+                CleanupDir(repoDir).GetChildFiles().Count().ShouldBe(2);
             }
 
-            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
             failures.ShouldBeEmpty();
         }
         finally
@@ -605,13 +609,33 @@ public sealed class CommitContractTests
             }
             else
             {
-                // Disposing it rolls it back, like any transaction that was not committed. This is why the commit that follows the application's database
-                // commit must not be given a token that can be cancelled: the files the database now references would be discarded.
+                // Disposing it does not roll it back, like any transaction that was neither committed nor rolled back: the application's database has
+                // committed, so the files it now references must not be discarded, and the deletion it committed must not be forgotten. They are left
+                // indeterminate, which is why the commit that follows the database commit should not be given a token that can be cancelled: what the
+                // commit would have finished is left to the cleaner.
                 await txn.DisposeAsync();
 
-                FileDir(repoDir, added).State.ShouldNotBe(EntryState.Exists);
-                FileDir(repoDir, addedLate).State.ShouldNotBe(EntryState.Exists);
-                ShouldBeCommitted(repoDir, deleted);
+                foreach (var fileId in new[] { added, addedLate, deleted })
+                    ShouldBeIndeterminate(repoDir, fileId);
+
+                (await CollectAsync(repo)).ShouldAllBe(e => e.IsIndeterminate && !e.IsPendingDeletion);
+
+                // The cleaner asks the application, whose database has the rows of the added files and no longer has that of the deleted one.
+                var asked = new List<FileId>();
+
+                await repo.CleanAsync(
+                    TimeSpan.Zero,
+                    id =>
+                    {
+                        asked.Add(id);
+                        return id == deleted ? IndeterminateResolution.Delete : IndeterminateResolution.Keep;
+                    },
+                    TestContext.CancellationToken);
+
+                asked.ShouldBe([added, addedLate, deleted], ignoreOrder: true);
+                ShouldBeCommitted(repoDir, added);
+                ShouldBeCommitted(repoDir, addedLate);
+                FileDir(repoDir, deleted).State.ShouldNotBe(EntryState.Exists);
             }
 
             CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
@@ -831,11 +855,14 @@ public sealed class CommitContractTests
             }
             else
             {
-                // The application must not commit its database, so it abandons the transaction, which rolls it back.
-                await txn.DisposeAsync();
+                // The application must not commit its database, so it knows that the transaction's files are not referenced and rolls it back, which
+                // discards the add at once. Disposing it afterwards does nothing more.
+                await txn.RollbackAsync(TestContext.CancellationToken);
 
                 FileDir(repoDir, added).State.ShouldNotBe(EntryState.Exists);
                 fileIds.ShouldAllBe(id => FileDir(repoDir, id).State == EntryState.Exists);
+
+                await txn.DisposeAsync();
             }
 
             CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
@@ -1500,8 +1527,780 @@ public sealed class CommitContractTests
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Both kinds of transaction: disposal without a commit or a rollback
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A transaction that is disposed without having been committed or rolled back cannot know whether its application's database committed (the commit
+    /// can have taken effect although the call threw), so it does not roll back. It leaves the files it added as a process that ended there leaves them:
+    /// readable and indeterminate, for the cleaner to resolve through the resolution callback.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.Immediate)]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.DeferredUntilClean)]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.DeferredFilesOnly)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.Immediate)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.DeferredFilesOnly)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.Immediate)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.DeferredUntilClean)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.DeferredFilesOnly)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.Immediate)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.DeferredFilesOnly)]
+    public async Task Dispose_WithoutCommitOrRollback_LeavesTheAddedFilesIndeterminate_ForTheCleanerToResolve(
+        bool staged, RepoFormatVersion formatVersion, DeleteMode deleteMode)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, deleteMode, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var txn = await PrepareAsync(repo, staged, addCount: 2, deleted: []);
+            var (kept, discarded) = (txn.Added[0], txn.Added[1]);
+
+            txn.Added.ShouldAllBe(id => IsHeld(IndeterminateMarker(repoDir, id)));
+
+            await txn.DisposeAsync();
+
+            // Nothing was rolled back and nothing was committed: both files are there with their markers, which nobody holds any more.
+            CleanupDir(repoDir).GetChildFiles().Count().ShouldBe(2);
+
+            foreach (var fileId in txn.Added)
+            {
+                ShouldBeIndeterminate(repoDir, fileId);
+                await ShouldBeReadableAsync(repo, fileId);
+            }
+
+            var entries = await CollectAsync(repo);
+            entries.Select(e => e.FileId).ShouldBe(txn.Added, ignoreOrder: true);
+            entries.ShouldAllBe(e => e.IsIndeterminate && !e.IsPendingDeletion);
+
+            // A pass without a callback cannot tell whether the database committed, so it leaves the files as they are.
+            await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+            foreach (var fileId in txn.Added)
+            {
+                ShouldBeIndeterminate(repoDir, fileId);
+                await ShouldBeReadableAsync(repo, fileId);
+            }
+
+            // A pass with one asks the application about each file: its database has a row for one of them and none for the other.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return id == kept ? IndeterminateResolution.Keep : IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe(txn.Added, ignoreOrder: true);
+
+            // The file that was kept is a committed file like any other, and the other one is gone.
+            ShouldBeCommitted(repoDir, kept);
+            await ShouldBeReadableAsync(repo, kept);
+            ShouldBeTheOnlyFileAndCommitted(await CollectAsync(repo), kept);
+
+            FileDir(repoDir, discarded).State.ShouldNotBe(EntryState.Exists);
+            await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(discarded));
+
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The deletions of a transaction that is disposed without having been committed or rolled back are neither made nor abandoned, for the same reason:
+    /// the application's database may have committed them. Their durable record (the marker of each file, or the staged journal) is released and left, so
+    /// the files are indeterminate and the cleaner asks the resolution callback about them.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.Immediate)]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.DeferredUntilClean)]
+    [DataRow(false, RepoFormatVersion.Version1, DeleteMode.DeferredFilesOnly)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.Immediate)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean)]
+    [DataRow(false, RepoFormatVersion.Version2, DeleteMode.DeferredFilesOnly)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.Immediate)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.DeferredUntilClean)]
+    [DataRow(true, RepoFormatVersion.Version1, DeleteMode.DeferredFilesOnly)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.Immediate)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.DeferredUntilClean)]
+    [DataRow(true, RepoFormatVersion.Version2, DeleteMode.DeferredFilesOnly)]
+    public async Task Dispose_WithoutCommitOrRollback_LeavesTheDeletedFilesIndeterminate_ForTheCleanerToResolve(
+        bool staged, RepoFormatVersion formatVersion, DeleteMode deleteMode)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, deleteMode, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileIds = await AddSampleFilesAsync(repo, 2);
+            var (kept, deleted) = (fileIds[0], fileIds[1]);
+
+            // A staged transaction records its deletions in one journal where the repository has journals. Otherwise, and in an ordinary transaction, each
+            // deletion is recorded in the file's indeterminate marker.
+            bool journaled = staged && formatVersion is RepoFormatVersion.Version2;
+
+            var txn = await PrepareAsync(repo, staged, addCount: 0, fileIds);
+            ShouldHavePendingDeletions(repoDir, journaled, fileIds, held: true);
+
+            await txn.DisposeAsync();
+
+            // The record is still there, with nobody holding it, as after a process that ended here: no deletion was made, and none was forgotten.
+            ShouldHavePendingDeletions(repoDir, journaled, fileIds, held: false);
+
+            foreach (var fileId in fileIds)
+            {
+                FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+                DeleteMarker(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
+                await ShouldBeReadableAsync(repo, fileId);
+            }
+
+            var entries = await CollectAsync(repo);
+            entries.Select(e => e.FileId).ShouldBe(fileIds, ignoreOrder: true);
+            entries.ShouldAllBe(e => e.IsIndeterminate && !e.IsPendingDeletion);
+
+            // A pass without a callback cannot tell whether the database committed the deletions, so it leaves the files and their record as they are.
+            await repo.CleanAsync(TimeSpan.Zero, TestContext.CancellationToken);
+
+            ShouldHavePendingDeletions(repoDir, journaled, fileIds, held: false);
+            fileIds.ShouldAllBe(id => FileDir(repoDir, id).State == EntryState.Exists);
+
+            // A pass with one asks the application about each file: its database still has the row of one of them, and the row of the other is gone.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return id == kept ? IndeterminateResolution.Keep : IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe(fileIds, ignoreOrder: true);
+
+            ShouldBeCommitted(repoDir, kept);
+            await ShouldBeReadableAsync(repo, kept);
+            ShouldBeTheOnlyFileAndCommitted(await CollectAsync(repo), kept);
+
+            FileDir(repoDir, deleted).State.ShouldNotBe(EntryState.Exists);
+            await Should.ThrowAsync<RepoFileNotFoundException>(async () => await repo.GetAsync(deleted));
+
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A staged transaction that is disposed before it was staged has its deletions in memory only. Nothing records them, so nothing happens to those
+    /// files and they are not indeterminate: the application cannot have committed its database, which comes after staging. The files the transaction
+    /// added are on disk, and are left indeterminate like those of any other transaction.
+    /// </summary>
+    [TestMethod]
+    [DataRow(RepoFormatVersion.Version1)]
+    [DataRow(RepoFormatVersion.Version2)]
+    public async Task Dispose_OfAStagedTransactionThatWasNotStaged_LeavesItsAddsIndeterminate_AndRecordsNothingForItsDeletions(RepoFormatVersion formatVersion)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileIds = await AddSampleFilesAsync(repo, 2);
+
+            var txn = await PrepareAsync(repo, staged: true, addCount: 1, fileIds, stage: false);
+            var added = txn.Added[0];
+
+            // Recording the deletions wrote nothing: the marker of the add is all there is.
+            CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(IndeterminateMarker(repoDir, added));
+
+            await txn.DisposeAsync();
+
+            CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(IndeterminateMarker(repoDir, added));
+            ShouldBeIndeterminate(repoDir, added);
+            await ShouldBeReadableAsync(repo, added);
+
+            foreach (var fileId in fileIds)
+            {
+                ShouldBeCommitted(repoDir, fileId);
+                await ShouldBeReadableAsync(repo, fileId);
+            }
+
+            var entries = await CollectAsync(repo);
+            entries.Select(e => e.FileId).ShouldBe([.. fileIds, added], ignoreOrder: true);
+            entries.ShouldAllBe(e => e.IsIndeterminate == (e.FileId == added) && !e.IsPendingDeletion);
+
+            // The cleaner asks about the added file only. No row references it, since the database did not commit, so the answer is to delete it.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([added]);
+            FileDir(repoDir, added).State.ShouldNotBe(EntryState.Exists);
+
+            foreach (var fileId in fileIds)
+                ShouldBeCommitted(repoDir, fileId);
+
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The case that disposal must not turn into lost files. A request replaces the file of a row: it adds the new file, deletes the old one and commits
+    /// its database. The server commits, but the answer does not arrive (the connection is lost), so the call throws, the exception skips the repository
+    /// commit and the transaction is disposed. The committed row references the added file, which must still be there, and the deletion of the old file,
+    /// which the database committed as well, must not be forgotten.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, RepoFormatVersion.Version1)]
+    [DataRow(false, RepoFormatVersion.Version2)]
+    [DataRow(true, RepoFormatVersion.Version1)]
+    [DataRow(true, RepoFormatVersion.Version2)]
+    public async Task Dispose_AfterADatabaseCommitThatTookEffectAlthoughItsCallThrew_KeepsTheFileTheDatabaseReferences(
+        bool staged, RepoFormatVersion formatVersion)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.DeferredUntilClean, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            // The application's database: the files that its rows reference.
+            var replaced = await AddSampleFileAsync(repo);
+            var rows = new HashSet<FileId> { replaced };
+
+            var connectionLost = new IOException("The connection was lost before the answer to the commit arrived.");
+            FileId? added = null;
+
+            Func<Task> replace = staged ? ReplaceInStagedTransactionAsync : ReplaceInTransactionAsync;
+            (await Should.ThrowAsync<IOException>(replace)).ShouldBeSameAs(connectionLost);
+
+            added.ShouldNotBeNull();
+            rows.ShouldBe([added]);
+
+            // The row that the database committed references the added file: it is there and readable, although its transaction was never committed.
+            // The old file has not been deleted, but its deletion is still on record.
+            await ShouldBeReadableAsync(repo, added);
+            FileDir(repoDir, replaced).State.ShouldBe(EntryState.Exists);
+
+            var entries = await CollectAsync(repo);
+            entries.Select(e => e.FileId).ShouldBe([added, replaced], ignoreOrder: true);
+            entries.ShouldAllBe(e => e.IsIndeterminate && !e.IsPendingDeletion);
+
+            // The next cleanup pass asks the database, which knows what it committed.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return rows.Contains(id) ? IndeterminateResolution.Keep : IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([added, replaced], ignoreOrder: true);
+
+            // The added file is a committed file like any other, and the file it replaced is gone.
+            ShouldBeCommitted(repoDir, added);
+            await ShouldBeReadableAsync(repo, added);
+            ShouldBeTheOnlyFileAndCommitted(await CollectAsync(repo), added);
+
+            FileDir(repoDir, replaced).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+
+            async Task ReplaceInTransactionAsync()
+            {
+                await using var txn = await repo.BeginTransactionAsync();
+                added = await AddSampleFileAsync(txn);
+                await txn.DeleteAsync(replaced, TestContext.CancellationToken);
+
+                await CommitDatabaseAsync();
+                await txn.CommitAsync(CancellationToken.None);
+            }
+
+            async Task ReplaceInStagedTransactionAsync()
+            {
+                await using var txn = await repo.BeginStagedTransactionAsync();
+                added = await AddSampleFileAsync(txn);
+                await txn.DeleteAsync(replaced, TestContext.CancellationToken);
+                var stage = await txn.StageAsync(TestContext.CancellationToken);
+
+                await CommitDatabaseAsync();
+                await stage.CommitAsync(CancellationToken.None);
+            }
+
+            // The server commits the database transaction, and the call throws all the same.
+            Task CommitDatabaseAsync()
+            {
+                rows.Remove(replaced);
+                rows.Add(added.ShouldNotBeNull());
+
+                return Task.FromException(connectionLost);
+            }
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// An explicit rollback is how an application that knows that its database did not commit discards a transaction's files at once, before and after
+    /// staging. Nothing is left for the disposal that follows, or for the cleaner.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, false, RepoFormatVersion.Version1)]
+    [DataRow(false, false, RepoFormatVersion.Version2)]
+    [DataRow(true, false, RepoFormatVersion.Version1)]
+    [DataRow(true, false, RepoFormatVersion.Version2)]
+    [DataRow(true, true, RepoFormatVersion.Version1)]
+    [DataRow(true, true, RepoFormatVersion.Version2)]
+    public async Task Rollback_DiscardsTheAddsAndAbandonsTheDeletionsAtOnce_AndDisposalAfterwardsDoesNothing(
+        bool staged, bool stage, RepoFormatVersion formatVersion)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileIds = await AddSampleFilesAsync(repo, 2);
+            var txn = await PrepareAsync(repo, staged, addCount: 2, fileIds, stage);
+
+            await txn.RollbackAsync();
+            ShouldBeRolledBack();
+
+            await txn.DisposeAsync();
+            ShouldBeRolledBack();
+
+            // Nothing is indeterminate, so the cleaner has nothing to ask about.
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBeEmpty();
+            ShouldBeRolledBack();
+
+            var entries = await CollectAsync(repo);
+            entries.Select(e => e.FileId).ShouldBe(fileIds, ignoreOrder: true);
+            entries.ShouldAllBe(e => !e.IsIndeterminate && !e.IsPendingDeletion);
+
+            failures.ShouldBeEmpty();
+
+            void ShouldBeRolledBack()
+            {
+                txn.Added.ShouldAllBe(id => FileDir(repoDir, id).State != EntryState.Exists);
+
+                foreach (var fileId in fileIds)
+                    ShouldBeCommitted(repoDir, fileId);
+
+                CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            }
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The staged counterpart of <see cref="Commit_CancelledWhileAnotherCallOnTheTransactionRuns_ThrowsAndCommitsNothing"/>: a call that is cancelled
+    /// before it has staged anything leaves the transaction open, and disposing it then leaves its adds indeterminate and records nothing for its
+    /// deletions, which were never staged.
+    /// </summary>
+    [TestMethod]
+    [DataRow(RepoFormatVersion.Version1)]
+    [DataRow(RepoFormatVersion.Version2)]
+    public async Task StageAndCommit_CancelledWhileAnotherCallOnTheTransactionRuns_ThenDisposed_LeavesTheAddsIndeterminate(RepoFormatVersion formatVersion)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            var fileIds = await AddSampleFilesAsync(repo, 2);
+
+            var txn = await repo.BeginStagedTransactionAsync();
+            var added = await AddSampleFileAsync(txn);
+
+            foreach (var fileId in fileIds)
+                await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+            // An add that is still running holds the transaction, so the call has to wait for it.
+            var gate = new GateProcessor();
+            var runningAdd = AddSampleFileAsync(txn, gate);
+            await gate.Entered.WaitAsync(TestContext.CancellationToken);
+
+            using var cts = new CancellationTokenSource();
+            var commit = txn.StageAndCommitAsync(cts.Token);
+            commit.IsCompleted.ShouldBeFalse();
+
+            await cts.CancelAsync();
+            await Should.ThrowAsync<OperationCanceledException>(() => commit);
+
+            gate.Release();
+            var addedLate = await runningAdd;
+
+            await txn.DisposeAsync();
+
+            // Not rolled back: the adds are indeterminate. Nothing was staged, so nothing records the deletions and their files are as they were.
+            ShouldBeIndeterminate(repoDir, added);
+            ShouldBeIndeterminate(repoDir, addedLate);
+            CleanupDir(repoDir).GetChildFiles().Count().ShouldBe(2);
+
+            foreach (var fileId in fileIds)
+                ShouldBeCommitted(repoDir, fileId);
+
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([added, addedLate], ignoreOrder: true);
+            FileDir(repoDir, added).State.ShouldNotBe(EntryState.Exists);
+            FileDir(repoDir, addedLate).State.ShouldNotBe(EntryState.Exists);
+
+            foreach (var fileId in fileIds)
+                ShouldBeCommitted(repoDir, fileId);
+
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// An add that fails cleans up after itself, whatever becomes of its transaction: nothing of it is left for the disposal or for the cleaner. The adds
+    /// of the same transaction that succeeded are left indeterminate when it is disposed.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Dispose_AfterOneOfSeveralAddsFailed_LeavesNothingOfTheFailedAdd_AndTheOthersIndeterminate(bool staged)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, RepoFormatVersion.Version2);
+        var failures = TrackCompletionFailures(repo);
+
+        try
+        {
+            IAsyncDisposable txn;
+            Func<IFileProcessingPipelineSelector?, Task<FileId>> add;
+
+            if (staged)
+            {
+                var stagedTxn = await repo.BeginStagedTransactionAsync();
+                (txn, add) = (stagedTxn, pipeline => AddSampleFileAsync(stagedTxn, pipeline));
+            }
+            else
+            {
+                var ordinaryTxn = await repo.BeginTransactionAsync();
+                (txn, add) = (ordinaryTxn, pipeline => AddSampleFileAsync(ordinaryTxn, pipeline));
+            }
+
+            var first = await add(null);
+
+            var failing = new ActingRewriteProcessor(() => throw new InvalidOperationException("Simulated processor failure."), []);
+            await Should.ThrowAsync<FileProcessingException>(() => add(failing));
+
+            // The failed add left no file, no marker and no working file, and the transaction can still add files.
+            CleanupDir(repoDir).GetChildFiles().ShouldHaveSingleItem().ShouldBe(IndeterminateMarker(repoDir, first));
+            repoDir.CombineDirectory(FileRepoPaths.TempDirectoryName, PathOptions.None).GetChildEntries().ShouldBeEmpty();
+            (await CollectAsync(repo)).ShouldHaveSingleItem().FileId.ShouldBe(first);
+
+            var last = await add(null);
+
+            await txn.DisposeAsync();
+
+            ShouldBeIndeterminate(repoDir, first);
+            ShouldBeIndeterminate(repoDir, last);
+            CleanupDir(repoDir).GetChildFiles().Count().ShouldBe(2);
+
+            var entries = await CollectAsync(repo);
+            entries.Select(e => e.FileId).ShouldBe([first, last], ignoreOrder: true);
+            entries.ShouldAllBe(e => e.IsIndeterminate && !e.IsPendingDeletion);
+
+            var asked = new List<FileId>();
+
+            await repo.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return IndeterminateResolution.Keep;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([first, last], ignoreOrder: true);
+            ShouldBeCommitted(repoDir, first);
+            ShouldBeCommitted(repoDir, last);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Disposing a transaction once its repository has been disposed leaves what disposing it on a live repository leaves, since the disposal needs
+    /// nothing of the repository: the files indeterminate, with their record released. Disposing it a second time does nothing, and the transaction can no
+    /// longer be committed or rolled back.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, RepoFormatVersion.Version1, false)]
+    [DataRow(false, RepoFormatVersion.Version1, true)]
+    [DataRow(false, RepoFormatVersion.Version2, false)]
+    [DataRow(false, RepoFormatVersion.Version2, true)]
+    [DataRow(true, RepoFormatVersion.Version1, false)]
+    [DataRow(true, RepoFormatVersion.Version1, true)]
+    [DataRow(true, RepoFormatVersion.Version2, false)]
+    [DataRow(true, RepoFormatVersion.Version2, true)]
+    public async Task Dispose_WithOrWithoutTheRepository_LeavesTheSameIndeterminateFiles_AndASecondDisposalDoesNothing(
+        bool staged, RepoFormatVersion formatVersion, bool repositoryDisposedFirst)
+    {
+        var repoDir = NewRepoDir();
+        var repo = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+        var failures = TrackCompletionFailures(repo);
+        bool journaled = staged && formatVersion is RepoFormatVersion.Version2;
+        FileId added;
+        FileId deleted;
+
+        try
+        {
+            deleted = await AddSampleFileAsync(repo);
+
+            var txn = await PrepareAsync(repo, staged, addCount: 1, [deleted]);
+            added = txn.Added[0];
+
+            if (repositoryDisposedFirst)
+                repo.Dispose();
+
+            await txn.DisposeAsync();
+            ShouldBeLeftIndeterminate();
+
+            string[] cleanupEntries = [.. CleanupDir(repoDir).GetChildFiles().Select(f => f.PathExport)];
+
+            await txn.DisposeAsync();
+            ShouldBeLeftIndeterminate();
+            CleanupDir(repoDir).GetChildFiles().Select(f => f.PathExport).ShouldBe(cleanupEntries, ignoreOrder: true);
+
+            // A disposed transaction is finished with: it can be neither committed nor rolled back, and trying to changes nothing.
+            await Should.ThrowAsync<ObjectDisposedException>(async () => await txn.CommitAsync());
+            await Should.ThrowAsync<ObjectDisposedException>(async () => await txn.RollbackAsync());
+            ShouldBeLeftIndeterminate();
+
+            failures.ShouldBeEmpty();
+        }
+        finally
+        {
+            repo.Dispose();
+        }
+
+        // The next clean, by whoever opens the repository next, resolves both files through the callback.
+        var reopened = CreateRepo(repoDir, DeleteMode.Immediate, formatVersion);
+
+        try
+        {
+            var asked = new List<FileId>();
+
+            await reopened.CleanAsync(
+                TimeSpan.Zero,
+                id =>
+                {
+                    asked.Add(id);
+                    return id == added ? IndeterminateResolution.Keep : IndeterminateResolution.Delete;
+                },
+                TestContext.CancellationToken);
+
+            asked.ShouldBe([added, deleted], ignoreOrder: true);
+            ShouldBeCommitted(repoDir, added);
+            FileDir(repoDir, deleted).State.ShouldNotBe(EntryState.Exists);
+            CleanupDir(repoDir).GetChildFiles().ShouldBeEmpty();
+        }
+        finally
+        {
+            reopened.Dispose();
+        }
+
+        void ShouldBeLeftIndeterminate()
+        {
+            ShouldBeIndeterminate(repoDir, added);
+            FileDir(repoDir, deleted).State.ShouldBe(EntryState.Exists);
+            DeleteMarker(repoDir, deleted).State.ShouldNotBe(EntryState.Exists);
+
+            if (journaled)
+            {
+                var stagedJournal = CleanupDir(repoDir).GetChildFiles("*" + FileRepoPaths.StagedJournalExtension).ShouldHaveSingleItem();
+                RepoFileSystem.TryReadJournal(stagedJournal, out var listed).ShouldBeTrue();
+                listed.ShouldBe([deleted]);
+                IsHeld(stagedJournal).ShouldBeFalse();
+            }
+            else
+            {
+                ShouldBeIndeterminate(repoDir, deleted);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A transaction of either kind at the point at which its application commits its database: it has added and deleted its files and, if it is a staged
+    /// one, has been staged (unless the test asked for one that has not).
+    /// </summary>
+    private sealed class PreparedTransaction(IAsyncDisposable transaction, FileId[] added, Func<Task> commit, Func<Task> rollback) : IAsyncDisposable
+    {
+        /// <summary>Gets the files the transaction added, in the order it added them.</summary>
+        public FileId[] Added => added;
+
+        public Task CommitAsync() => commit();
+
+        public Task RollbackAsync() => rollback();
+
+        public ValueTask DisposeAsync() => transaction.DisposeAsync();
+    }
+
+    /// <summary>
+    /// Begins a transaction of the specified kind, adds the specified number of sample files to it and deletes the specified files in it. A staged
+    /// transaction is then staged, unless <paramref name="stage"/> is <see langword="false"/>, in which case its commit is
+    /// <see cref="FileRepoStagedTransaction.StageAndCommitAsync"/>.
+    /// </summary>
+    private async Task<PreparedTransaction> PrepareAsync(FileRepo repo, bool staged, int addCount, FileId[] deleted, bool stage = true)
+    {
+        var added = new FileId[addCount];
+
+        if (staged)
+        {
+            var stagedTxn = await repo.BeginStagedTransactionAsync();
+
+            for (int i = 0; i < addCount; i++)
+                added[i] = await AddSampleFileAsync(stagedTxn);
+
+            foreach (var fileId in deleted)
+                await stagedTxn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+            Func<Task> commit = () => stagedTxn.StageAndCommitAsync(TestContext.CancellationToken);
+
+            if (stage)
+            {
+                var stagedStage = await stagedTxn.StageAsync(TestContext.CancellationToken);
+                commit = () => stagedStage.CommitAsync(TestContext.CancellationToken);
+            }
+
+            return new PreparedTransaction(stagedTxn, added, commit, () => stagedTxn.RollbackAsync(TestContext.CancellationToken));
+        }
+
+        var txn = await repo.BeginTransactionAsync();
+
+        for (int i = 0; i < addCount; i++)
+            added[i] = await AddSampleFileAsync(txn);
+
+        foreach (var fileId in deleted)
+            await txn.DeleteAsync(fileId, TestContext.CancellationToken);
+
+        return new PreparedTransaction(
+            txn, added, () => txn.CommitAsync(TestContext.CancellationToken), () => txn.RollbackAsync(TestContext.CancellationToken));
+    }
+
+    /// <summary>
+    /// Asserts that the deletions of the specified files are on record as pending and that the cleanup directory holds nothing else: one staged journal
+    /// that lists them, or an indeterminate marker for each of them, held by their transaction or by nobody.
+    /// </summary>
+    private static void ShouldHavePendingDeletions(IAbsoluteDirectoryPath repoDir, bool journaled, FileId[] fileIds, bool held)
+    {
+        var entries = CleanupDir(repoDir).GetChildFiles().ToList();
+
+        if (journaled)
+        {
+            var stagedJournal = entries.ShouldHaveSingleItem();
+            stagedJournal.Extension.ShouldBe(FileRepoPaths.StagedJournalExtension);
+            RepoFileSystem.TryReadJournal(stagedJournal, out var listed).ShouldBeTrue();
+            listed.ShouldBe(fileIds);
+            IsHeld(stagedJournal).ShouldBe(held);
+        }
+        else
+        {
+            entries.Select(e => e.PathExport).ShouldBe(fileIds.Select(id => IndeterminateMarker(repoDir, id).PathExport), ignoreOrder: true);
+            fileIds.ShouldAllBe(id => IsHeld(IndeterminateMarker(repoDir, id)) == held);
+        }
+    }
+
+    /// <summary>
+    /// Asserts that the repository can fetch a file and that its content, which is that of the sample file, can be read.
+    /// </summary>
+    private async Task ShouldBeReadableAsync(FileRepo repo, FileId fileId)
+    {
+        (await repo.GetAsync(fileId)).FileId.ShouldBe(fileId);
+
+        await using var stream = await repo.OpenAsync(fileId, FileAccessPattern.Sequential);
+        using var content = new MemoryStream();
+        await stream.CopyToAsync(content, TestContext.CancellationToken);
+
+        content.ToArray().ShouldBe(await File.ReadAllBytesAsync(_sampleDir.CombineFile("sample.jpg").PathExport, TestContext.CancellationToken));
+    }
+
+    /// <summary>
+    /// Asserts that an enumeration of the repository reported the specified file and no other, as neither indeterminate nor pending deletion.
+    /// </summary>
+    private static void ShouldBeTheOnlyFileAndCommitted(List<RepoFileEntry> entries, FileId fileId)
+    {
+        var entry = entries.ShouldHaveSingleItem();
+
+        entry.FileId.ShouldBe(fileId);
+        entry.IsIndeterminate.ShouldBeFalse();
+        entry.IsPendingDeletion.ShouldBeFalse();
+    }
 
     /// <summary>
     /// Makes the first occurrence of a debug step in the repository throw, which fails the commit of the one file that reached it.
@@ -1529,6 +2328,17 @@ public sealed class CommitContractTests
         IsHeld(IndeterminateMarker(repoDir, indeterminate)).ShouldBeFalse();
 
         return indeterminate;
+    }
+
+    /// <summary>
+    /// Asserts that a file is indeterminate: its group is on disk, with an indeterminate marker that nobody holds and no delete marker.
+    /// </summary>
+    private static void ShouldBeIndeterminate(IAbsoluteDirectoryPath repoDir, FileId fileId)
+    {
+        FileDir(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+        IndeterminateMarker(repoDir, fileId).State.ShouldBe(EntryState.Exists);
+        IsHeld(IndeterminateMarker(repoDir, fileId)).ShouldBeFalse();
+        DeleteMarker(repoDir, fileId).State.ShouldNotBe(EntryState.Exists);
     }
 
     /// <summary>

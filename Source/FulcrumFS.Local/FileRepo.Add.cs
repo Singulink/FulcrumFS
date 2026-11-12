@@ -213,10 +213,12 @@ partial class FileRepo
         }
 
         // A pending rebase marker observed while resolving the source forces an optimistic rollforward-and-restart (honoring the whole-system invariant that
-        // no add/delete plans while a rebase marker exists - see the alias-resolution block below), so the whole add runs under a bounded restart loop.
-        for (int addAttempt = 0; ; addAttempt++)
+        // no add/delete plans while a rebase marker exists - see the alias-resolution block below), so the whole add runs under a restart loop, in which the
+        // rollforwards are bounded. A restart because the source was promoted or re-pointed while it was being resolved (see the same block) is not: each
+        // of those means that the source's slot changed, and it does not count as an attempt.
+        for (int rollForwardAttempts = 0; ;)
         {
-            if (addAttempt >= MaxAddRebaseRollForwardAttempts)
+            if (rollForwardAttempts >= MaxAddRebaseRollForwardAttempts)
             {
                 throw new IOException(
                     $"Unable to resolve a stable source for file ID '{fileId}' after {MaxAddRebaseRollForwardAttempts} attempts due to concurrent rebase " +
@@ -252,6 +254,7 @@ partial class FileRepo
             var brokenMarkersToDelete = new List<IAbsoluteFilePath>();
 
             bool needRollForward = false;
+            bool sourceChanged = false;
 
             try
             {
@@ -278,60 +281,54 @@ partial class FileRepo
 
                 var existingByVariantId = new Dictionary<string, IAbsoluteFilePath>(StringComparer.Ordinal);
 
+                // The marker of the source variant, if the source is a dangling alias: the source resolution below then needs no further read to know it.
+                string? danglingSourceMarkerName = null;
+
                 foreach (string vid in allVariantIds)
                 {
-                    var (existing, isRetired, _) = await _fs.FindDataFileAsync(fileId, vid).ConfigureAwait(false);
+                    // The slot is read until it is steady, as a fetch of the variant reads it, and not once: our lock on the variant keeps the foreground
+                    // from changing the slot, but the cleaner takes no variant locks. While it finishes a retirement that a crash interrupted, it can
+                    // promote this alias to a data file, or re-point it, and then remove the source's data file, between our read of the marker and our
+                    // look at its source. Taking the marker of such a read for a dangling alias would report corruption that is not there, and then treat
+                    // as empty a slot that holds a live variant.
+                    var slot = await ReadVariantSlotAsync(fileId, vid).ConfigureAwait(false);
 
-                    if (isRetired)
+                    switch (slot.Kind)
                     {
-                        throw new RepoVariantPendingCleanupException(
-                            $"File ID '{fileId}' variant '{vid}' has pending retirement cleanup state on disk and cannot be added under the same ID until " +
-                            $"cleanup completes. Reusing a retired variant ID is an advanced scenario - consult the FileRepo.DeleteVariantsAsync " +
-                            $"documentation before relying on this behavior.");
+                        case VariantSlotKind.Retired:
+                            throw CreatePendingCleanupException(fileId, vid);
+
+                        case VariantSlotKind.Missing:
+                            break;
+
+                        case VariantSlotKind.MalformedAlias:
+                            // A malformed marker (filename unparseable) is treated as an empty slot: the marker is queued for deletion under the lock and
+                            // the MalformedAlias corruption event fires.
+                            await CorruptionDetected.RaiseMalformedAliasAsync(fileId, slot.File!.Name).ConfigureAwait(false);
+                            brokenMarkersToDelete.Add(slot.File);
+                            break;
+
+                        case VariantSlotKind.DanglingAlias:
+                            // A dangling alias marker (one whose source data file is missing, and still was when the slot was read again) is treated as
+                            // an empty slot rather than a collision: the marker has no resolvable backing data, so an add over it is a self-healing
+                            // operation. Delete the marker under the lock and raise the corruption event so monitoring/repair tooling sees it. The add
+                            // then proceeds as if the slot had been empty all along. This is so whether or not the source is retired, as it is for the
+                            // fetches: a retirement keeps the data file of a retired source for as long as an alias that is not retired names it.
+                            await CorruptionDetected.RaiseDanglingAliasAsync(fileId, vid, slot.SourceVariantId).ConfigureAwait(false);
+                            brokenMarkersToDelete.Add(slot.File!);
+
+                            if (vid == sourceVariantId)
+                                danglingSourceMarkerName = slot.File!.Name;
+
+                            break;
+
+                        default:
+                            // A data file, or an alias that resolves: the variant exists. An alias whose source is retired with its data file still
+                            // there is among them - that is in-progress retirement, not corruption, and the alias stays as it is (if it is the source of
+                            // this add, the source-resolution branch downstream picks up a pending rebase and rolls it forward).
+                            existingByVariantId[vid] = slot.File!;
+                            break;
                     }
-
-                    if (existing is null)
-                        continue;
-
-                    // A dangling alias marker (one whose source data file is missing) is treated as an empty slot rather than a collision: the marker has no
-                    // resolvable backing data, so an add over it is a self-healing operation. Delete the marker under the lock and raise the corruption event
-                    // so monitoring/repair tooling sees it. The add then proceeds as if the slot had been empty all along.
-                    //
-                    // A retired source (delete marker present) is NOT corruption - it is in-progress retirement that the source-resolution branch downstream
-                    // will pick up as a pending rebase and roll forward. Leave such markers in place so the rebase logic can see them.
-                    //
-                    // A malformed marker (filename unparseable) is also treated as an empty slot: the marker is queued for deletion under the lock and the
-                    // MalformedAlias corruption event fires.
-                    if (existing.Extension is FileRepoPaths.AliasMarkerExtension)
-                    {
-                        if (!RepoFileSystem.TryParseAliasMarker(existing, out _, out string? aliasSrcVid, out string? aliasSrcExt))
-                        {
-                            await CorruptionDetected.RaiseMalformedAliasAsync(fileId, existing.Name).ConfigureAwait(false);
-                            brokenMarkersToDelete.Add(existing);
-                            continue;
-                        }
-
-                        bool sourceMissing;
-
-                        if (aliasSrcVid is not null)
-                        {
-                            var (aliasSrc, srcRetired, _) = await _fs.FindDataFileAsync(fileId, aliasSrcVid).ConfigureAwait(false);
-                            sourceMissing = aliasSrc is null && !srcRetired;
-                        }
-                        else
-                        {
-                            sourceMissing = _fs.GetDataFile(fileId, aliasSrcExt, variantId: null).State is not EntryState.Exists;
-                        }
-
-                        if (sourceMissing)
-                        {
-                            await CorruptionDetected.RaiseDanglingAliasAsync(fileId, vid, aliasSrcVid).ConfigureAwait(false);
-                            brokenMarkersToDelete.Add(existing);
-                            continue;
-                        }
-                    }
-
-                    existingByVariantId[vid] = existing;
                 }
 
                 if (mode is not VariantAddMode.GetOrAdd)
@@ -390,6 +387,8 @@ partial class FileRepo
                     // Honor the whole-system invariant instead: drop our locks (in the finally), roll the rebase forward to completion under its own locks,
                     // then restart and re-resolve against the settled, single-head subtree. (No locks are held across the rollforward, so no out-of-order
                     // acquisition is possible.)
+                    DebugStepHook?.Invoke(DebugStep.VariantAliasMarkerRead);
+
                     var (resolved, _, rootRebaseChosen) = await _fs.FindDataFileAsync(fileId, rootVid).ConfigureAwait(false);
 
                     if (rootRebaseChosen is not null)
@@ -403,14 +402,43 @@ partial class FileRepo
 
                         needRollForward = true;
                     }
+                    else if (resolved is null || resolved.State is not EntryState.Exists)
+                    {
+                        // The root's data file is missing. Our locks on the source and the root keep the foreground away, but not the cleaner, which
+                        // takes no variant locks: finishing a retirement of the root, it may have promoted or re-pointed the source and then removed the
+                        // root's data file since we read the source's marker. The source is then live under another name, and not found only by the marker
+                        // we hold. So its slot is read again until it is steady, with our read as the one before, as for the variants being added above.
+                        // A source that the collision check already found dangling under this marker needs no further read.
+                        var sourceSlot = sourceFile.Name == danglingSourceMarkerName ?
+                            new VariantSlot(VariantSlotKind.DanglingAlias, sourceFile) :
+                            await ReadVariantSlotAsync(fileId, sourceVariantId!, sourceFile.Name).ConfigureAwait(false);
+
+                        switch (sourceSlot.Kind)
+                        {
+                            case VariantSlotKind.Data:
+                            case VariantSlotKind.Alias:
+                                // The source was promoted or re-pointed. Drop our locks (in the finally) and restart, so that the add checks its variants
+                                // and takes its locks, the new root's among them, against the group as it is now. The slot changed, so this is not counted
+                                // as an attempt: only something that changes the source without end keeps the add restarting.
+                                sourceChanged = true;
+                                break;
+
+                            case VariantSlotKind.DanglingAlias:
+                                // The same marker with the root still missing: the source is a dangling alias.
+                                throw new RepoFileNotFoundException(
+                                    $"File ID '{fileId}' source variant '{sourceVariantId}' alias points to missing data file.");
+
+                            case VariantSlotKind.MalformedAlias:
+                                // Source alias marker is malformed: treat as nonexistent. Fire the corruption event and surface a plain not-found.
+                                await CorruptionDetected.RaiseMalformedAliasAsync(fileId, sourceSlot.File!.Name).ConfigureAwait(false);
+                                throw new RepoFileNotFoundException($"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
+
+                            default:
+                                throw new RepoFileNotFoundException($"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
+                        }
+                    }
                     else
                     {
-                        if (resolved is null || resolved.State is not EntryState.Exists)
-                        {
-                            throw new RepoFileNotFoundException(
-                                $"File ID '{fileId}' source variant '{sourceVariantId}' alias points to missing data file.");
-                        }
-
                         parentRootVariantId = rootVid ?? FileRepoPaths.MainFileName;
                         parentRootExtension = rootExt;
 
@@ -423,7 +451,7 @@ partial class FileRepo
                     parentRootExtension = sourceFile.Extension;
                 }
 
-                if (!needRollForward)
+                if (!needRollForward && !sourceChanged)
                 {
                     // Run the tree against the resolved source data file directly. Passing the file path (rather than a pre-opened stream) lets each
                     // processor consume the source in whatever form is optimal for it: a file-based processor (e.g. one that shells out to ffmpeg) reads the
@@ -474,8 +502,13 @@ partial class FileRepo
                 locks.ReverseDisposeAll();
             }
 
-            // Our locks are released. Roll the observed pending rebase forward to completion (under its own locks) and restart, so the next iteration resolves
-            // the source against a settled, single-head subtree.
+            // Our locks are released. A source that was promoted or re-pointed needs nothing rolled forward: restart against the group as it is now.
+            if (sourceChanged)
+                continue;
+
+            // Roll the observed pending rebase forward to completion (under its own locks) and restart, so the next iteration resolves the source against a
+            // settled, single-head subtree.
+            rollForwardAttempts++;
             await RollForwardPendingRebasesAsync(fileId, cancellationToken).ConfigureAwait(false);
         }
 
@@ -528,69 +561,91 @@ partial class FileRepo
         // GetOrAdd: if this variant already exists on disk, register it and recurse children against the existing file (resolving an alias marker if needed).
         if (variantId is not null && mode is VariantAddMode.GetOrAdd && existingByVariantId!.TryGetValue(variantId, out var existingFile))
         {
-            IAbsoluteFilePath childSource;
-            string childRootVariantId;
-            string childRootExtension;
+            // The data file the existing variant resolves to, with its extension and the variant whose data file it is (the variant itself, or the source
+            // of an alias). It stays null if the slot turns out not to hold a variant after all, which is then created below.
+            IAbsoluteFilePath? existingData = null;
+            string existingExtension = string.Empty;
+            string existingRootVariantId = variantId;
 
-            if (existingFile.Extension is FileRepoPaths.AliasMarkerExtension)
+            if (existingFile.Extension is not FileRepoPaths.AliasMarkerExtension)
             {
-                if (!RepoFileSystem.TryParseAliasMarker(existingFile, out _, out string? aliasSourceVid, out string? aliasSourceExt))
+                existingData = existingFile;
+                existingExtension = existingFile.Extension;
+            }
+            else if (!RepoFileSystem.TryParseAliasMarker(existingFile, out _, out string? aliasSourceVid, out string? aliasSourceExt))
+            {
+                // Malformed marker: treat as nonexistent. Fire the corruption event, queue the marker for deletion, and fall through to recreation.
+                await CorruptionDetected.RaiseMalformedAliasAsync(fileId, existingFile.Name).ConfigureAwait(false);
+                brokenMarkersToDelete?.Add(existingFile);
+            }
+            else
+            {
+                var resolved = _fs.GetDataFile(fileId, aliasSourceExt, aliasSourceVid);
+
+                if (resolved.State is EntryState.Exists)
                 {
-                    // Malformed marker: treat as nonexistent. Fire the corruption event, queue the marker for deletion, and fall through to recreation.
-                    await CorruptionDetected.RaiseMalformedAliasAsync(fileId, existingFile.Name).ConfigureAwait(false);
-                    brokenMarkersToDelete?.Add(existingFile);
-                    existingByVariantId.Remove(variantId);
+                    existingData = resolved;
+                    existingExtension = aliasSourceExt;
+                    existingRootVariantId = aliasSourceVid ?? FileRepoPaths.MainFileName;
                 }
                 else
                 {
-                    var resolved = _fs.GetDataFile(fileId, aliasSourceExt, aliasSourceVid);
-                    if (resolved.State is not EntryState.Exists)
-                    {
-                        // The alias source disappeared between the collision check and this point (rare TOCTOU: the source variant is not in our lock set since it
-                        // is not a created/source variant for this add). Treat as a dangling alias: queue the marker for deletion just before the batch move, raise
-                        // the corruption event, and let the variant be recreated below.
-                        await CorruptionDetected.RaiseDanglingAliasAsync(fileId, variantId, aliasSourceVid).ConfigureAwait(false);
-                        brokenMarkersToDelete?.Add(existingFile);
-                        existingByVariantId.Remove(variantId);
-                    }
-                    else
-                    {
-                        stagedNodes.Add(new StagedNode
-                        {
-                            VariantId = variantId,
-                            Path = resolved,
-                            Extension = aliasSourceExt,
-                            Context = null,
-                            IsExisting = true,
-                            RootVariantId = aliasSourceVid ?? FileRepoPaths.MainFileName,
-                            RootExtension = aliasSourceExt,
-                        });
+                    // The alias source disappeared between the collision check and this point, during which the pipelines of this variant's parents ran.
+                    // The source variant is not in our lock set (it is not a created/source variant for this add), and the cleaner takes no variant locks
+                    // in any case: finishing a retirement of the source, it promotes or re-points this alias before it removes the source's data file. So
+                    // the marker we hold may be one that has been replaced, and the slot is read again until it is steady, with the collision check's read
+                    // as the one before. Only the same marker with its source still missing is a dangling alias: queue the marker for deletion just before
+                    // the batch move, raise the corruption event, and let the variant be recreated below. A slot that holds a data file or an alias that
+                    // resolves by now is the existing variant, and is neither reported nor replaced.
+                    var slot = await ReadVariantSlotAsync(fileId, variantId, existingFile.Name).ConfigureAwait(false);
 
-                        childSource = resolved;
-                        childRootVariantId = aliasSourceVid ?? FileRepoPaths.MainFileName;
-                        childRootExtension = aliasSourceExt;
+                    switch (slot.Kind)
+                    {
+                        case VariantSlotKind.Data:
+                            existingData = slot.DataFile;
+                            existingExtension = slot.File!.Extension;
+                            break;
 
-                        await RunChildrenAsync(fileId, childSource, childRootVariantId, childRootExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, progressCallback, cancellationToken).ConfigureAwait(false);
-                        return;
+                        case VariantSlotKind.Alias:
+                            existingData = slot.DataFile;
+                            existingExtension = slot.SourceExtension!;
+                            existingRootVariantId = slot.SourceVariantId ?? FileRepoPaths.MainFileName;
+                            break;
+
+                        case VariantSlotKind.Retired:
+                            throw CreatePendingCleanupException(fileId, variantId);
+
+                        case VariantSlotKind.MalformedAlias:
+                            await CorruptionDetected.RaiseMalformedAliasAsync(fileId, slot.File!.Name).ConfigureAwait(false);
+                            brokenMarkersToDelete?.Add(slot.File);
+                            break;
+
+                        case VariantSlotKind.DanglingAlias:
+                            await CorruptionDetected.RaiseDanglingAliasAsync(fileId, variantId, slot.SourceVariantId).ConfigureAwait(false);
+                            brokenMarkersToDelete?.Add(slot.File!);
+                            break;
                     }
                 }
             }
-            else
+
+            if (existingData is not null)
             {
                 stagedNodes.Add(new StagedNode
                 {
                     VariantId = variantId,
-                    Path = existingFile,
-                    Extension = existingFile.Extension,
+                    Path = existingData,
+                    Extension = existingExtension,
                     Context = null,
                     IsExisting = true,
-                    RootVariantId = variantId,
-                    RootExtension = existingFile.Extension,
+                    RootVariantId = existingRootVariantId,
+                    RootExtension = existingExtension,
                 });
 
-                await RunChildrenAsync(fileId, existingFile, variantId, existingFile.Extension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, progressCallback, cancellationToken).ConfigureAwait(false);
+                await RunChildrenAsync(fileId, existingData, existingRootVariantId, existingExtension, pipeline.Variants, mode, existingByVariantId, stagedNodes, brokenMarkersToDelete, progressCallback, cancellationToken).ConfigureAwait(false);
                 return;
             }
+
+            existingByVariantId.Remove(variantId);
         }
 
         // Create a context with a working directory of its own in temp, named after the file and variant so that temp stays readable, and made unique by a
@@ -758,7 +813,9 @@ partial class FileRepo
     /// Walks the static variant tree in pre-order, attempting to locate every declared variant on disk. Returns <see langword="true"/> if every variant in the
     /// tree (including the root) was found and appended to <paramref name="results"/>; otherwise returns <see langword="false"/> with the partial results left
     /// in an undefined state (the caller should discard them). Alias markers are resolved transparently; the returned <see cref="RepoFileInfo.Path"/> always
-    /// references a real data file. A dangling alias (source data file missing) aborts the fast path so the locked path can recreate the variant.
+    /// references a real data file. Each slot is read until it is steady, as a fetch of the variant reads it, so an alias that a retirement of its source
+    /// promoted or re-pointed while it was being read is found as the variant it is now. A dangling alias (source data file missing, and still missing with
+    /// the same marker when the slot is read again) aborts the fast path so the locked path can report it and recreate the variant.
     /// </summary>
     private async ValueTask<bool> TryCollectExistingVariantsAsync(FileId fileId, string rootVariantId, FileProcessingPipeline rootPipeline, List<RepoFileInfo> results)
     {
@@ -775,31 +832,23 @@ partial class FileRepo
 
         async ValueTask<bool> TryAppendAsync(string variantId)
         {
-            var (existing, isRetired, _) = await _fs.FindDataFileAsync(fileId, variantId).ConfigureAwait(false);
+            var slot = await ReadVariantSlotAsync(fileId, variantId).ConfigureAwait(false);
 
-            // Pending retirement cleanup: abort fast path so the locked path can throw RepoVariantPendingCleanupException under the lock.
-            if (isRetired)
+            // Anything but a variant that exists aborts the fast path. Pending retirement cleanup: the locked path throws
+            // RepoVariantPendingCleanupException under the lock. A malformed or dangling alias: the locked path reports it and recreates the variant.
+            if (slot.Kind is not (VariantSlotKind.Data or VariantSlotKind.Alias))
                 return false;
 
-            if (existing is null)
-                return false;
-
-            if (existing.Extension is FileRepoPaths.AliasMarkerExtension)
-            {
-                var resolved = _fs.ResolveAlias(fileId, existing);
-                if (resolved is null)
-                    return false;
-
-                results.Add(new RepoFileInfo(fileId, variantId, resolved));
-            }
-            else
-            {
-                results.Add(new RepoFileInfo(fileId, variantId, existing));
-            }
-
+            results.Add(new RepoFileInfo(fileId, variantId, slot.DataFile!));
             return true;
         }
     }
+
+    private static RepoVariantPendingCleanupException CreatePendingCleanupException(FileId fileId, string variantId) =>
+        new(
+            $"File ID '{fileId}' variant '{variantId}' has pending retirement cleanup state on disk and cannot be added under the same ID until " +
+            $"cleanup completes. Reusing a retired variant ID is an advanced scenario - consult the FileRepo.DeleteVariantsAsync " +
+            $"documentation before relying on this behavior.");
 
     /// <summary>
     /// Adds the variant IDs of every entry in the pipeline's pre-validated flat variant tree to <paramref name="destination"/>. Throws

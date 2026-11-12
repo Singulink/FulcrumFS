@@ -128,6 +128,8 @@ await txn.CommitAsync();
 
 When a file belongs to a database row, commit the database transaction **first** and the repository transaction **second**. If the process crashes between the two commits, the database row references a repository file whose commit had not finished; that file is still accessible and is resolved safely on a later cleanup pass, so the reference is never left dangling. Committing the repository first risks the opposite: a committed file that the database never recorded, with no clean way to tell it apart from a valid one.
 
+The same safety net covers an exception that skips the repository commit. Disposing a transaction that was neither committed nor rolled back does not discard its files, because the database may have committed even though the call threw: they are left in that same accessible state for a later cleanup pass to resolve. When you know that the database did not commit, call <xref:FulcrumFS.FileRepoTransaction.RollbackAsync*> to discard them at once. See [Rolling Back](adding-files.md#rolling-back).
+
 > [!IMPORTANT]
 > Always commit the database before the repository. This single rule is what lets FulcrumFS guarantee that every file the database references stays accessible, and every file the database no longer references is eventually deleted by cleanup, all without any distributed transaction coordinator. See [Transactional Commit Model](../concepts/commit-model.md) for the full rationale.
 
