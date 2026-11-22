@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Singulink.CodeAnalysis;
 
 namespace FulcrumFS.Utilities;
 
@@ -10,7 +11,7 @@ internal static class StructDisposableListExtensions
     /// the stored element (and the resource it tracks, such as a held lock) un-released, which is very difficult to trace. Always use this to dispose lists of
     /// struct locks rather than indexing (<c>list[i].Dispose()</c>) or <c>foreach</c>, both of which operate on copies.
     /// </summary>
-    public static void ReverseDisposeAll<T>(this List<T> list) where T : struct, IDisposable
+    public static void ReverseDisposeAll<[NonCopyable] T>(this List<T> list) where T : struct, IDisposable
     {
         var span = CollectionsMarshal.AsSpan(list);
 

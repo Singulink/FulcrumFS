@@ -28,5 +28,9 @@
     <PackageReference Include="DotNetAnalyzers.DocumentationAnalyzers" PrivateAssets="all" />
     <PackageReference Include="StyleCop.Analyzers" PrivateAssets="all" />
     <PackageReference Include="Roslynator.Analyzers" PrivateAssets="all" />
+
+    <!-- The non-copyable attributes and the analyzer, in every project: an assembly that is not built with the analyzer gets SCA1025 in the projects that
+         reference it. A normal reference, so the packages depend on Singulink.CodeAnalysis and pass the analyzer on. -->
+    <PackageReference Include="Singulink.CodeAnalysis" />
   </ItemGroup>
 </Project>

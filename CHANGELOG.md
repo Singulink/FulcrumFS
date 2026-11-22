@@ -1,5 +1,11 @@
 # FulcrumFS Version History
 
+## Version 2.3.1
+
+- The assemblies are built with the Singulink.CodeAnalysis analyzer, so a project that uses the analyzer no longer gets warning SCA1025 for them
+- The packages depend on Singulink.CodeAnalysis 1.0.0, which provides the `[NonCopyable]` attribute and brings the analyzer to the projects that use FulcrumFS
+- Requires Singulink.Threading 3.2.1 and Singulink.IO.FileSystem 3.3.0 or later
+
 ## Version 2.3
 
 Disposing a transaction no longer rolls it back. A database commit can take effect although its call throws, for example when the connection is lost before the server's answer arrives; the exception then skips the repository commit, and the rollback that disposal made deleted files that a committed row references. A transaction that is disposed without having been committed or rolled back now leaves its files indeterminate for cleanup to resolve, as a crash at that point does. Apps that relied on disposal to discard files should call `RollbackAsync` where they know that their database did not commit, and must run cleanup with a resolution callback.
