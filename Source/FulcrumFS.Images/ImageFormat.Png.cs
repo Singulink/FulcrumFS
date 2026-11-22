@@ -36,8 +36,9 @@ public abstract partial class ImageFormat
         internal override IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, ImageMetadataStrippingMode stripMetadataMode)
         {
             return new PngEncoder {
-                ChunkFilter = stripMetadataMode >= ImageMetadataStrippingMode.Preferred ?
-                    PngChunkFilter.ExcludeTextChunks | PngChunkFilter.ExcludePhysicalChunk : PngChunkFilter.None,
+                ChunkFilter = stripMetadataMode >= ImageMetadataStrippingMode.Preferred
+                    ? PngChunkFilter.ExcludeTextChunks | PngChunkFilter.ExcludePhysicalChunk
+                    : PngChunkFilter.None,
 
                 CompressionLevel = compressionLevel switch {
                     ImageCompressionLevel.Lowest => PngCompressionLevel.Level1,

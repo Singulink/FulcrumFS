@@ -275,9 +275,9 @@ public sealed class AddStreamOwnershipTests
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------
 
-    private static async Task<IAsyncDisposable> BeginAsync(FileRepo repo, TransactionKind kind) => kind is TransactionKind.Ordinary ?
-        await repo.BeginTransactionAsync() :
-        await repo.BeginStagedTransactionAsync();
+    private static async Task<IAsyncDisposable> BeginAsync(FileRepo repo, TransactionKind kind) => kind is TransactionKind.Ordinary
+        ? await repo.BeginTransactionAsync()
+        : await repo.BeginStagedTransactionAsync();
 
     /// <summary>
     /// Starts an add on either kind of transaction, through the overload that takes the extension from a file stream's name when

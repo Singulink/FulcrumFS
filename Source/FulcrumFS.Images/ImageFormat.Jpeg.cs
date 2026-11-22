@@ -32,9 +32,9 @@ public abstract partial class ImageFormat
             return metadata.GetJpegMetadata().Quality;
         }
 
-        internal override LibFormats.IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int jpegEquivalentQuality, ImageMetadataStrippingMode stripMetadataMode)
+        internal override LibFormats.IImageEncoder GetEncoder(ImageCompressionLevel compressionLevel, int quality, ImageMetadataStrippingMode stripMetadataMode)
         {
-            return new LibFormats.Jpeg.JpegEncoder { Quality = jpegEquivalentQuality };
+            return new LibFormats.Jpeg.JpegEncoder { Quality = quality };
         }
     }
 }

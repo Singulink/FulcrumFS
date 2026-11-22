@@ -621,22 +621,22 @@ public sealed partial class FileRepo : IFileRepo, IDisposable
 
                 throw new DirectoryNotFoundException(
                     $"The directory '{BaseDirectory.PathDisplay}' is not a FulcrumFS repository. " +
-                    (Options.ReadOnly ?
-                        $"It cannot be created by an instance opened read-only; call '{nameof(EnsureCreated)}' on an instance with full access to create it." :
-                        $"Call '{nameof(EnsureCreated)}' to create it."));
+                    (Options.ReadOnly
+                        ? $"It cannot be created by an instance opened read-only; call '{nameof(EnsureCreated)}' on an instance with full access to create it."
+                        : $"Call '{nameof(EnsureCreated)}' to create it."));
             }
 
-            _formatVersion = Options.ReadOnly ?
-                RepoInfoFile.VerifyReadCompatSupported(_infoFile).FullAccess :
-                RepoInfoFile.VerifyFullAccessSupported(_infoFile).FullAccess;
+            _formatVersion = Options.ReadOnly
+                ? RepoInfoFile.VerifyReadCompatSupported(_infoFile).FullAccess
+                : RepoInfoFile.VerifyFullAccessSupported(_infoFile).FullAccess;
 
             if (_fs.FilesDirectory.State is not EntryState.Exists || _fs.CleanupDirectory.State is not EntryState.Exists)
             {
                 throw new DirectoryNotFoundException(
                     $"The FulcrumFS repository at '{BaseDirectory.PathDisplay}' is in an incomplete state. " +
-                    (Options.ReadOnly ?
-                        $"It cannot be repaired by an instance opened read-only; call '{nameof(EnsureCreated)}' on an instance with full access to repair it." :
-                        $"Call '{nameof(EnsureCreated)}' to repair it."));
+                    (Options.ReadOnly
+                        ? $"It cannot be repaired by an instance opened read-only; call '{nameof(EnsureCreated)}' on an instance with full access to repair it."
+                        : $"Call '{nameof(EnsureCreated)}' to repair it."));
             }
         }
     }

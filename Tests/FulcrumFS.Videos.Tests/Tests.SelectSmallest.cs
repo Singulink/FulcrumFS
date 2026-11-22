@@ -183,11 +183,13 @@ partial class Tests
             },
             _videoFilesDir.CombineFile(fileName).PathExport,
             exceptionMessage: null,
-            expectedChanges: !shouldFileChange ? null : (NewStreamCount: stripMetadata ? 2 : 3, StreamMapping:
-            [
-                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: !shouldVideoChange), // Video stream
-                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: !shouldAudioChange), // Audio stream
-            ]),
+            expectedChanges: !shouldFileChange
+                ? null
+                : (NewStreamCount: stripMetadata ? 2 : 3, StreamMapping:
+                    [
+                        (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: !shouldVideoChange), // Video stream
+                        (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: !shouldAudioChange), // Audio stream
+                    ]),
             pathIsAbsolute: true,
             afterFinishedAction: async (processedFile) =>
             {
@@ -274,11 +276,13 @@ partial class Tests
             },
             fileName,
             exceptionMessage: null,
-            expectedChanges: !shouldFileChange ? null : (NewStreamCount: 2, StreamMapping:
-            [
-                (From: 0, To: 0, ExtensionToCheckWith: ".mkv", Equal: false), // Video stream
-                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: !shouldAudioChange), // Audio stream
-            ]));
+            expectedChanges: !shouldFileChange
+                ? null
+                : (NewStreamCount: 2, StreamMapping:
+                    [
+                        (From: 0, To: 0, ExtensionToCheckWith: ".mkv", Equal: false), // Video stream
+                        (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: !shouldAudioChange), // Audio stream
+                    ]));
     }
 
     [TestMethod]
@@ -313,11 +317,13 @@ partial class Tests
             },
             fileName,
             exceptionMessage: null,
-            expectedChanges: !shouldFileReencode ? null : (NewStreamCount: 2, StreamMapping:
-            [
-                (From: 0, To: 0, ExtensionToCheckWith: ".mkv", Equal: false), // Video stream
-                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: !shouldAudioChange), // Audio stream
-            ]));
+            expectedChanges: !shouldFileReencode
+                ? null
+                : (NewStreamCount: 2, StreamMapping:
+                    [
+                        (From: 0, To: 0, ExtensionToCheckWith: ".mkv", Equal: false), // Video stream
+                        (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: !shouldAudioChange), // Audio stream
+                    ]));
     }
 
     [TestMethod]
@@ -345,10 +351,12 @@ partial class Tests
             },
             fileName,
             exceptionMessage: null,
-            expectedChanges: !isVideoOversized ? null : (NewStreamCount: 1, StreamMapping:
-            [
-                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: false), // Video stream
-            ]),
+            expectedChanges: !isVideoOversized
+                ? null
+                : (NewStreamCount: 1, StreamMapping:
+                    [
+                        (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: false), // Video stream
+                    ]),
             afterFinishedAction: async (processedFile) =>
             {
                 string videoInfo = await RunFFtoolProcessWithErrorHandling(

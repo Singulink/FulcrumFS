@@ -49,7 +49,7 @@ partial class Tests
                     $"geq='r=min(max(16*r(X,Y)-510,0),255):g=min(max(16*g(X,Y),0),255):b=min(max(16*b(X,Y)-255,0),255)'"),
                 "-t", duration.ToString(CultureInfo.InvariantCulture),
                 "-y",
-                diffFile.PathExport
+                diffFile.PathExport,
             ],
             TestContext.CancellationToken);
 #endif
@@ -282,7 +282,7 @@ partial class Tests
                 "-i", processedFile.PathExport,
                 "-filter_complex", "[0:a]showspectrumpic=s=3840x2160",
                 "-y",
-                spectrogramFile.PathExport
+                spectrogramFile.PathExport,
             ],
             TestContext.CancellationToken);
 
@@ -293,8 +293,7 @@ partial class Tests
                 "-i", spectrogramFile.PathExport,
                 "-t", duration.ToString(CultureInfo.InvariantCulture),
                 "-i", originalFile.PathExport,
-                "-filter_complex",
-                    "[0:v]" +
+                "-filter_complex", "[0:v]" +
                     "format=pix_fmts=rgb24:color_ranges=pc" +
                     "[0i];" +
                     "[1:a]" +
@@ -306,7 +305,7 @@ partial class Tests
                     "format=gray," +
                     "geq='r=min(max(16*r(X,Y)-510,0),255):g=min(max(16*g(X,Y),0),255):b=min(max(16*b(X,Y)-255,0),255)'",
                 "-y",
-                spectrogramDiffFile.PathExport
+                spectrogramDiffFile.PathExport,
             ],
             TestContext.CancellationToken);
 #endif
@@ -768,7 +767,7 @@ partial class Tests
                 "-vf", "transpose=1",
                 "-c:v", "libx264",
                 "-c:a", "copy",
-                "-y", tempRotatedInputFile.PathExport
+                "-y", tempRotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         await RunFFtoolProcessWithErrorHandling(
@@ -777,7 +776,7 @@ partial class Tests
                 "-display_rotation", "90",
                 "-i", tempRotatedInputFile.PathExport,
                 "-c", "copy",
-                "-y", rotatedInputFile.PathExport
+                "-y", rotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         tempRotatedInputFile.Delete();
@@ -922,7 +921,7 @@ partial class Tests
                 "-vf", "transpose=1",
                 "-c:v", "libx264",
                 "-c:a", "copy",
-                "-y", tempRotatedInputFile.PathExport
+                "-y", tempRotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         await RunFFtoolProcessWithErrorHandling(
@@ -931,7 +930,7 @@ partial class Tests
                 "-display_rotation", "90",
                 "-i", tempRotatedInputFile.PathExport,
                 "-c", "copy",
-                "-y", rotatedInputFile.PathExport
+                "-y", rotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         tempRotatedInputFile.Delete();
@@ -1158,7 +1157,7 @@ partial class Tests
                 "-r", "30",
                 "-c:a", "copy",
                 "-c:v", "libx264",
-                "-y", offsettedInputFile.PathExport
+                "-y", offsettedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         await ValidateMetadata(offsettedInputFile, shouldHaveStartTime: true);
@@ -1827,7 +1826,7 @@ partial class Tests
                 "-vf", physicalRotationFilter,
                 "-c:v", "libx264",
                 "-c:a", "copy",
-                "-y", tempRotatedInputFile.PathExport
+                "-y", tempRotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         await RunFFtoolProcessWithErrorHandling(
@@ -1836,7 +1835,7 @@ partial class Tests
                 "-display_rotation", displayRotation.ToString(CultureInfo.InvariantCulture),
                 "-i", tempRotatedInputFile.PathExport,
                 "-c", "copy",
-                "-y", rotatedInputFile.PathExport
+                "-y", rotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         tempRotatedInputFile.Delete();
@@ -1923,7 +1922,7 @@ partial class Tests
                 "-c:v", "libx264",
                 "-x264-params", "tff=1",
                 "-c:a", "copy",
-                "-y", tempRotatedInputFile.PathExport
+                "-y", tempRotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         await RunFFtoolProcessWithErrorHandling(
@@ -1932,7 +1931,7 @@ partial class Tests
                 "-display_rotation", "90",
                 "-i", tempRotatedInputFile.PathExport,
                 "-c", "copy",
-                "-y", rotatedInputFile.PathExport
+                "-y", rotatedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         tempRotatedInputFile.Delete();
@@ -2108,7 +2107,7 @@ partial class Tests
                 "-vf", flipMode,
                 "-c:v", "libx264",
                 "-c:a", "copy",
-                "-y", tempFlippedInputFile.PathExport
+                "-y", tempFlippedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         await RunFFtoolProcessWithErrorHandling(
@@ -2117,7 +2116,7 @@ partial class Tests
                 $"-display_{flipMode}",
                 "-i", tempFlippedInputFile.PathExport,
                 "-c", "copy",
-                "-y", flippedInputFile.PathExport
+                "-y", flippedInputFile.PathExport,
             ],
             TestContext.CancellationToken);
         tempFlippedInputFile.Delete();

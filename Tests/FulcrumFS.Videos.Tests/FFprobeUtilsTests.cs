@@ -165,7 +165,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 48000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "bbb_sunflower_1080p_60fps_normal-25s.mp4",
@@ -206,7 +206,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 48000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video1.mp4",
@@ -247,7 +247,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video2.mkv",
@@ -288,7 +288,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video3.mov",
@@ -329,7 +329,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video4.webm",
@@ -370,7 +370,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 48000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video5.avi",
@@ -411,7 +411,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video6.ts",
@@ -452,7 +452,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video7.mpeg",
@@ -493,7 +493,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video8.3gp",
@@ -534,7 +534,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video9.avi",
@@ -575,7 +575,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video10.mp4",
@@ -616,7 +616,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video11.mkv",
@@ -657,7 +657,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video12.mp4",
@@ -698,7 +698,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video13.mp4",
@@ -739,7 +739,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video14.mp4",
@@ -780,7 +780,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video15.mp4",
@@ -821,7 +821,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video16.mkv",
@@ -866,7 +866,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "subrip",
                     Language: null,
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video17.mkv",
@@ -911,7 +911,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "ass",
                     Language: null,
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video18.mkv",
@@ -956,7 +956,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "ass",
                     Language: null,
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video19.mkv",
@@ -1001,7 +1001,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "webvtt",
                     Language: null,
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video20.mp4",
@@ -1046,7 +1046,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "mov_text",
                     Language: "und",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video21.mp4",
@@ -1091,7 +1091,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "mov_text",
                     Language: "eng",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video22.mkv",
@@ -1136,7 +1136,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "subrip",
                     Language: null,
                     Title: "Test Title"),
-            ])
+            ]),
         ],
         [
             "video23.mkv",
@@ -1181,7 +1181,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "ass",
                     Language: null,
                     Title: "Test Title"),
-            ])
+            ]),
         ],
         [
             "video24.mkv",
@@ -1226,7 +1226,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "ass",
                     Language: null,
                     Title: "Test Title"),
-            ])
+            ]),
         ],
         [
             "video25.mkv",
@@ -1271,7 +1271,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "webvtt",
                     Language: null,
                     Title: "Test Title"),
-            ])
+            ]),
         ],
         [
             "video26.mkv",
@@ -1316,7 +1316,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "subrip",
                     Language: "eng",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video27.mkv",
@@ -1361,7 +1361,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "ass",
                     Language: "eng",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video28.mkv",
@@ -1406,7 +1406,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "ass",
                     Language: "eng",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video29.mkv",
@@ -1451,7 +1451,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "webvtt",
                     Language: "eng",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video30.mp4",
@@ -1492,7 +1492,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video31.mp4",
@@ -1533,7 +1533,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video32.mp4",
@@ -1574,7 +1574,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video33.mp4",
@@ -1615,7 +1615,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video34.mp4",
@@ -1656,7 +1656,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video35.mp4",
@@ -1697,7 +1697,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video36.mp4",
@@ -1738,7 +1738,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video37.mp4",
@@ -1779,7 +1779,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video38.mp4",
@@ -1820,7 +1820,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video39.mp4",
@@ -1861,7 +1861,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video40.mp4",
@@ -1902,7 +1902,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video41.mp4",
@@ -1943,7 +1943,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video42.mp4",
@@ -1984,7 +1984,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video43.mp4",
@@ -2025,7 +2025,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video44.mp4",
@@ -2066,7 +2066,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video45.mp4",
@@ -2107,7 +2107,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video46.mp4",
@@ -2148,7 +2148,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video47.mp4",
@@ -2189,7 +2189,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video48.mp4",
@@ -2230,7 +2230,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video49.mp4",
@@ -2271,7 +2271,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video50.mp4",
@@ -2312,7 +2312,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video51.webm",
@@ -2353,7 +2353,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 48000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video52.webm",
@@ -2394,7 +2394,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 48000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video53.mp4",
@@ -2462,7 +2462,7 @@ public sealed class FFprobeUtilsTests
                     AlphaMode: false,
                     Rotation: 0,
                     HasNonStandardDisplayMatrix: false),
-            ])
+            ]),
         ],
         [
             "video54.mp4",
@@ -2530,7 +2530,7 @@ public sealed class FFprobeUtilsTests
                     AlphaMode: false,
                     Rotation: 0,
                     HasNonStandardDisplayMatrix: false),
-            ])
+            ]),
         ],
         [
             "video55.mp4",
@@ -2571,7 +2571,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video56.mp4",
@@ -2612,7 +2612,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video57.mp4",
@@ -2653,7 +2653,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 1,
                     SampleRate: 44100,
                     ChannelLayout: "mono"),
-            ])
+            ]),
         ],
         [
             "video58.mp4",
@@ -2694,7 +2694,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video59.mp4",
@@ -2735,7 +2735,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 4,
                     SampleRate: 44100,
                     ChannelLayout: "quad"),
-            ])
+            ]),
         ],
         [
             "video60.mp4",
@@ -2776,7 +2776,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 6,
                     SampleRate: 44100,
                     ChannelLayout: "5.1"),
-            ])
+            ]),
         ],
         [
             "video61.mp4",
@@ -2817,7 +2817,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 8,
                     SampleRate: 44100,
                     ChannelLayout: "7.1"),
-            ])
+            ]),
         ],
         [
             "video62.mp4",
@@ -2858,7 +2858,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 3,
                     SampleRate: 44100,
                     ChannelLayout: "2.1"),
-            ])
+            ]),
         ],
         [
             "video63.mp4",
@@ -2899,7 +2899,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 4,
                     SampleRate: 44100,
                     ChannelLayout: null),
-            ])
+            ]),
         ],
         [
             "video64.mp4",
@@ -2940,7 +2940,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 5,
                     SampleRate: 44100,
                     ChannelLayout: null),
-            ])
+            ]),
         ],
         [
             "video65.mp4",
@@ -2981,7 +2981,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 7,
                     SampleRate: 44100,
                     ChannelLayout: null),
-            ])
+            ]),
         ],
         [
             "video66.mp4",
@@ -3022,7 +3022,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 16,
                     SampleRate: 44100,
                     ChannelLayout: null),
-            ])
+            ]),
         ],
         [
             "video67.mp4",
@@ -3063,7 +3063,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 8000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video68.mp4",
@@ -3104,7 +3104,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 11025,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video69.mp4",
@@ -3145,7 +3145,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 12000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video70.mp4",
@@ -3186,7 +3186,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 16000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video71.mp4",
@@ -3227,7 +3227,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 22050,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video72.mp4",
@@ -3268,7 +3268,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 24000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video73.mp4",
@@ -3309,7 +3309,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 32000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video74.mp4",
@@ -3350,7 +3350,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 48000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video75.mp4",
@@ -3391,7 +3391,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 64000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video76.mp4",
@@ -3432,7 +3432,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 88200,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video77.mp4",
@@ -3473,7 +3473,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 96000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video78.mp4",
@@ -3514,7 +3514,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 192000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video79.mp4",
@@ -3555,7 +3555,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 200000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video80.mp4",
@@ -3596,7 +3596,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 4000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video81.mp4",
@@ -3637,7 +3637,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 22,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video82.mp4",
@@ -3678,7 +3678,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 45000,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video83.mp4",
@@ -3719,7 +3719,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 1,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video84.mp4",
@@ -3760,7 +3760,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video85.mp4",
@@ -3801,7 +3801,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video86.mp4",
@@ -3842,7 +3842,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video87.mp4",
@@ -3883,7 +3883,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video88.mp4",
@@ -3924,7 +3924,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video89.mp4",
@@ -3965,7 +3965,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video90.mp4",
@@ -4006,7 +4006,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video91.mp4",
@@ -4047,7 +4047,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video92.mp4",
@@ -4088,7 +4088,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video93.mp4",
@@ -4129,7 +4129,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video94.mp4",
@@ -4170,7 +4170,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video95.mp4",
@@ -4211,7 +4211,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video96.mp4",
@@ -4252,7 +4252,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video97.mp4",
@@ -4293,7 +4293,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video98.mp4",
@@ -4334,7 +4334,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video99.mp4",
@@ -4375,7 +4375,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video100.mp4",
@@ -4416,7 +4416,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video101.mp4",
@@ -4457,7 +4457,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video102.mp4",
@@ -4498,7 +4498,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video103.mp4",
@@ -4539,7 +4539,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video104.mp4",
@@ -4580,7 +4580,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video105.mp4",
@@ -4621,7 +4621,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video106.mp4",
@@ -4662,7 +4662,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video107.mp4",
@@ -4703,7 +4703,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video108.mp4",
@@ -4744,7 +4744,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video109.mp4",
@@ -4785,7 +4785,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video110.mp4",
@@ -4826,7 +4826,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video111.mp4",
@@ -4867,7 +4867,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video112.mp4",
@@ -4908,7 +4908,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video113.mp4",
@@ -4949,7 +4949,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video114.mp4",
@@ -4990,7 +4990,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video115.mp4",
@@ -5031,7 +5031,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video116.mp4",
@@ -5072,7 +5072,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video117.mp4",
@@ -5113,7 +5113,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video118.mp4",
@@ -5154,7 +5154,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video119.mp4",
@@ -5195,7 +5195,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video120.mp4",
@@ -5236,7 +5236,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video121.mp4",
@@ -5277,7 +5277,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video122.mp4",
@@ -5318,7 +5318,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video123.mp4",
@@ -5359,7 +5359,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video124.mp4",
@@ -5400,7 +5400,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video125.mp4",
@@ -5441,7 +5441,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video126.mp4",
@@ -5482,7 +5482,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video127.mp4",
@@ -5523,7 +5523,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video128.mp4",
@@ -5564,7 +5564,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video129.mp4",
@@ -5605,7 +5605,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video130.mp4",
@@ -5646,7 +5646,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video131.mp4",
@@ -5687,7 +5687,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video132.mp4",
@@ -5728,7 +5728,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video133.mp4",
@@ -6075,7 +6075,7 @@ public sealed class FFprobeUtilsTests
                     AlphaMode: false,
                     Rotation: 0,
                     HasNonStandardDisplayMatrix: false),
-            ])
+            ]),
         ],
         [
             "video134.mkv",
@@ -6123,7 +6123,7 @@ public sealed class FFprobeUtilsTests
                     StreamShorthand: 't',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
-            ])
+            ]),
         ],
         [
             "video135.ts",
@@ -6171,7 +6171,7 @@ public sealed class FFprobeUtilsTests
                     StreamShorthand: 'd',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
-            ])
+            ]),
         ],
         [
             "video136.mp4",
@@ -6212,7 +6212,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video137.mp4",
@@ -6253,7 +6253,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video138.mp4",
@@ -6294,7 +6294,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video139.mp4",
@@ -6335,7 +6335,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video140.mp4",
@@ -6376,7 +6376,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video141.mp4",
@@ -6417,7 +6417,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video142.mp4",
@@ -6458,7 +6458,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video143.mp4",
@@ -6499,7 +6499,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video144.mp4",
@@ -6540,7 +6540,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video145.mp4",
@@ -6581,7 +6581,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video146.mp4",
@@ -6622,7 +6622,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video147.mp4",
@@ -6663,7 +6663,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video148.mp4",
@@ -6704,7 +6704,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video149.mp4",
@@ -6745,7 +6745,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video150.mp4",
@@ -6786,7 +6786,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 3,
                     SampleRate: 44100,
                     ChannelLayout: "3.0"),
-            ])
+            ]),
         ],
         [
             "video151.mp4",
@@ -6827,7 +6827,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 4,
                     SampleRate: 44100,
                     ChannelLayout: "4.0"),
-            ])
+            ]),
         ],
         [
             "video152.mp4",
@@ -6868,7 +6868,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 5,
                     SampleRate: 44100,
                     ChannelLayout: "5.0"),
-            ])
+            ]),
         ],
         [
             "video153.mp4",
@@ -6909,7 +6909,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 7,
                     SampleRate: 44100,
                     ChannelLayout: null),
-            ])
+            ]),
         ],
         [
             "video154.mp4",
@@ -6950,7 +6950,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 8,
                     SampleRate: 44100,
                     ChannelLayout: null),
-            ])
+            ]),
         ],
         [
             "video155.mp4",
@@ -6991,7 +6991,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 8,
                     SampleRate: 44100,
                     ChannelLayout: "5.1.2(back)"),
-            ])
+            ]),
         ],
         [
             "video156.mp4",
@@ -7032,7 +7032,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 7,
                     SampleRate: 44100,
                     ChannelLayout: "6.1(back)"),
-            ])
+            ]),
         ],
         [
             "video157.mp4",
@@ -7073,7 +7073,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 8,
                     SampleRate: 44100,
                     ChannelLayout: "7.1(wide)"),
-            ])
+            ]),
         ],
         [
             "video158.mkv",
@@ -7114,7 +7114,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video159.ts",
@@ -7127,7 +7127,7 @@ public sealed class FFprobeUtilsTests
                     StreamShorthand: 'd',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
-            ])
+            ]),
         ],
         [
             "video160.mp4",
@@ -7160,7 +7160,7 @@ public sealed class FFprobeUtilsTests
                     AlphaMode: false,
                     Rotation: 0,
                     HasNonStandardDisplayMatrix: false),
-            ])
+            ]),
         ],
         [
             "video161.mp4",
@@ -7174,7 +7174,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video162.mp4",
@@ -7215,7 +7215,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video163.mp4",
@@ -7256,7 +7256,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video164.mp4",
@@ -7297,7 +7297,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video165.mkv",
@@ -7338,7 +7338,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video166.mp4",
@@ -7379,7 +7379,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video167.mp4",
@@ -7420,13 +7420,13 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video168.mp4",
             new FFprobeUtils.VideoFileInfo(MediaContainerFormat.MP4.Name, null,
             [
-            ])
+            ]),
         ],
         [
             "video169.mkv",
@@ -7471,7 +7471,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "dvd_subtitle",
                     Language: "eng",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video170.mkv",
@@ -7516,7 +7516,7 @@ public sealed class FFprobeUtilsTests
                     CodecName: "dvb_subtitle",
                     Language: "eng",
                     Title: null),
-            ])
+            ]),
         ],
         [
             "video171.mp4",
@@ -7557,7 +7557,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 1,
                     SampleRate: 48000,
                     ChannelLayout: "mono"),
-            ])
+            ]),
         ],
         [
             "video172.mp4",
@@ -7598,7 +7598,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 1,
                     SampleRate: 48000,
                     ChannelLayout: "mono"),
-            ])
+            ]),
         ],
         [
             "video173.mp4",
@@ -7639,7 +7639,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 1,
                     SampleRate: 48000,
                     ChannelLayout: "mono"),
-            ])
+            ]),
         ],
         [
             "video174.mp4",
@@ -7680,7 +7680,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 1,
                     SampleRate: 48000,
                     ChannelLayout: "mono"),
-            ])
+            ]),
         ],
         [
             "video175.mp4",
@@ -7721,7 +7721,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video176.mp4",
@@ -7762,7 +7762,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video177.mp4",
@@ -7803,7 +7803,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video178.mp4",
@@ -7844,7 +7844,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video179.mp4",
@@ -7885,7 +7885,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video180.mp4",
@@ -7926,7 +7926,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video181.mp4",
@@ -7967,7 +7967,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video182.mp4",
@@ -8008,7 +8008,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video183.mp4",
@@ -8049,7 +8049,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video184.mp4",
@@ -8090,7 +8090,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video185.mkv",
@@ -8131,7 +8131,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video186.mp4",
@@ -8172,7 +8172,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video187.mp4",
@@ -8213,7 +8213,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video188.mp4",
@@ -8261,7 +8261,7 @@ public sealed class FFprobeUtilsTests
                     StreamShorthand: 'd',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
-            ])
+            ]),
         ],
         [
             "video189.mp4",
@@ -8309,7 +8309,7 @@ public sealed class FFprobeUtilsTests
                     StreamShorthand: 'd',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
-            ])
+            ]),
         ],
         [
             "video190.mp4",
@@ -8357,7 +8357,7 @@ public sealed class FFprobeUtilsTests
                     StreamShorthand: 'd',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
-            ])
+            ]),
         ],
         [
             "video191.mp4",
@@ -8405,7 +8405,7 @@ public sealed class FFprobeUtilsTests
                     StreamShorthand: 'd',
                     IsAttachedPic: false,
                     IsTimedThumbnails: false),
-            ])
+            ]),
         ],
         [
             "video192.mkv",
@@ -8446,7 +8446,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 1,
                     SampleRate: 48000,
                     ChannelLayout: "mono"),
-            ])
+            ]),
         ],
         [
             "video193.mkv",
@@ -8487,7 +8487,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 1,
                     SampleRate: 48000,
                     ChannelLayout: "mono"),
-            ])
+            ]),
         ],
         [
             "video194.mkv",
@@ -8528,7 +8528,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video195.mkv",
@@ -8569,7 +8569,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video196.mkv",
@@ -8610,7 +8610,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video197.mp4",
@@ -8651,7 +8651,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video198.mp4",
@@ -8692,7 +8692,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video199.mp4",
@@ -8733,7 +8733,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video200.mp4",
@@ -8774,7 +8774,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video201.mp4",
@@ -8815,7 +8815,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video202.mp4",
@@ -8856,7 +8856,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video203.mp4",
@@ -8897,7 +8897,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video204.mp4",
@@ -8938,7 +8938,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video205.mp4",
@@ -8979,7 +8979,7 @@ public sealed class FFprobeUtilsTests
                     Channels: 2,
                     SampleRate: 44100,
                     ChannelLayout: "stereo"),
-            ])
+            ]),
         ],
         [
             "video206.3gp",
@@ -9020,7 +9020,7 @@ public sealed class FFprobeUtilsTests
                     AlphaMode: false,
                     Rotation: 0,
                     HasNonStandardDisplayMatrix: false),
-            ])
+            ]),
         ],
     ];
 }

@@ -598,26 +598,31 @@ partial class Tests
                     options,
                     fileName,
                     exceptionMessage: null,
-                    expectedChanges: shouldReencode ? (NewStreamCount: 2, StreamMapping:
-                    [
-                        (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: false), // Video stream
-                        (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // Audio stream
-                    ]) : null, afterFinishedAction: shouldReencode ? async (newPath) =>
-                    {
-                        // Validate that we actually have what we expected now:
-                        await CheckProcessing(
-                            repo,
-                            VideoProcessingOptions.Preserve with
-                            {
-                                ForceValidateAllStreams = DefaultForceValidateAllStreams,
-                                MaximumChromaSubsampling = subsampling,
-                                MaximumBitsPerChannel = bpc,
-                            },
-                            newPath,
-                            exceptionMessage: null,
-                            expectedChanges: null,
-                            pathIsAbsolute: true);
-                    } : null);
+                    expectedChanges: shouldReencode
+                        ? (NewStreamCount: 2, StreamMapping:
+                            [
+                                (From: 0, To: 0, ExtensionToCheckWith: ".mp4", Equal: false), // Video stream
+                                (From: 1, To: 1, ExtensionToCheckWith: ".mp4", Equal: true), // Audio stream
+                            ])
+                        : null,
+                    afterFinishedAction: shouldReencode
+                        ? async (newPath) =>
+                        {
+                            // Validate that we actually have what we expected now:
+                            await CheckProcessing(
+                                repo,
+                                VideoProcessingOptions.Preserve with
+                                {
+                                    ForceValidateAllStreams = DefaultForceValidateAllStreams,
+                                    MaximumChromaSubsampling = subsampling,
+                                    MaximumBitsPerChannel = bpc,
+                                },
+                                newPath,
+                                exceptionMessage: null,
+                                expectedChanges: null,
+                                pathIsAbsolute: true);
+                        }
+                        : null);
             }
 
             // Run the processor & check if we reencoded or not as expected:

@@ -362,9 +362,9 @@ partial class FileRepo
                         // Source alias marker is malformed: treat as nonexistent. Fire the corruption event and surface a plain not-found.
                         await CorruptionDetected.RaiseMalformedAliasAsync(fileId, sourceFile.Name).ConfigureAwait(false);
                         throw new RepoFileNotFoundException(
-                            sourceVariantId is null ?
-                                $"File ID '{fileId}' was not found." :
-                                $"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
+                            sourceVariantId is null
+                                ? $"File ID '{fileId}' was not found."
+                                : $"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
                     }
 
                     // Additionally lock the resolved root if it differs from the (already-locked) sourceVariantId, so the underlying data file cannot be
@@ -409,9 +409,9 @@ partial class FileRepo
                         // root's data file since we read the source's marker. The source is then live under another name, and not found only by the marker
                         // we hold. So its slot is read again until it is steady, with our read as the one before, as for the variants being added above.
                         // A source that the collision check already found dangling under this marker needs no further read.
-                        var sourceSlot = sourceFile.Name == danglingSourceMarkerName ?
-                            new VariantSlot(VariantSlotKind.DanglingAlias, sourceFile) :
-                            await ReadVariantSlotAsync(fileId, sourceVariantId!, sourceFile.Name).ConfigureAwait(false);
+                        var sourceSlot = sourceFile.Name == danglingSourceMarkerName
+                            ? new VariantSlot(VariantSlotKind.DanglingAlias, sourceFile)
+                            : await ReadVariantSlotAsync(fileId, sourceVariantId!, sourceFile.Name).ConfigureAwait(false);
 
                         switch (sourceSlot.Kind)
                         {
@@ -519,9 +519,9 @@ partial class FileRepo
             var (file, _, _) = await _fs.FindDataFileAsync(fileId, sourceVariantId).ConfigureAwait(false);
             return file ??
                 throw new RepoFileNotFoundException(
-                    sourceVariantId is null ?
-                        $"File ID '{fileId}' was not found." :
-                        $"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
+                    sourceVariantId is null
+                        ? $"File ID '{fileId}' was not found."
+                        : $"File ID '{fileId}' or its source variant '{sourceVariantId}' was not found.");
         }
     }
 

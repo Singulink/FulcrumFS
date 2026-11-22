@@ -56,7 +56,7 @@ public sealed class DocumentPdfConversionProcessor : FileProcessor
         private set;
     }
 
-    internal static IntPtr? ProcessorAffinity
+    internal static nint? ProcessorAffinity
     {
         get
         {
@@ -113,7 +113,7 @@ public sealed class DocumentPdfConversionProcessor : FileProcessor
             throw new FileNotFoundException("LibreOffice (soffice) executable not found in specified directory.", soffice.ToString());
 
         int maxConcurrentProcesses = options?.MaxConcurrentProcesses ?? Environment.ProcessorCount;
-        IntPtr? processorAffinity = options?.ProcessorAffinity;
+        nint? processorAffinity = options?.ProcessorAffinity;
         ProcessPriorityClass? processPriorityClass = options?.ProcessPriorityClass;
 
         if (!_libreOfficePathInitialized.TrySet())

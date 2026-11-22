@@ -896,92 +896,94 @@ internal static class FFmpegUtils
         FileStream? fs = progressFilePath?.OpenAsyncStream(FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
         try
         {
-            var progressCallbackTask = fs != null ? Task.Run(async () =>
-            {
-                List<byte> lineBuffer = [];
-                byte[] buffer = new byte[32];
-                int bytesRead;
-                bool justRead = false;
-#if !DEBUG
-                const int WaitTimeMs = 90;
-#else
-                const int WaitTimeMs = 5;
-#endif
-
-                // This loop is for ensuring we read all progress (even post-exit) if requested.
-                for (int i = 0; i < (ensureAllProgressRead ? 2 : 1); i++)
+            var progressCallbackTask = fs != null
+                ? Task.Run(async () =>
                 {
-                    do
+                    List<byte> lineBuffer = [];
+                    byte[] buffer = new byte[32];
+                    int bytesRead;
+                    bool justRead = false;
+                    #if !DEBUG
+                    const int WaitTimeMs = 90;
+                    #else
+                    const int WaitTimeMs = 5;
+                    #endif
+
+                    // This loop is for ensuring we read all progress (even post-exit) if requested.
+                    for (int i = 0; i < (ensureAllProgressRead ? 2 : 1); i++)
                     {
-                        while ((bytesRead = await fs.ReadAsync(buffer, ensureAllProgressRead ? default : progressCallbackCt).ConfigureAwait(false)) > 0)
+                        do
                         {
-                            justRead = true;
-                            int beginIdx = 0;
-                            while (true)
+                            while ((bytesRead = await fs.ReadAsync(buffer, ensureAllProgressRead ? default : progressCallbackCt).ConfigureAwait(false)) > 0)
                             {
-                                int eolIdx = buffer.AsSpan()[beginIdx..bytesRead].IndexOf((byte)'\n');
-                                if (eolIdx >= 0)
+                                justRead = true;
+                                int beginIdx = 0;
+                                while (true)
                                 {
-                                    lineBuffer.AddRange(buffer.AsSpan().Slice(beginIdx, eolIdx));
-                                    beginIdx = beginIdx + eolIdx + 1;
-
-                                    // Check if line begins with out_time_us=, and send the seconds to the progress callback if so.
-                                    ReadOnlySpan<byte> lineSpan = CollectionsMarshal.AsSpan(lineBuffer);
-                                    if (lineSpan is [.., (byte)'\r']) lineSpan = lineSpan[..^1];
-                                    if (lineSpan.StartsWith("out_time_us="u8))
+                                    int eolIdx = buffer.AsSpan()[beginIdx..bytesRead].IndexOf((byte)'\n');
+                                    if (eolIdx >= 0)
                                     {
-                                        ReadOnlySpan<byte> timeSpan = lineSpan["out_time_us="u8.Length..];
-                                        if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
-                                        {
-                                            double progress = outTimeUs / 1_000_000.0;
-                                            if (progressCallback != null) await progressCallback(progress).ConfigureAwait(false);
-                                        }
-                                    }
+                                        lineBuffer.AddRange(buffer.AsSpan().Slice(beginIdx, eolIdx));
+                                        beginIdx = beginIdx + eolIdx + 1;
 
-                                    lineBuffer.Clear();
+                                        // Check if line begins with out_time_us=, and send the seconds to the progress callback if so.
+                                        ReadOnlySpan<byte> lineSpan = CollectionsMarshal.AsSpan(lineBuffer);
+                                        if (lineSpan is [.., (byte)'\r']) lineSpan = lineSpan[..^1];
+                                        if (lineSpan.StartsWith("out_time_us="u8))
+                                        {
+                                            ReadOnlySpan<byte> timeSpan = lineSpan["out_time_us="u8.Length..];
+                                            if (long.TryParse(timeSpan, NumberStyles.None, CultureInfo.InvariantCulture, out long outTimeUs))
+                                            {
+                                                double progress = outTimeUs / 1_000_000.0;
+                                                if (progressCallback != null) await progressCallback(progress).ConfigureAwait(false);
+                                            }
+                                        }
+
+                                        lineBuffer.Clear();
+                                    }
+                                    else
+                                    {
+                                        lineBuffer.AddRange(buffer.AsSpan()[beginIdx..bytesRead]);
+                                        break;
+                                    }
                                 }
-                                else
+                            }
+
+                            if (i != 0)
+                            {
+                                // If we're in the second iteration (ensuring all progress read), we don't want to wait as there won't be any more.
+                                break;
+                            }
+                            else if (justRead)
+                            {
+                                // If we just read something, yield to allow more data to be written, but don't delay.
+                                await Task.Yield();
+                                justRead = false;
+                            }
+                            else if (ensureAllProgressRead)
+                            {
+                                // If we're wanting to ensure all progress is read, we need to ensure we don't get a OperationCanceledException, as that would
+                                // stop the outer loop from being able to run its second iteration.
+                                try
                                 {
-                                    lineBuffer.AddRange(buffer.AsSpan()[beginIdx..bytesRead]);
+                                    await Task.Delay(WaitTimeMs, progressCallbackCt).ConfigureAwait(false);
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    // Break out of the loop, as we're ready to do the i = 1 loop to finish reading the file & exit.
                                     break;
                                 }
                             }
-                        }
-
-                        if (i != 0)
-                        {
-                            // If we're in the second iteration (ensuring all progress read), we don't want to wait as there won't be any more.
-                            break;
-                        }
-                        else if (justRead)
-                        {
-                            // If we just read something, yield to allow more data to be written, but don't delay.
-                            await Task.Yield();
-                            justRead = false;
-                        }
-                        else if (ensureAllProgressRead)
-                        {
-                            // If we're wanting to ensure all progress is read, we need to ensure we don't get a OperationCanceledException, as that would stop
-                            // the outer loop from being able to run its second iteration.
-                            try
+                            else
                             {
+                                // If we didn't read anything twice in a row, wait a bit before trying again.
                                 await Task.Delay(WaitTimeMs, progressCallbackCt).ConfigureAwait(false);
                             }
-                            catch (OperationCanceledException)
-                            {
-                                // Break out of the loop, as we're ready to do the i = 1 loop to finish reading the file & exit.
-                                break;
-                            }
                         }
-                        else
-                        {
-                            // If we didn't read anything twice in a row, wait a bit before trying again.
-                            await Task.Delay(WaitTimeMs, progressCallbackCt).ConfigureAwait(false);
-                        }
+                        while (!progressCallbackCt.IsCancellationRequested);
                     }
-                    while (!progressCallbackCt.IsCancellationRequested);
-                }
-            }, ensureAllProgressRead ? default : progressCallbackCt) : null;
+                }, ensureAllProgressRead ? default : progressCallbackCt)
+                : null;
 
             // Run ffmpeg:
             try

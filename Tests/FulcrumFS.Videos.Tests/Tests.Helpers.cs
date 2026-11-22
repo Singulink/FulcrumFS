@@ -243,7 +243,7 @@ partial class Tests
                     "-xerror",
                     "-hide_banner",
                     "-y",
-                    outputFilePath
+                    outputFilePath,
                 ],
                 cancellationToken);
         }
@@ -272,7 +272,7 @@ partial class Tests
                 "-hash", "md5",
                 "-xerror",
                 "-hide_banner",
-                "-"
+                "-",
             ],
             cancellationToken);
 
@@ -290,7 +290,7 @@ partial class Tests
                 "-select_streams", "0",
                 "-show_entries", "stream=codec_tag_string",
                 "-of", "default=nokey=1:noprint_wrappers=1",
-                inputFile
+                inputFile,
             ],
             cancellationToken);
 
@@ -487,10 +487,13 @@ partial class Tests
         return equal;
     }
 
-    public static IEnumerable<object[]> VideosToCheck => field ??= [.. Enumerable.Range(1, 205).Select((x) => (object[])[
-        ((IEnumerable<string>)[".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".mpeg", ".3gp"])
-            .Select((y) => "video" + x.ToString(CultureInfo.InvariantCulture) + y).Single((y) => _videoFilesDir.CombineFile(y).Exists)
-    ])];
+    public static IEnumerable<object[]> VideosToCheck => field ??=
+    [
+        .. Enumerable.Range(1, 205).Select((x) => (object[])[
+            ((IEnumerable<string>)[".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".mpeg", ".3gp"])
+                .Select((y) => "video" + x.ToString(CultureInfo.InvariantCulture) + y).Single((y) => _videoFilesDir.CombineFile(y).Exists),
+        ]),
+    ];
 
     public static IEnumerable<string> InvalidVideoFiles => field ??=
     [

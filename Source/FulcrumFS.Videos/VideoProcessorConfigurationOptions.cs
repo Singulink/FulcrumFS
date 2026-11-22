@@ -47,7 +47,7 @@ public sealed record VideoProcessorConfigurationOptions
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is zero.</exception>
     /// <exception cref="PlatformNotSupportedException">The value is set on a platform other than Windows or Linux.</exception>
-    public IntPtr? ProcessorAffinity
+    public nint? ProcessorAffinity
     {
         get;
 

@@ -671,9 +671,9 @@ public sealed class TempDirectoryTests
             string markerName = $"{context.VariantId}.{FileRepoPaths.MainFileName}{context.Extension}{FileRepoPaths.AliasMarkerExtension}";
             await File.WriteAllBytesAsync(workingDir.CombineFile(markerName, PathOptions.None).PathExport, [], context.CancellationToken).ConfigureAwait(false);
 
-            Source = _sourceFailsToClose ?
-                new CloseFailingStream(failEveryTime: true) :
-                await context.GetSourceAsSeekableStreamAsync(preferInMemory: false, maxInMemoryCopySize: 0).ConfigureAwait(false);
+            Source = _sourceFailsToClose
+                ? new CloseFailingStream(failEveryTime: true)
+                : await context.GetSourceAsSeekableStreamAsync(preferInMemory: false, maxInMemoryCopySize: 0).ConfigureAwait(false);
 
             return FileProcessingResult.Stream(Source, context.Extension, hasChanges: false);
         }

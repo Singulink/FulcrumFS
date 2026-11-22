@@ -173,7 +173,7 @@ public sealed class VideoProcessor : FileProcessor
         private set;
     }
 
-    internal static IntPtr? ProcessorAffinity
+    internal static nint? ProcessorAffinity
     {
         get
         {
@@ -230,7 +230,7 @@ public sealed class VideoProcessor : FileProcessor
             throw new FileNotFoundException("FFprobe executable not found in specified directory.", ffprobe.ToString());
 
         int maxConcurrentProcesses = options?.MaxConcurrentProcesses ?? -1;
-        IntPtr? processorAffinity = options?.ProcessorAffinity;
+        nint? processorAffinity = options?.ProcessorAffinity;
         int? threadLimit = options?.ThreadLimit;
         ProcessPriorityClass? processPriorityClass = options?.ProcessPriorityClass;
 
@@ -624,7 +624,7 @@ public sealed class VideoProcessor : FileProcessor
                 .. sourceInfo.Streams
                     .Select((x, i) => (Value: x, Index: i))
                     .Where((t) => t.Value is FFprobeUtils.VideoStreamInfo vs && !IsThumbnailStream(vs))
-                    .Select((t) => t.Index)
+                    .Select((t) => t.Index),
             ];
 
             // If at least 1 stream to check:
@@ -673,7 +673,7 @@ public sealed class VideoProcessor : FileProcessor
                 .. sourceInfo.Streams
                     .Select((x, i) => (Value: x, Index: i))
                     .Where((t) => t.Value is FFprobeUtils.AudioStreamInfo && !droppedStreams[t.Index])
-                    .Select((t) => t.Index)
+                    .Select((t) => t.Index),
             ];
 
             // If at least 1 stream to check:
@@ -1143,8 +1143,7 @@ public sealed class VideoProcessor : FileProcessor
 
                 // Builds the per-stream compatibility test command for the current stream index.
                 IEnumerable<string> BuildStreamCompatibilityTestCommand(string codec, bool shortSegment) => shortSegment
-                    ?
-                    [
+                    ? [
                         "-i", sourceFile.PathExport,
                         "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
                         "-c", codec,
@@ -1152,16 +1151,15 @@ public sealed class VideoProcessor : FileProcessor
                         "-copy_unknown", "-xerror", "-hide_banner", "-y", "-nostdin",
                         "-f", "mp4",
                         NullDevicePath,
-                    ]
-                    :
-                    [
+                      ]
+                    : [
                         "-i", sourceFile.PathExport,
                         "-map", string.Create(CultureInfo.InvariantCulture, $"0:{i}"),
                         "-c", codec,
                         "-copy_unknown", "-xerror", "-hide_banner", "-y", "-nostdin",
                         "-f", "mp4",
                         NullDevicePath,
-                    ];
+                      ];
 
                 // If still incompatible, it is possible it's actually caused by an invalid stream - so check that now:
 
@@ -2364,31 +2362,33 @@ public sealed class VideoProcessor : FileProcessor
         double mostRecentClampedProgress = progressUsed;
         const double ReservedProgress = 0.05;
 
-        Func<double, ValueTask>? localProgressCallback = (progressCallback != null && maxDuration != 0.0) ? async (durationDone) =>
-        {
-            // Avoid going backwards or repeating the same progress:
-            // Note: NaN must be rejected before it can poison lastDone (comparisons with NaN are false, so it would pass the checks below otherwise).
+        Func<double, ValueTask>? localProgressCallback = (progressCallback != null && maxDuration != 0.0)
+            ? async (durationDone) =>
+            {
+                // Avoid going backwards or repeating the same progress:
+                // Note: NaN must be rejected before it can poison lastDone (comparisons with NaN are false, so it would pass the checks below otherwise).
 
-            if (double.IsNaN(durationDone) || durationDone <= lastDone)
-                return;
-            if (durationDone > maxDuration && lastDone < maxDuration)
-                (durationDone, lastDone) = (maxDuration, durationDone);
-            else
-                lastDone = durationDone;
+                if (double.IsNaN(durationDone) || durationDone <= lastDone)
+                    return;
+                if (durationDone > maxDuration && lastDone < maxDuration)
+                    (durationDone, lastDone) = (maxDuration, durationDone);
+                else
+                    lastDone = durationDone;
 
-            if (durationDone < 0.0 || durationDone > maxDuration) return;
+                if (durationDone < 0.0 || durationDone > maxDuration) return;
 
-            // Clamp / adjust to [progressUsed, 0.95] range:
+                // Clamp / adjust to [progressUsed, 0.95] range:
 
-            double clampedProgress = double.Clamp(
-                progressUsed + (durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed)),
-                progressUsed,
-                1.0 - ReservedProgress);
+                double clampedProgress = double.Clamp(
+                    progressUsed + (durationDone / maxDuration * (1.0 - ReservedProgress - progressUsed)),
+                    progressUsed,
+                    1.0 - ReservedProgress);
 
-            mostRecentClampedProgress = clampedProgress;
+                mostRecentClampedProgress = clampedProgress;
 
-            await progressCallback!(clampedProgress).ConfigureAwait(false);
-        } : null;
+                await progressCallback!(clampedProgress).ConfigureAwait(false);
+            }
+            : null;
 
         try
         {
@@ -2464,11 +2464,13 @@ public sealed class VideoProcessor : FileProcessor
                     maxLength: null,
                     maxDuration,
                     (i) => streamsValidatedImplicitly.BinarySearch(i) switch { < 0 => null, { } idx => idx },
-                    [.. streamsValidatedImplicitly.Select((x) => new FFmpegUtils.PerStreamMapOverride(
-                        fileIndex: 0,
-                        streamKind: '\0',
-                        streamIndexWithinKind: x,
-                        mapToOutput: true))],
+                    [
+                        .. streamsValidatedImplicitly.Select((x) => new FFmpegUtils.PerStreamMapOverride(
+                            fileIndex: 0,
+                            streamKind: '\0',
+                            streamIndexWithinKind: x,
+                            mapToOutput: true)),
+                    ],
                     mappedStreamCount: streamsValidatedImplicitly.Count,
                     progressTempFile,
                     reportDuration: false,
@@ -2537,7 +2539,7 @@ public sealed class VideoProcessor : FileProcessor
                     ],
                     perOutputStreamOverrides:
                     [
-                        new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: -1, codec: "copy")
+                        new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: -1, codec: "copy"),
                     ],
                     mapChaptersFrom: -1,
                     forceProgressiveDownloadSupport: false,
@@ -2592,7 +2594,7 @@ public sealed class VideoProcessor : FileProcessor
                     ],
                     perOutputStreamOverrides:
                     [
-                        new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: -1, codec: "copy")
+                        new FFmpegUtils.PerStreamCodecOverride(streamKind: '\0', streamIndexWithinKind: -1, codec: "copy"),
                     ],
                     mapChaptersFrom: -1,
                     forceProgressiveDownloadSupport: false,
@@ -2753,21 +2755,24 @@ public sealed class VideoProcessor : FileProcessor
                 const double ReservedProgressInner = 0.02;
                 lastDone = 0.0;
 
-                Func<double, ValueTask>? localProgressCallbackInner = progressCallback != null && maxDuration != 0.0 ? async (durationDone) =>
-                {
-                    // Avoid going backwards or repeating the same progress:
-                    // Note: NaN must be rejected before it can poison lastDone (comparisons with NaN are false, so it would pass the checks below otherwise).
-                    if (double.IsNaN(durationDone) || durationDone <= lastDone) return;
-                    if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
-                    else lastDone = durationDone;
-                    if (durationDone < 0.0 || durationDone > maxDuration) return;
+                Func<double, ValueTask>? localProgressCallbackInner = progressCallback != null && maxDuration != 0.0
+                    ? async (durationDone) =>
+                    {
+                        // Avoid going backwards or repeating the same progress:
+                        // Note: NaN must be rejected before it can poison lastDone (comparisons with NaN are false, so it would pass the checks below
+                        // otherwise).
+                        if (double.IsNaN(durationDone) || durationDone <= lastDone) return;
+                        if (durationDone > maxDuration && lastDone < maxDuration) (durationDone, lastDone) = (maxDuration, durationDone);
+                        else lastDone = durationDone;
+                        if (durationDone < 0.0 || durationDone > maxDuration) return;
 
-                    // Clamp to [0.0, 0.98] range of our remaining reserved portion:
-                    double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgressInner), 0.0, 1.0 - ReservedProgressInner);
-                    await progressCallback!(
-                        1.0 - (ReservedProgress / 2.0) + (clampedProgress * (ReservedProgress / 2.0)))
-                    .ConfigureAwait(false);
-                } : null;
+                        // Clamp to [0.0, 0.98] range of our remaining reserved portion:
+                        double clampedProgress = double.Clamp(durationDone / maxDuration * (1.0 - ReservedProgressInner), 0.0, 1.0 - ReservedProgressInner);
+                        await progressCallback!(
+                            1.0 - (ReservedProgress / 2.0) + (clampedProgress * (ReservedProgress / 2.0)))
+                        .ConfigureAwait(false);
+                    }
+                    : null;
 
                 if (localProgressCallbackInner is not null)
                     progressTempFile ??= context.GetNewWorkFile(".txt");

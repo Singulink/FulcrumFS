@@ -49,7 +49,9 @@ public sealed class FileRepoCleaningOptions
     /// <exception cref="ArgumentException">The value has a name that is not friendly (see above).</exception>
     [MaybeNull]
     public required IAbsoluteDirectoryPath BaseDirectory {
-        get => field ?? (IsFrozen ? throw NotSet(nameof(BaseDirectory)) : null);
+        get {
+            return field ?? (IsFrozen ? throw NotSet(nameof(BaseDirectory)) : null);
+        }
         set {
             EnsureNotFrozen();
             CheckBaseDirectory(value, nameof(value));

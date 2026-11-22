@@ -64,7 +64,9 @@ public sealed class FileRepoOptions
     /// <exception cref="ArgumentException">The value has a name that is not friendly (see above).</exception>
     [MaybeNull]
     public required IAbsoluteDirectoryPath BaseDirectory {
-        get => field ?? (IsFrozen ? throw NotSet(nameof(BaseDirectory)) : null);
+        get {
+            return field ?? (IsFrozen ? throw NotSet(nameof(BaseDirectory)) : null);
+        }
         set {
             EnsureNotFrozen();
             CheckBaseDirectory(value, nameof(value));
@@ -232,7 +234,9 @@ public sealed class FileRepoOptions
     /// <exception cref="ArgumentOutOfRangeException">The value is not <see cref="RepoFormatVersion.Version1"/>, <see cref="RepoFormatVersion.Version2"/> or
     /// <see cref="RepoFormatVersion.Latest"/>, other than <see cref="RepoFormatVersion.Unspecified"/> while it is not set.</exception>
     public required RepoFormatVersion MinimumFormatVersion {
-        get => field is RepoFormatVersion.Unspecified && IsFrozen ? throw NotSet(nameof(MinimumFormatVersion)) : field;
+        get {
+            return field is RepoFormatVersion.Unspecified && IsFrozen ? throw NotSet(nameof(MinimumFormatVersion)) : field;
+        }
         set {
             EnsureNotFrozen();
 
