@@ -164,13 +164,14 @@ public sealed class FileRepoEnumerationTests
     {
         var repoDir = NewRepoDir();
 
-        // Sequential IDs shard on the low 16 bits of their millisecond timestamp, and each one is at least a millisecond after the last, so each file is in
-        // its own shard and the walk passes a shard boundary after the first entry.
+        // Sequential IDs shard on the low 16 bits of their millisecond timestamp, and up to 16 IDs can share a millisecond. The delay puts the second file
+        // in a later millisecond, so each file is in its own shard and the walk passes a shard boundary after the first entry.
         var repo = CreateRepo(repoDir, FileIdMode.Sequential);
 
         try
         {
             await AddSampleFileAsync(repo);
+            await Task.Delay(TimeSpan.FromMilliseconds(20), TestContext.CancellationToken);
             await AddSampleFileAsync(repo);
 
             using var cts = new CancellationTokenSource();
